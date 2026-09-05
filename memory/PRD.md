@@ -53,6 +53,9 @@ PENDING].
   accordions, related), /archive, /city, /journal
 - Search overlay (mock index), mobile fullscreen menu, page transitions
 - README.md + ARCHITECTURE.md
+- 2026-09-05 fix: package-lock.json + .npmrc (legacy-peer-deps) committed so Vercel
+  npm-based production build resolves @types/node / typescript devDependencies;
+  `npm run build` verified green (exit 0, 8/8 routes)
 
 ## Verified
 - All routes return 200; hero/drop/districts/object/newsletter/footer screenshotted
