@@ -1,0 +1,32 @@
+:root {
+  color-scheme: dark;
+  --void: #101110;
+  --bone: #efeee8;
+  --graphite: #252724;
+  --steel: #a9ada5;
+  --line: #ffffff30;
+  --space-1: .5rem;
+  --space-2: 1rem;
+  --space-3: 1.5rem;
+  --space-4: 2rem;
+  --space-5: 3rem;
+  --space-6: 5rem;
+  --gutter: clamp(1.25rem, 4vw, 4rem);
+  --content-max: 100rem;
+  --font-display: Impact, 'Arial Narrow', 'Helvetica Neue', sans-serif;
+  --font-utility: Arial, Helvetica, sans-serif;
+  --font-micro: 'Courier New', monospace;
+  --text-small: .75rem;
+  --text-label: .875rem;
+  --text-body: 1rem;
+  --text-title: clamp(4rem, 10vw, 9rem);
+  --duration-fast: 180ms;
+  --duration-reveal: 650ms;
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --layer-scene: 0;
+  --layer-content: 1;
+  --layer-header: 10;
+  --border: 1px solid var(--line);
+  --ratio-editorial: 4 / 3;
+  /* Responsive enhancement breakpoint: 48rem; see lib/experience.ts. */
+}
