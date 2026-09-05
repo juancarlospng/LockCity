@@ -1,0 +1,227 @@
+{
+  "project_info": {
+    "title": "LOCK CITY V2 — Immersive Streetwear & Lifestyle E-Commerce Prototype",
+    "concept": "THE CITY IS ALIVE. A digital place where collections are DISTRICTS, products are OBJECTS, releases are DROPS, past releases live in the ARCHIVE, editorial content is TRANSMISSIONS, and community is PEOPLE OF THE CITY.",
+    "archetype": "Architectural / Swiss & High-Contrast Brutalism (Pure Monochrome)",
+    "tone": "Urban, sophisticated, experimental, premium, youthful, editorial, architectural, slightly raw, minimal but strong",
+    "theme": "Dark Mode (#050505)",
+    "routes": [
+      "/",
+      "/shop",
+      "/collections/:slug",
+      "/product/:slug",
+      "/archive",
+      "/city",
+      "/journal"
+    ]
+  },
+  "colors": {
+    "background": "#050505",
+    "foreground": "#F1EFE9",
+    "primary": "#F1EFE9",
+    "secondary_dark": "#101010",
+    "graphite": "#222222",
+    "steel": "#747474",
+    "border": "#222222",
+    "card_bg": "#0D0D0D",
+    "muted_text": "#747474",
+    "accent": "PURE MONOCHROME — No colored accents permitted",
+    "rules": [
+      "Strict pure monochrome palette: #050505 background, #F1EFE9 bone-white primary text, #222222 graphite borders/dividers, #747474 steel muted accents, #101010 secondary dark surfaces.",
+      "NEVER use colored accents (no neon blues, purples, oranges, or teals).",
+      "Use #F1EFE9 on #222222 or #050505 with minimum 4.5:1 APCA/WCAG contrast ratio.",
+      "Hover states must use explicit color overrides: hover:bg-[#F1EFE9] hover:text-[#050505] for primary CTAs."
+    ]
+  },
+  "typography": {
+    "display_font": "Unbounded, Syne, or Anton / Oswald (fallback: uppercase sans-serif with tracking-tighter and font-black for architectural display headers)",
+    "utility_font": "Space Mono or JetBrains Mono / Inter (fallback: system monospace or geometric sans for technical specs, prices, STATUS: AVAILABLE labels)",
+    "styles": {
+      "h1_hero": "text-4xl sm:text-6xl lg:text-7xl font-black uppercase tracking-tighter leading-none text-[#F1EFE9]",
+      "h2_section": "text-2xl sm:text-4xl lg:text-5xl font-extrabold uppercase tracking-tight leading-tight text-[#F1EFE9]",
+      "h3_card": "text-lg sm:text-xl font-bold uppercase tracking-wide text-[#F1EFE9]",
+      "utility_label": "font-mono text-xs sm:text-sm uppercase tracking-[0.2em] text-[#747474]",
+      "body": "font-mono text-sm sm:text-base leading-relaxed text-[#F1EFE9]/80"
+    },
+    "anti_patterns": [
+      "Do NOT use default Inter for main architectural headings or hero titles.",
+      "Do NOT use soft cursive or decorative script fonts.",
+      "Do NOT mix more than 2 distinct font families."
+    ]
+  },
+  "spacing_and_layout": {
+    "philosophy": "Generous spacing philosophy. Use 2x-3x padding to give architectural breathing room.",
+    "container_padding": "px-4 sm:px-8 lg:px-16 py-12 lg:py-24",
+    "grid_modes": {
+      "bento_tetris": "grid grid-cols-1 md:grid-cols-8 lg:grid-cols-12 gap-6 lg:gap-10",
+      "product_grid": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8",
+      "archive_vault": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+    },
+    "border_rules": "All containers with borders must include internal padding (p-6 or p-8) to eliminate text collision."
+  },
+  "webgl_and_3d_experience": {
+    "engine": "Three.js / React Three Fiber (@react-three/fiber) + Drei (@react-three/drei) + Canvas API procedural fallback",
+    "theme": "Abstract brutalist architectural wireframes, volumetric fog (#050505), particle grids, directional light beams, monochrome lighting",
+    "features": [
+      "Scene 01 Enter The City: 3D procedural brutalist monoliths, floating metallic geometric grids, atmospheric particle dust, mouse-parallax tilt",
+      "Scene 04 Districts Spatial Interaction: Interactive 3D architectural quadrant selector (DISTRICT 01 CORE, 02 DROP, 03 COLLAB, 04 ARCHIVE) with raycasting hover tilt and camera zoom",
+      "Scene 05 Featured Object: 3D rotating product wireframe / silhouette cube / technical blueprint projection with scroll-linked rotation"
+    ],
+    "performance": [
+      "Adaptive DPR ceiling [1, 2]",
+      "Pause rendering when WebGL canvas is offscreen using IntersectionObserver",
+      "Mobile complexity reduction: disable heavy post-processing and reduce particle count to 250 on screen widths < 768px",
+      "Graceful fallback to procedural HTML5 Canvas 2D grid/noise shader if WebGL is unsupported or reduced-motion is requested"
+    ]
+  },
+  "homepage_scenes": [
+    {
+      "scene_id": "00",
+      "name": "Initialization Loader",
+      "description": "Full-screen system boot sequence with digital counter (0% -> 100%), technical telemetry, STATUS: SYSTEM_ONLINE, and masked unveil reveal animation."
+    },
+    {
+      "scene_id": "01",
+      "name": "Enter The City Cinematic Hero",
+      "description": "Kinetic headline 'LOCK CITY®' with line-by-line reveal, live status badge [LOCATION: 37.7749° N | STATUS: LIVE], 3D WebGL background, CTA 'ENTER THE CITY' with hover invert effect."
+    },
+    {
+      "scene_id": "02",
+      "name": "Latest Drop Editorial",
+      "description": "High-impact narrative layout announcing DROP_006 'URBAN MONOLITH'. Editorial typography, release countdown timestamp, technical spec callouts."
+    },
+    {
+      "scene_id": "03",
+      "name": "Shop The Drop",
+      "description": "4 to 6 mock OBJECT cards (e.g. OBJECT_0041 HEAVYWEIGHT HOODIE, OBJECT_0042 CARGO TROUSER). Clean architectural grid, quick-add drawer trigger, hovering tech blueprint overlay."
+    },
+    {
+      "scene_id": "04",
+      "name": "Districts Spatial Selector",
+      "description": "Interactive spatial layout: DISTRICT 01 CORE, 02 DROP, 03 COLLAB, 04 ARCHIVE. Hover states reveal district metadata, item counts, and WebGL camera shifts."
+    },
+    {
+      "scene_id": "05",
+      "name": "Featured Object Storytelling",
+      "description": "Scroll-reveal product deep dive for OBJECT_0041 ('BUILT FOR THE CITY'). Multi-stage pinned scroll sequence: Silhouette -> Graphic -> Material (500GSM Organic Cotton) -> Technical -> Identity -> Direct CTA."
+    },
+    {
+      "scene_id": "06",
+      "name": "The City (Manifesto Chapters)",
+      "description": "Brand culture editorial with numbered manifesto chapters (01 / CONCRETE FOUNDATION, 02 / UNCOMPROMISING UTILITY, 03 / DIGITAL PERPETUITY). Slow editorial marquee ribbon."
+    },
+    {
+      "scene_id": "07",
+      "name": "People Of The City",
+      "description": "Community spotlight section showcasing street culture styling, district coordinates, and citizen roster cards with subtle hover lift."
+    },
+    {
+      "scene_id": "08",
+      "name": "Archive Vault",
+      "description": "Digital vault with system aesthetic: DROP_001 ARCHIVED, DROP_002 ARCHIVED, status tags, release dates, and vault detail modal trigger."
+    },
+    {
+      "scene_id": "09",
+      "name": "Transmissions",
+      "description": "Editorial journal teasers with issue numbers (TRANSMISSION_012), publication dates, reading time, and link to /journal."
+    },
+    {
+      "scene_id": "10",
+      "name": "Join The City",
+      "description": "Newsletter terminal input [ENTER CITIZEN EMAIL...], instant toast feedback via Sonner, system status badge (DEMO ONLY)."
+    }
+  ],
+  "components": {
+    "navigation_header": {
+      "type": "Crystal Glass sticky header",
+      "styles": "fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-[#050505]/80 border-b border-[#222222]",
+      "elements": [
+        "Brand Logo: LOCK CITY® with status pulse indicator",
+        "Nav Links: DISTRICTS, DROPS, ARCHIVE, TRANSMISSIONS, CITY",
+        "Actions: Search trigger, Cart Drawer Trigger with item counter badge [0], Mobile menu toggle"
+      ]
+    },
+    "custom_cursor": {
+      "desktop_only": true,
+      "states": [
+        "DEFAULT: 8px solid white dot",
+        "EXPLORE: Expanding ring with 'EXPLORE' tracking-widest text",
+        "VIEW: Inverted circle with 'VIEW' label",
+        "DRAG: Horizontal double arrow slider indicator"
+      ]
+    },
+    "cart_drawer": {
+      "trigger": "Cart button in header or quick-add from product cards",
+      "behavior": "Slide-over drawer with item list, size selector, quantity modifier, subtotal calculation, and DEMO CHECKOUT modal trigger."
+    },
+    "district_card": {
+      "styles": "border border-[#222222] bg-[#0D0D0D] p-8 hover:border-[#F1EFE9] transition-all duration-300 relative group overflow-hidden"
+    },
+    "product_card": {
+      "styles": "border border-[#222222] bg-[#0D0D0D] p-6 group hover:border-[#F1EFE9] transition-all duration-300 flex flex-col justify-between"
+    },
+    "footer": {
+      "styles": "bg-[#050505] border-t border-[#222222] pt-20 pb-12 px-6 lg:px-16",
+      "hero_copy": "THE CITY NEVER SLEEPS",
+      "hero_copy_class": "text-[10vw] font-black uppercase tracking-tighter leading-none text-[#222222] select-none my-8"
+    }
+  },
+  "motion_and_interactions": {
+    "smooth_scroll": "Lenis smooth scrolling engine enabled on desktop",
+    "animations": [
+      "Staggered entrance reveals using Framer Motion (initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 })",
+      "Kinetic headline text reveal with overflow-hidden clip mask",
+      "Marquee drift speed: ultra-slow 20s drift using react-fast-marquee or framer motion repeat",
+      "Hover transitions: use specific property transitions (e.g. transition-colors duration-200), NEVER transition: all"
+    ],
+    "reduced_motion": "Wrap animations with useReducedMotion check and provide instant non-animated fallbacks when prefers-reduced-motion is detected."
+  },
+  "accessibility_and_testing": {
+    "data_testid_rule": "ALL interactive elements (buttons, inputs, links, tabs, cart triggers, close buttons, sliders) MUST include data-testid in kebab-case format.",
+    "examples": [
+      "data-testid=\"nav-brand-logo\"",
+      "data-testid=\"nav-districts-link\"",
+      "data-testid=\"nav-cart-trigger\"",
+      "data-testid=\"hero-enter-city-button\"",
+      "data-testid=\"product-card-object-0041\"",
+      "data-testid=\"quick-add-button-object-0041\"",
+      "data-testid=\"cart-drawer-close-button\"",
+      "data-testid=\"cart-checkout-demo-button\"",
+      "data-testid=\"newsletter-email-input\"",
+      "data-testid=\"newsletter-submit-button\""
+    ]
+  },
+  "dependencies_to_install": [
+    "three",
+    "@react-three/fiber",
+    "@react-three/drei",
+    "lenis",
+    "lucide-react",
+    "framer-motion",
+    "sonner",
+    "react-fast-marquee"
+  ],
+  "instructions_to_main_agent": [
+    "1. Read this design_guidelines.json completely before writing UI components.",
+    "2. Ensure all components use .js / .jsx file extensions in /app/frontend/src/.",
+    "3. Maintain strict monochrome visual palette: #050505 background, #F1EFE9 text, #222222 borders.",
+    "4. Implement all 11 Homepage scenes (00 through 10) plus all required routes (/, /shop, /collections/:slug, /product/:slug, /archive, /city, /journal).",
+    "5. Use Three.js / R3F for WebGL hero background, District 3D selector, and Featured Object wireframe viewer.",
+    "6. Include data-testid on every interactive element for automated test verification.",
+    "7. Implement Lenis smooth scroll and Framer Motion micro-interactions."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur) for floating navigation.",
+    "You MUST NOT apply universal transition (e.g. transition: all). Always add transitions for specific interactive elements like button, input excluding transforms.",
+    "You MUST NOT center align the app container (.App { text-align: center; }).",
+    "Always use modern button styles like sharp brutalist rectangular buttons with hover invert color transitions.",
+    "NEVER use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯 for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations separate good from extraordinary.",
+    "All interactive and key informational elements MUST include a data-testid attribute in kebab-case format."
+  ]
+}
