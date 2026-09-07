@@ -23,11 +23,21 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
         data-testid={`product-link-${product.id}`}
         data-cursor="view"
         className="block"
-        aria-label={`View ${product.name} — ${product.code}`}
+        aria-label={`View ${product.name}`}
       >
         <div className="relative overflow-hidden">
           <div className="transition-transform duration-700 ease-out group-hover:scale-[1.04]">
-            <Media seed={product.seed} code={product.code} />
+            {product.images[0] ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={product.images[0]}
+                alt={product.name}
+                className="aspect-[4/5] w-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <Media seed={product.id.length * 17 + 7} code={product.code} />
+            )}
           </div>
           <div className="absolute left-3 top-3 flex items-center gap-3">
             <span className="text-[9px] tracking-[0.3em] text-steel">
@@ -38,19 +48,20 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
         </div>
         <div className="flex items-start justify-between gap-3 border-t border-graphite p-5">
           <div>
-            <p className="text-[9px] tracking-[0.3em] text-steel">{product.code}</p>
+            {product.code && (
+              <p className="text-[9px] tracking-[0.3em] text-steel">{product.code}</p>
+            )}
             <h3 className="mt-1 font-display text-xl uppercase leading-none text-bone">
               {product.name}
             </h3>
-            <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-steel">
-              {product.color}
-            </p>
+            {product.color && (
+              <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-steel">
+                {product.color}
+              </p>
+            )}
           </div>
           <p className="shrink-0 text-xs text-bone">
-            {formatPrice(product.price)}
-            <span className="block text-right text-[8px] uppercase tracking-[0.2em] text-steel">
-              Mock
-            </span>
+            {formatPrice(product.price, product.currency)}
           </p>
         </div>
       </Link>
@@ -58,7 +69,7 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
         type="button"
         data-testid={`quick-add-button-${product.id}`}
         disabled={!canAdd}
-        onClick={() => canAdd && addItem(product.id, quickVariant.id)}
+        onClick={() => canAdd && addItem(product, quickVariant)}
         className={`border-t border-graphite py-3 text-[10px] font-bold uppercase tracking-[0.3em] transition-colors duration-200 ${
           canAdd
             ? "text-bone hover:bg-bone hover:text-bg"

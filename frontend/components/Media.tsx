@@ -9,12 +9,12 @@ interface MediaProps {
   className?: string;
 }
 
-// Procedural placeholder media — stands in for real Lock City photography.
-// [PRODUCT MEDIA PENDING] — every visual is deterministic from its seed.
+// Procedural architectural graphic — a decorative design element of the
+// city identity, never presented as product photography.
 export function Media({
   seed,
   code,
-  label = "PRODUCT MEDIA PENDING",
+  label = "Lock City graphic",
   ratio = "portrait",
   compact = false,
   className = "",
@@ -43,15 +43,14 @@ export function Media({
       className={`relative overflow-hidden bg-[#0A0A0A] ${className}`}
       style={{ aspectRatio: `${w}/${h}` }}
       role="img"
-      aria-label={`[${label}] — generated placeholder`}
+      aria-label={label}
     >
       <svg
         viewBox={`0 0 ${w} ${h}`}
         className="h-full w-full"
         preserveAspectRatio="xMidYMid slice"
         aria-hidden
-      >
-        <defs>
+      ><defs>
           <radialGradient id={`${gid}-spot`} cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#F1EFE9" stopOpacity="0.22" />
             <stop offset="55%" stopColor="#F1EFE9" stopOpacity="0.05" />
@@ -126,13 +125,6 @@ export function Media({
         <rect x="1" y="1" width={w - 2} height={h - 2} fill="none" stroke="#222222" strokeWidth="2" />
         <path d={`M 16 16 h 24 M 16 16 v 24 M ${w - 16} 16 h -24 M ${w - 16} 16 v 24 M 16 ${h - 16} h 24 M 16 ${h - 16} v -24 M ${w - 16} ${h - 16} h -24 M ${w - 16} ${h - 16} v -24`} stroke="#3A3A3A" strokeWidth="2" fill="none" />
       </svg>
-
-      {!compact && (
-        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[8px] uppercase tracking-[0.25em] text-steel">
-          <span>[{label}]</span>
-          <span>Mock data</span>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,11 +1,8 @@
 import Link from "next/link";
-import { Media } from "@/components/Media";
+import { EmptyState } from "@/components/EmptyState";
 import { MaskText, Reveal } from "@/components/Reveal";
-import { MOCK_TRANSMISSIONS } from "@/lib/mock-data";
 
 export function Transmissions() {
-  const [first, ...rest] = MOCK_TRANSMISSIONS;
-
   return (
     <section
       data-testid="transmissions-section"
@@ -37,63 +34,14 @@ export function Transmissions() {
         </Reveal>
       </div>
 
-      <div className="mt-14 grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Reveal>
-          <Link
-            href="/journal"
-            data-testid={`transmission-card-${first.id}`}
-            data-cursor="view"
-            className="group block border border-graphite bg-card transition-colors duration-300 hover:border-bone"
-          >
-            <div className="overflow-hidden">
-              <div className="transition-transform duration-700 group-hover:scale-[1.03]">
-                <Media seed={first.seed} code={first.code} ratio="wide" label="EDITORIAL IMAGE PENDING" />
-              </div>
-            </div>
-            <div className="border-t border-graphite p-6">
-              <div className="flex items-center justify-between text-[9px] uppercase tracking-[0.25em] text-steel">
-                <span>{first.category}</span>
-                <span>{first.minutes} min</span>
-              </div>
-              <h3 className="mt-3 font-display text-3xl uppercase leading-none text-bone">
-                {first.title}
-              </h3>
-              <p className="mt-3 max-w-md text-xs leading-relaxed text-steel">
-                {first.excerpt}
-              </p>
-            </div>
-          </Link>
-        </Reveal>
-
-        <div className="flex flex-col gap-5">
-          {rest.map((t, i) => (
-            <Reveal key={t.id} delay={0.1 + i * 0.08} className="flex-1">
-              <Link
-                href="/journal"
-                data-testid={`transmission-card-${t.id}`}
-                data-cursor="view"
-                className="group flex h-full gap-6 border border-graphite bg-card p-6 transition-colors duration-300 hover:border-bone"
-              >
-                <span className="font-display text-4xl uppercase leading-none text-graphite transition-colors duration-300 group-hover:text-steel">
-                  {t.code.replace("TRANSMISSION_", "T")}
-                </span>
-                <div className="flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center gap-4 text-[9px] uppercase tracking-[0.25em] text-steel">
-                      <span>{t.category}</span>
-                      <span>{t.minutes} min</span>
-                    </div>
-                    <h3 className="mt-2 font-display text-2xl uppercase leading-none text-bone">
-                      {t.title}
-                    </h3>
-                  </div>
-                  <p className="mt-4 text-xs leading-relaxed text-steel">{t.excerpt}</p>
-                </div>
-              </Link>
-            </Reveal>
-          ))}
-        </div>
-      </div>
+      <Reveal delay={0.15} className="mt-14">
+        <EmptyState
+          testid="transmissions-empty-state"
+          kicker="Editorial · Film · Collab · City · People"
+          title="First broadcast soon"
+          body="LOCKED IN profiles, campaign films, drop stories and city stories will transmit from here."
+        />
+      </Reveal>
     </section>
   );
 }

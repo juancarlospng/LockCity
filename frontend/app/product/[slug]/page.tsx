@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { ProductDetail } from "@/components/ProductDetail";
 import { commerce } from "@/lib/commerce";
 
+export const dynamic = "force-dynamic";
+
 export default async function ProductPage({
   params,
 }: {

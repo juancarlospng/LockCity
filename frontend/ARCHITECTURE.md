@@ -1,115 +1,100 @@
-# LOCK CITY V2 — Architecture
+# LOCK CITY — Architecture
 
 ## Two coordinated layers
 
 **DOM interface** (semantic HTML, SEO, a11y, commerce): navigation, headings,
-product cards, filters, forms, cart drawer. All critical information lives in DOM.
+product UI, filters, forms, cart drawer. All critical information lives in DOM.
 
-**WebGL experience** (Three.js via R3F): hero environment, districts spatial
-selector, featured-object artifact. The site is fully understandable without WebGL —
-every canvas has `role="img"` with a label and a static fallback.
+**WebGL experience** (Three.js via R3F, dynamically imported): hero city,
+districts spatial selector. Progressive enhancement only — every canvas has
+`role="img"`, an aria label, and a static fallback. Purchasing never depends
+on WebGL.
 
 ## Project structure
 
 ```
-app/                    routes (App Router)
-  layout.tsx            fonts, providers, nav, footer, cart drawer, cursor, toaster
-  template.tsx          fast page transition (fade/rise)
-  page.tsx              homepage scene composition
+app/
+  layout.tsx            fonts, GTM (conditional), providers, nav, footer, cart, cursor
+  template.tsx          fast route transition
+  page.tsx              homepage scenes (Loader, Hero, LatestDrop, Districts,
+                        TheCity=LOCKED IN, People, Archive, Transmissions, Join)
   shop|archive|city|journal/page.tsx
-  collections/[slug]/page.tsx
-  product/[slug]/page.tsx
+  collections/[slug]/page.tsx   district header + products via adapter
+  product/[slug]/page.tsx       commercial product page (when catalog live)
+  not-found.tsx         branded 404
+  store/[...path]/route.ts      WooCommerce Store API same-origin proxy (503 if unset)
+  join/route.ts                 newsletter subscription endpoint (503 until provider)
 components/
-  Navigation.tsx        fixed header, scroll-aware backdrop
-  MobileMenu.tsx        fullscreen editorial menu
-  SearchOverlay.tsx     mock live search over the object index
-  CartDrawer.tsx        slide-over bag + DEMO CHECKOUT modal
-  Cursor.tsx            desktop-only custom cursor (data-cursor="explore|view|drag")
-  Media.tsx             procedural SVG placeholder media (seeded, deterministic)
-  ProductCard.tsx       editorial card + quick-add
-  ProductDetail.tsx     gallery, size selector, accordions, related objects
-  Reveal.tsx            Reveal + MaskText (masked line-by-line kinetic type)
-  Marquee.tsx           slow editorial marquee (CSS, reduced-motion aware)
-  StatusBadge.tsx       AVAILABLE / PRE-ORDER / COMING SOON / SOLD OUT
-  Newsletter.tsx        Scene 10 — demo-only submit
-  Footer.tsx            brand footer, "THE CITY NEVER SLEEPS" placeholder copy
-  home/                 Scenes 00–10 (Loader, Hero, LatestDrop, ShopTheDrop,
-                        Districts, FeaturedObject, TheCity, People,
-                        ArchiveTeaser, Transmissions)
-  three/
-    SceneCanvas.tsx     shared wrapper: adaptive DPR, IntersectionObserver
-                        render-pause, WebGL support detection, static fallback
-    HeroScene.tsx       brutalist city grid (instanced), monoliths, fog, dust,
-                        pointer + scroll camera rig
-    DistrictScene.tsx   4 architectural district blocks, raycast hover,
-                        emissive highlight, camera shift
-    ObjectScene.tsx     scroll-driven rotating wireframe artifact
+  Navigation, MobileMenu, SearchOverlay (live store search), CartDrawer,
+  Cursor, Media (procedural architectural graphic), ProductCard, ProductDetail,
+  ShopGrid, EmptyState, Reveal/MaskText, Marquee, StatusBadge, Newsletter, Footer,
+  AnalyticsRouteTracker
+  home/  Loader, Hero, LatestDrop, Districts, TheCity, People, ArchiveTeaser,
+         Transmissions
+  three/ SceneCanvas (perf manager), HeroScene, DistrictScene
 lib/
-  types.ts              Product, ProductVariant, Collection, Drop,
-                        ProductStatus, Cart, CartItem, Transmission
-  mock-data.ts          MOCK DATA only
-  commerce.ts           CommerceAdapter interface + MockCommerceAdapter
-  cart.tsx              cart context (localStorage)
-  utils.ts              cn, formatPrice, seededRandom
+  types.ts        Product/ProductVariant with stable identifiers
+                  (lock/woo/printful ids + SKU), Drop, Transmission, Person,
+                  CartItem (display snapshot pattern)
+  districts.ts    structural IA (CORE/DROP/COLLAB/ARCHIVE)
+  commerce.ts     CommerceAdapter → WooCommerceAdapter | EmptyCommerceAdapter
+  analytics.ts    typed GA4/GTM dataLayer events + purchaseOnce guard
+  attribution.ts  first-touch UTM/promoter/coupon/referrer capture
+  newsletter.ts   SubscriptionProvider abstraction (Null → Klaviyo later)
+  cart.tsx        cart context (localStorage), analytics-instrumented
+backend/ (FastAPI, platform service)
+  server.py       POST /api/webhooks/woocommerce — HMAC-SHA256 signature
+                  validation, topic allowlist, idempotent persistence via
+                  unique delivery_id in MongoDB, 503 fail-closed
+  supabase/migrations/001_initial_schema.sql — Lock City OS schema (12
+                  entities, RLS enabled, service-role only)
 ```
 
-## Commerce mock layer
+## Source of truth rules
 
-UI consumes `CommerceAdapter` (`lib/commerce.ts`) only:
+WooCommerce = catalog/orders/revenue · Printful = fulfillment/cost ·
+GA4 = behavior · Supabase = operational intelligence · Lock City AI =
+analysis only (later). The frontend never duplicates the catalog; it maps
+WooCommerce data through the adapter with stable identifiers.
 
-```ts
-export const commerce: CommerceAdapter = new MockCommerceAdapter();
-```
+## Commerce flow (launch path)
 
-Production swap: implement `LockCityApiAdapter implements CommerceAdapter`
-against the future LOCK CITY ADMIN API (WooCommerce / Printful / Stripe / PayPal /
-Email / Affiliates). No provider is ever called from the frontend. Product
-components never touch raw JSON — they receive typed `Product` models.
+1. Set `NEXT_PUBLIC_WC_STORE_URL` → catalog, collections and search go live
+   automatically (adapter switches from Empty to WooCommerce).
+2. Checkout button redirects to the WooCommerce native checkout; cart sync via
+   Store API cart endpoints (nonce/cart-token preserved by `/store/*` proxy).
+3. WooCommerce webhooks → backend `/api/webhooks/woocommerce` → MongoDB
+   (now) → n8n/Supabase sync (P1).
 
-## Motion system
+## Three.js performance
 
-- lenis lerp smooth scroll (skipped under `prefers-reduced-motion`), instance
-  exposed as `window.__lenis` for programmatic scrolls
-- framer-motion: `Reveal` (fade/rise on inView), `MaskText` (masked line reveal),
-  route transitions via `template.tsx`
-- Scroll-linked WebGL: framer-motion `useScroll` MotionValues feed camera
-  position (hero depth-travel) and artifact rotation (featured object)
-- Featured Object uses a tall sticky section (6 steps × 80vh); steps highlight
-  via scroll progress. Native scrolling is never hijacked.
+- `next/dynamic` with `ssr:false` for every scene — Three.js is excluded from
+  the initial bundle; a static gradient poster renders first
+- `useQuality()` tiers HIGH/MEDIUM/LOW/STATIC (cores, memory, viewport)
+- DPR caps, instanced building grid, no post-processing, particles 900/500/220
+- Render loop pauses when canvas leaves viewport (IntersectionObserver) AND
+  when the tab is hidden (`visibilitychange`)
+- STATIC fallback for weak devices / reduced-motion / no WebGL
 
-## Three.js performance strategy
+## Analytics
 
-- `useQuality()` → HIGH / MEDIUM / LOW / STATIC from cores, deviceMemory, viewport
-- DPR capped: [1,2] high, [1,1.5] otherwise; antialias only on HIGH
-- Render loop paused when canvas offscreen (IntersectionObserver → frameloop)
-- Instanced meshes for the building grid; low-poly boxes; no post-processing
-- Particle count: 900 high / 500 medium / 220 low
-- STATIC (weak devices, `prefers-reduced-motion`, no WebGL): CSS radial-gradient
-  fallback, zero WebGL
-- Mobile: LOW profile — reduced density, particles, DPR; custom cursor disabled
+Events: page_view (SPA-aware), view_home, enter_city, view_collection,
+view_item, select_size, add_to_cart, view_cart, remove_from_cart,
+begin_checkout, purchase (deduplicated), email_signup, interact_3d.
+All carry first-touch attribution metadata. Nothing loads until
+`NEXT_PUBLIC_GTM_ID` is set; consent defaults are queued before GTM starts.
 
-## Accessibility
+## Security
 
-Semantic landmarks, labeled buttons/links, form labels, visible `:focus-visible`,
-skip link, keyboard-focusable district controls, aria-live on shop result count,
-`aria-current` on featured-object steps, reduced-motion removes camera travel,
-parallax and marquee.
+- Admin WooCommerce keys + webhook secret: server-only env vars
+- Store API proxy: public surface by design, no credentials
+- Webhooks: raw-body HMAC validation, constant-time compare, idempotency keys
+- Supabase: RLS on all tables, no public policies, service-role only
+- Financially sensitive actions (payouts, refunds, pricing) require the
+  `approvals` table — never automatic
 
-## Asset replacement process
+## Asset pipeline (future)
 
-Every placeholder visual is `<Media seed={n} code="…" label="…" />` — a seeded
-procedural SVG clearly tagged `[PRODUCT MEDIA PENDING]` / `[LOCK CITY IMAGE
-PENDING]`. To go live: replace Media usages with real campaign photography
-components (keep the frame treatments: clipped corners, spotlight, mono grade).
-Copy marked `[CONTENT PENDING]` / `[INFORMATION PENDING]` awaits real brand input.
-
-## Future LOCK CITY ADMIN API
-
-Planned data areas: products, orders, customers, coupons, affiliates, preorders,
-analytics. The frontend will swap the adapter; UI stays untouched.
-
-## Known prototype boundaries
-
-- Account is a placeholder (no auth in scope)
-- Checkout, newsletter and search run locally only (DEMO ONLY)
-- Collection/product data is static mock content
+Real campaign/product photography replaces the procedural `Media` graphic.
+Prefer optimized GLB/glTF for future hero-product VIEW IN 3D; mobile
+performance outranks cinematic weight.

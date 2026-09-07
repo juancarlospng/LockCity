@@ -79,6 +79,13 @@ export function SceneCanvas({
     return () => io.disconnect();
   }, []);
 
+  const [pageHidden, setPageHidden] = useState(false);
+  useEffect(() => {
+    const onVisibility = () => setPageHidden(document.hidden);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
   const staticMode = quality === "static" || reduced || !supported;
 
   return (
@@ -89,7 +96,7 @@ export function SceneCanvas({
         )
       ) : (
         <Canvas
-          frameloop={visible ? "always" : "never"}
+          frameloop={visible && !pageHidden ? "always" : "never"}
           dpr={quality === "high" ? [1, 2] : [1, 1.5]}
           camera={camera}
           gl={{

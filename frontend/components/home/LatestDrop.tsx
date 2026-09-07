@@ -5,8 +5,6 @@ import Link from "next/link";
 import { useRef } from "react";
 import { Media } from "@/components/Media";
 import { MaskText, Reveal } from "@/components/Reveal";
-import { StatusBadge } from "@/components/StatusBadge";
-import { LATEST_DROP } from "@/lib/mock-data";
 
 export function LatestDrop() {
   const ref = useRef<HTMLElement>(null);
@@ -29,7 +27,7 @@ export function LatestDrop() {
         aria-hidden
         className="text-outline pointer-events-none absolute -right-6 top-10 select-none font-display text-[24vw] uppercase leading-none opacity-40"
       >
-        006
+        001
       </p>
 
       <div className="relative grid grid-cols-1 gap-14 lg:grid-cols-12">
@@ -49,27 +47,30 @@ export function LatestDrop() {
           <Reveal delay={0.15} className="mt-10 space-y-4">
             <div className="flex items-center gap-4">
               <span className="font-display text-3xl uppercase text-bone">
-                {LATEST_DROP.code}
+                The first drop
               </span>
-              <StatusBadge status="AVAILABLE" />
+              <span
+                data-testid="drop-status-badge"
+                className="inline-flex items-center gap-2 text-[9px] uppercase tracking-[0.3em] text-bone"
+              >
+                <span aria-hidden className="h-1 w-1 animate-pulse-dot rounded-full bg-bone" />
+                Coming soon
+              </span>
             </div>
-            <p className="text-xs uppercase tracking-[0.25em] text-steel">
-              {LATEST_DROP.name} — {LATEST_DROP.season}
-            </p>
             <p className="max-w-sm text-xs leading-relaxed text-steel">
-              Six new objects enter the city. Concrete weight, bone tones,
-              architectural cuts. Mock data — development placeholder copy.
+              The city is being built. Join to get the signal the moment the
+              first objects land.
             </p>
           </Reveal>
 
           <Reveal delay={0.25} className="mt-12 flex flex-wrap items-center gap-6">
             <Link
-              href="/collections/drop"
-              data-testid="explore-drop-button"
+              href="/#join"
+              data-testid="notify-drop-button"
               data-cursor="explore"
               className="border border-bone px-8 py-4 text-xs font-bold uppercase tracking-[0.3em] text-bone transition-colors duration-300 hover:bg-bone hover:text-bg"
             >
-              Explore drop →
+              Get the signal →
             </Link>
             <Link
               href="/shop"
@@ -86,17 +87,13 @@ export function LatestDrop() {
             <div className="relative overflow-hidden" data-cursor="explore">
               <motion.div style={reduced ? undefined : { y: mediaY }} className="scale-110">
                 <Media
-                  seed={606}
-                  code="DROP_006"
+                  seed={101}
+                  code="001"
                   ratio="wide"
-                  label="LOCK CITY IMAGE PENDING"
+                  label="First drop campaign"
                   className="min-h-[320px] lg:min-h-[520px]"
                 />
               </motion.div>
-              <div className="absolute bottom-4 left-4 flex gap-6 text-[9px] uppercase tracking-[0.25em] text-steel">
-                <span>06 objects</span>
-                <span>Campaign [Pending]</span>
-              </div>
             </div>
           </Reveal>
         </div>

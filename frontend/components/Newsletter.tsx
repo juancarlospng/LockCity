@@ -1,25 +1,45 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { toast } from "sonner";
+import { emailSignup } from "@/lib/analytics";
 import { MaskText, Reveal } from "./Reveal";
+
+type State = "idle" | "loading" | "subscribed" | "unavailable" | "error";
 
 export function Newsletter() {
   const [email, setEmail] = useState("");
-  const [done, setDone] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [state, setState] = useState<State>("idle");
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!email.includes("@")) {
-      toast.error("Enter a valid email — demo only");
-      return;
+    setState("loading");
+    try {
+      const res = await fetch("/join", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email,
+          consent,
+          language: navigator.language,
+        }),
+      });
+      if (res.ok) {
+        emailSignup();
+        setState("subscribed");
+      } else if (res.status === 503) {
+        setState("unavailable");
+      } else {
+        setState("error");
+      }
+    } catch {
+      setState("error");
     }
-    setDone(true);
-    toast.success("Transmission received — demo only");
   };
 
   return (
     <section
+      id="join"
       data-testid="join-the-city-section"
       aria-labelledby="join-heading"
       className="relative border-t border-graphite px-4 py-28 sm:px-8 lg:px-12 lg:py-40"
@@ -40,17 +60,16 @@ export function Newsletter() {
         </div>
 
         <div className="w-full max-w-md">
-          {done ? (
+          {state === "subscribed" ? (
             <div
               data-testid="newsletter-success"
               className="border border-graphite p-8"
             >
               <p className="font-display text-2xl uppercase text-bone">
-                Signal received
+                Welcome to the city
               </p>
               <p className="mt-3 text-xs leading-relaxed text-steel">
-                You are on the list. Demo only — no email was sent and no provider
-                is connected.
+                You are on the list. The signal arrives with the first drop.
               </p>
             </div>
           ) : (
@@ -59,7 +78,7 @@ export function Newsletter() {
                 htmlFor="newsletter-email"
                 className="text-[10px] uppercase tracking-[0.3em] text-steel"
               >
-                Enter citizen email — Demo only
+                Email
               </label>
               <div className="mt-3 flex items-center gap-4">
                 <input
@@ -75,16 +94,41 @@ export function Newsletter() {
                 <button
                   type="submit"
                   data-testid="newsletter-submit-button"
-                  className="shrink-0 text-xs font-bold uppercase tracking-[0.3em] text-bone transition-colors duration-200 hover:text-steel"
+                  disabled={state === "loading"}
+                  className="shrink-0 text-xs font-bold uppercase tracking-[0.3em] text-bone transition-colors duration-200 hover:text-steel disabled:text-graphite"
                 >
-                  Enter →
+                  {state === "loading" ? "…" : "Enter →"}
                 </button>
               </div>
+              <label className="mt-4 flex cursor-pointer items-start gap-3 pb-2 text-[10px] uppercase leading-relaxed tracking-[0.15em] text-steel">
+                <input
+                  type="checkbox"
+                  data-testid="newsletter-consent-checkbox"
+                  required
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 appearance-none border border-graphite bg-transparent checked:border-bone checked:bg-bone"
+                />
+                I agree to receive Lock City communications
+              </label>
+              {state === "unavailable" && (
+                <p
+                  data-testid="newsletter-unavailable"
+                  className="pb-3 text-[10px] uppercase tracking-[0.2em] text-steel"
+                >
+                  The list is not open yet — the signal arrives soon
+                </p>
+              )}
+              {state === "error" && (
+                <p
+                  data-testid="newsletter-error"
+                  className="pb-3 text-[10px] uppercase tracking-[0.2em] text-steel"
+                >
+                  Something failed — check the email and try again
+                </p>
+              )}
             </form>
           )}
-          <p className="mt-4 text-[9px] uppercase tracking-[0.25em] text-steel">
-            Demo only — not connected to an email provider
-          </p>
         </div>
       </div>
     </section>

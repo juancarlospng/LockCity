@@ -1,17 +1,30 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { DistrictScene } from "@/components/three/DistrictScene";
 import { MaskText, Reveal } from "@/components/Reveal";
-import { MOCK_COLLECTIONS } from "@/lib/mock-data";
+import { DISTRICTS } from "@/lib/districts";
+import { interact3D, viewCollection } from "@/lib/analytics";
+
+const DistrictScene = dynamic(
+  () => import("@/components/three/DistrictScene").then((m) => m.DistrictScene),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="absolute inset-0 h-full w-full bg-[radial-gradient(ellipse_at_50%_60%,#141414_0%,#050505_70%)]" />
+    ),
+  }
+);
 
 export function Districts() {
   const [active, setActive] = useState<number | null>(null);
   const router = useRouter();
 
-  const select = (i: number) =>
-    router.push(`/collections/${MOCK_COLLECTIONS[i].slug}`);
+  const select = (i: number) => {
+    viewCollection(DISTRICTS[i].slug);
+    router.push(`/collections/${DISTRICTS[i].slug}`);
+  };
 
   return (
     <section
@@ -34,19 +47,26 @@ export function Districts() {
       </div>
 
       <div className="relative h-[62vh] min-h-[440px] lg:h-[78vh]">
-        <DistrictScene active={active} onHover={setActive} onSelect={select} />
+        <DistrictScene
+          active={active}
+          onHover={(i) => {
+            setActive(i);
+            if (i !== null) interact3D("districts", "hover");
+          }}
+          onSelect={select}
+        />
 
         <div className="absolute right-4 top-10 hidden max-w-[240px] text-right sm:right-8 lg:block lg:right-12">
           {active !== null ? (
             <div data-testid="district-info-panel" className="animate-fade-in">
-              <p className="font-display text-2xl uppercase text-bone">
-                {MOCK_COLLECTIONS[active].name}
+              <p className="text-[10px] tracking-[0.3em] text-steel">
+                District {DISTRICTS[active].index}
               </p>
-              <p className="mt-2 text-[10px] uppercase tracking-[0.25em] text-steel">
-                {MOCK_COLLECTIONS[active].tagline}
+              <p className="mt-2 font-display text-2xl uppercase text-bone">
+                {DISTRICTS[active].name}
               </p>
               <p className="mt-4 text-xs leading-relaxed text-steel">
-                {MOCK_COLLECTIONS[active].description}
+                This district opens with the first drop.
               </p>
             </div>
           ) : (
@@ -57,18 +77,18 @@ export function Districts() {
         </div>
 
         <div className="absolute inset-x-0 bottom-0 grid grid-cols-2 border-t border-graphite bg-bg/70 backdrop-blur-md lg:grid-cols-4">
-          {MOCK_COLLECTIONS.map((c, i) => (
+          {DISTRICTS.map((d, i) => (
             <button
-              key={c.slug}
+              key={d.slug}
               type="button"
-              data-testid={`district-${c.slug}-button`}
+              data-testid={`district-${d.slug}-button`}
               data-cursor="explore"
               onMouseEnter={() => setActive(i)}
               onMouseLeave={() => setActive(null)}
               onFocus={() => setActive(i)}
               onBlur={() => setActive(null)}
               onClick={() => select(i)}
-              aria-label={`Enter district ${c.districtIndex} — ${c.name}`}
+              aria-label={`Enter district ${d.index} — ${d.name}`}
               className={`group border-graphite px-4 py-6 text-left transition-colors duration-300 lg:px-8 lg:py-8 [&:not(:last-child)]:border-r ${
                 active === i ? "bg-bone text-bg" : "text-bone hover:bg-onyx"
               }`}
@@ -78,10 +98,10 @@ export function Districts() {
                   active === i ? "text-bg/60" : "text-steel"
                 }`}
               >
-                District {c.districtIndex}
+                District {d.index}
               </span>
               <span className="mt-2 block font-display text-2xl uppercase leading-none lg:text-3xl">
-                {c.name}
+                {d.name}
               </span>
               <span
                 className={`mt-2 block text-[9px] uppercase tracking-[0.2em] transition-transform duration-300 group-hover:translate-x-1 ${

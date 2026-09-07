@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 
-const BOOT_LINES = ["INITIALIZING CITY", "LOADING ENVIRONMENT", "SYSTEM 02"];
+const BOOT_LINES = ["INITIALIZING CITY", "LOADING ENVIRONMENT"];
 
 export function Loader() {
   const [show, setShow] = useState(false);
@@ -46,7 +46,6 @@ export function Loader() {
         >
           <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-steel">
             <span>Lock City®</span>
-            <span>System 02</span>
           </div>
 
           <div className="flex flex-col gap-2">

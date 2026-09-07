@@ -9,24 +9,28 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { MOCK_PRODUCTS } from "./mock-data";
 import type { CartItem, Product, ProductVariant } from "./types";
+import {
+  addToCart as trackAddToCart,
+  removeFromCart as trackRemoveFromCart,
+  viewCart,
+} from "./analytics";
 
 interface CartContextValue {
   items: CartItem[];
   isOpen: boolean;
   openCart: () => void;
   closeCart: () => void;
-  addItem: (productId: string, variantId: string) => void;
+  addItem: (product: Product, variant: ProductVariant) => void;
   removeItem: (productId: string, variantId: string) => void;
   setQty: (productId: string, variantId: string, qty: number) => void;
   count: number;
   subtotal: number;
-  resolve: (item: CartItem) => { product: Product; variant: ProductVariant } | null;
+  currency: string;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
-const STORAGE_KEY = "lc-v2-cart";
+const STORAGE_KEY = "lc-cart";
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -45,69 +49,121 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items, hydrated]);
 
-  const addItem = useCallback((productId: string, variantId: string) => {
+  const addItem = useCallback((product: Product, variant: ProductVariant) => {
     setItems((prev) => {
       const existing = prev.find(
-        (i) => i.productId === productId && i.variantId === variantId
+        (i) => i.productId === product.id && i.variantId === variant.id
       );
       if (existing) {
         return prev.map((i) =>
           i === existing ? { ...i, qty: Math.min(i.qty + 1, 9) } : i
         );
       }
-      return [...prev, { productId, variantId, qty: 1 }];
+      return [
+        ...prev,
+        {
+          productId: product.id,
+          variantId: variant.id,
+          qty: 1,
+          name: product.name,
+          slug: product.slug,
+          price: variant.price ?? product.price,
+          currency: product.currency,
+          size: variant.size,
+          color: variant.color ?? product.color,
+          image: product.images[0],
+        },
+      ];
+    });
+    trackAddToCart({
+      item_id: product.id,
+      item_name: product.name,
+      item_variant: variant.size,
+      item_category: product.category,
+      price: variant.price ?? product.price,
+      quantity: 1,
     });
     setIsOpen(true);
   }, []);
 
   const removeItem = useCallback((productId: string, variantId: string) => {
-    setItems((prev) =>
-      prev.filter((i) => !(i.productId === productId && i.variantId === variantId))
-    );
+    setItems((prev) => {
+      const item = prev.find(
+        (i) => i.productId === productId && i.variantId === variantId
+      );
+      if (item) {
+        trackRemoveFromCart({
+          item_id: item.productId,
+          item_name: item.name,
+          item_variant: item.size,
+          price: item.price,
+          quantity: item.qty,
+        });
+      }
+      return prev.filter(
+        (i) => !(i.productId === productId && i.variantId === variantId)
+      );
+    });
   }, []);
 
-  const setQty = useCallback((productId: string, variantId: string, qty: number) => {
-    setItems((prev) =>
-      qty <= 0
-        ? prev.filter((i) => !(i.productId === productId && i.variantId === variantId))
-        : prev.map((i) =>
-            i.productId === productId && i.variantId === variantId ? { ...i, qty } : i
-          )
-    );
+  const setQty = useCallback(
+    (productId: string, variantId: string, qty: number) => {
+      setItems((prev) =>
+        qty <= 0
+          ? prev.filter(
+              (i) => !(i.productId === productId && i.variantId === variantId)
+            )
+          : prev.map((i) =>
+              i.productId === productId && i.variantId === variantId
+                ? { ...i, qty }
+                : i
+            )
+      );
+    },
+    []
+  );
+
+  const openCart = useCallback(() => {
+    setIsOpen(true);
+    setItems((current) => {
+      viewCart(
+        current.map((i) => ({
+          item_id: i.productId,
+          item_name: i.name,
+          item_variant: i.size,
+          price: i.price,
+          quantity: i.qty,
+        })),
+        current.reduce((sum, i) => sum + i.price * i.qty, 0)
+      );
+      return current;
+    });
   }, []);
 
-  const resolve = useCallback((item: CartItem) => {
-    const product = MOCK_PRODUCTS.find((p) => p.id === item.productId);
-    const variant = product?.variants.find((v) => v.id === item.variantId);
-    return product && variant ? { product, variant } : null;
-  }, []);
-
-  const { count, subtotal } = useMemo(() => {
+  const { count, subtotal, currency } = useMemo(() => {
     let count = 0;
     let subtotal = 0;
     for (const item of items) {
-      const product = MOCK_PRODUCTS.find((p) => p.id === item.productId);
-      if (!product) continue;
       count += item.qty;
-      subtotal += product.price * item.qty;
+      subtotal += item.price * item.qty;
     }
-    return { count, subtotal };
+    return { count, subtotal, currency: items[0]?.currency ?? "EUR" };
   }, [items]);
 
   const value = useMemo(
     () => ({
       items,
       isOpen,
-      openCart: () => setIsOpen(true),
+      openCart,
       closeCart: () => setIsOpen(false),
       addItem,
       removeItem,
       setQty,
       count,
       subtotal,
-      resolve,
+      currency,
     }),
-    [items, isOpen, addItem, removeItem, setQty, count, subtotal, resolve]
+    [items, isOpen, openCart, addItem, removeItem, setQty, count, subtotal, currency]
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

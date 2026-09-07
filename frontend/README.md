@@ -1,49 +1,60 @@
-# LOCK CITY V2 — Immersive Ecommerce Prototype
+# LOCK CITY® — Technological Commerce System
 
-**THE CITY IS ALIVE.** LOCK CITY V2 is a digital place, not a conventional store.
-Collections are DISTRICTS. Products are OBJECTS. Releases are DROPS. History lives
-in the ARCHIVE. Editorial content is TRANSMISSIONS. Community is PEOPLE OF THE CITY.
-
-> PROTOTYPE — all products, prices, drops, people and content are **MOCK DATA**.
-> Unknown brand facts are marked `[INFORMATION PENDING]`.
+**THE CITY IS ALIVE.** A cultural, cinematic storefront where collections are
+DISTRICTS, products carry internal OBJECT identities, and releases are DROPS.
+The front-end builds culture and desire; the system underneath is built to
+function like software.
 
 ## Stack
 
 - Next.js 15 (App Router) + React 19 + TypeScript
-- Three.js + React Three Fiber + Drei (WebGL layer)
-- framer-motion (reveals, micro-interactions) + lenis (smooth scroll)
-- Tailwind CSS, next/font (Anton display + Space Mono utility), sonner (toasts)
+- Three.js + React Three Fiber (progressive enhancement — never required to buy)
+- framer-motion + lenis (motion), Tailwind CSS, sonner
+- WooCommerce (catalog/orders/revenue — source of truth) via Store API
+- Printful behind WooCommerce (production/fulfillment/cost)
+- Supabase/Postgres (operational intelligence — schema in `backend/supabase/`)
+- GA4 via GTM (behavioral analytics, gated behind `NEXT_PUBLIC_GTM_ID`)
 
 ## Run
 
 ```bash
 yarn install
-yarn start        # next dev on 0.0.0.0:3000 (supervisor-managed here)
-yarn build        # production build
+yarn start        # dev, 0.0.0.0:3000
+yarn build        # production build (type-checked)
 ```
 
-## Routes
+## Environment
 
-| Route | Purpose |
-| --- | --- |
-| `/` | 11-scene cinematic homepage (00 Initialization → 10 Join The City) |
-| `/shop` | All objects — filters (NEW / T-SHIRTS / HOODIES / BOTTOMS / ACCESSORIES), sort |
-| `/collections/[slug]` | District page: `core`, `drop`, `collab`, `archive` |
-| `/product/[slug]` | Product detail — gallery, size selector, add to bag, accordions |
-| `/archive` | The vault — all past drops |
-| `/city` | Brand manifesto placeholder |
-| `/journal` | Transmissions index |
+See `.env.example`. Nothing loads or calls out until configured:
 
-Cart is a global drawer (localStorage-persisted) with DEMO CHECKOUT.
+| Variable | Purpose | Scope |
+| --- | --- | --- |
+| `NEXT_PUBLIC_WC_STORE_URL` | WooCommerce storefront URL (Store API is public by design) | public |
+| `NEXT_PUBLIC_GTM_ID` | GTM container (GA4 inside GTM) | public |
+| `KLAVIYO_API_KEY` / `KLAVIYO_LIST_ID` | JOIN THE CITY provider (later) | server |
+| `WC_URL` / `WC_CONSUMER_KEY` / `WC_CONSUMER_SECRET` | Admin REST API — backend only | server |
+| `WC_WEBHOOK_SECRET` | Webhook HMAC validation | server |
+| `DATABASE_URL` | Supabase Transaction Pooler URI (port 6543) | server |
 
-## Design system
+## Architecture map
 
-Pure monochrome: `#050505` bg, `#F1EFE9` bone text, `#222222` graphite borders,
-`#747474` steel muted, `#101010` surfaces. No accent color — typography, light,
-composition and motion carry the identity. Display type: Anton. Utility: Space Mono.
+- Commerce adapter: `lib/commerce.ts` (`WooCommerceAdapter` → `EmptyCommerceAdapter`
+  fallback; UI always renders honest empty states when no store is connected)
+- Edge routes: `/store/*` (same-origin WooCommerce Store API proxy) and
+  `/join` (newsletter subscription abstraction). Note: `/api/*` is reserved
+  for the platform backend — do not create Next route handlers under `/api`.
+- Webhooks: `POST /api/webhooks/woocommerce` on the FastAPI backend —
+  HMAC-SHA256 signature validation, idempotent via `X-WC-Delivery-ID`,
+  503 fail-closed until configured.
+- Analytics: `lib/analytics.ts` typed dataLayer events with automatic
+  first-touch attribution (`lib/attribution.ts`).
+- Data model: `backend/supabase/migrations/001_initial_schema.sql`
+  (RLS enabled, service-role only).
 
-## Data safety
+## Rules
 
-All commerce values are fictional development content, labeled MOCK DATA in the UI.
-No real Lock City products, prices, dates, stock or people are represented.
-No payment, email or fulfillment provider is connected.
+- No fabricated products, prices, people, drops or content — ever.
+- Brand language (Districts, Objects, Drops) never replaces shopping language
+  (Shop, Size, Add to Bag, Checkout).
+- Three.js for experience; standard UI for commerce.
+- Secrets live in env vars, server-side, never in the browser bundle.

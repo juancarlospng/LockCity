@@ -1,10 +1,22 @@
 "use client";
 
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRef } from "react";
-import { HeroScene } from "@/components/three/HeroScene";
 import { MaskText } from "@/components/Reveal";
+import { enterCity, interact3D, viewHome } from "@/lib/analytics";
+import { useEffect } from "react";
+
+const HeroScene = dynamic(
+  () => import("@/components/three/HeroScene").then((m) => m.HeroScene),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="absolute inset-0 h-full w-full bg-[radial-gradient(ellipse_at_50%_35%,#181818_0%,#050505_65%)]" />
+    ),
+  }
+);
 
 export function Hero() {
   const ref = useRef<HTMLElement>(null);
@@ -16,9 +28,14 @@ export function Hero() {
   const y = useTransform(scrollYProgress, [0, 1], ["0%", "22%"]);
   const opacity = useTransform(scrollYProgress, [0, 0.75], [1, 0]);
 
+  useEffect(() => viewHome(), []);
+
   const scrollToDrop = () => {
+    enterCity();
     const target = document.getElementById("scene-drop");
-    const lenis = (window as Window & { __lenis?: { scrollTo: (t: HTMLElement, o?: object) => void } }).__lenis;
+    const lenis = (
+      window as Window & { __lenis?: { scrollTo: (t: HTMLElement, o?: object) => void } }
+    ).__lenis;
     if (target && lenis && !reduced) lenis.scrollTo(target, { duration: 1.4 });
     else target?.scrollIntoView({ behavior: "auto" });
   };
@@ -29,6 +46,7 @@ export function Hero() {
       data-testid="hero-section"
       aria-label="Enter the city"
       className="relative h-[100svh] min-h-[620px] overflow-hidden"
+      onPointerDown={() => interact3D("hero-city", "pointer")}
     >
       <HeroScene progress={scrollYProgress} />
       <div
@@ -43,9 +61,8 @@ export function Hero() {
         <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-steel">
           <span data-testid="hero-status-badge" className="flex items-center gap-2">
             <span aria-hidden className="h-1 w-1 animate-pulse-dot rounded-full bg-bone" />
-            Status: Live
+            The city is alive
           </span>
-          <span className="hidden sm:block">[37.7749° N — Coordinates mock]</span>
           <span>Scene 01</span>
         </div>
 
@@ -66,8 +83,7 @@ export function Hero() {
           <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
             <p className="max-w-xs text-xs leading-relaxed text-steel">
               A streetwear system rendered as a place. Collections are districts.
-              Products are objects.{" "}
-              <span className="text-bone/70">Prototype — mock data.</span>
+              Products are objects.
             </p>
 
             <div className="flex flex-wrap items-center gap-4">

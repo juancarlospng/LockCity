@@ -85,9 +85,6 @@ export function Navigation() {
             >
               Search
             </button>
-            <span className="hidden text-[11px] uppercase tracking-[0.25em] text-graphite sm:block">
-              Account
-            </span>
             <button
               type="button"
               data-testid="nav-cart-trigger"

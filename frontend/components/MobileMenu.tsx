@@ -66,8 +66,8 @@ export function MobileMenu({ onClose }: { onClose: () => void }) {
       </nav>
 
       <div className="flex items-center justify-between px-6 py-6 text-[10px] uppercase tracking-[0.25em] text-steel">
-        <span>System 02 — Prototype</span>
-        <span className="animate-pulse-dot">Status: Live</span>
+        <span>The city is alive</span>
+        <span className="animate-pulse-dot">Locked in</span>
       </div>
     </motion.div>
   );

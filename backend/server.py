@@ -1,9 +1,13 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import base64
+import hashlib
+import hmac
+import json
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List
@@ -65,6 +69,67 @@ async def get_status_checks():
             check['timestamp'] = datetime.fromisoformat(check['timestamp'])
     
     return status_checks
+
+# ── WooCommerce webhooks ─────────────────────────────────────
+# Validates X-WC-Webhook-Signature (base64 HMAC-SHA256 of the raw body),
+# persists each delivery once (idempotent via unique delivery_id), and
+# stores only metadata here — full order sync happens server-side via the
+# authenticated REST API later. Returns 503 until WC_WEBHOOK_SECRET is set.
+
+WC_WEBHOOK_SECRET = os.environ.get('WC_WEBHOOK_SECRET')
+ALLOWED_WC_TOPICS = {
+    "order.created",
+    "order.updated",
+    "product.updated",
+    "customer.created",
+    "customer.updated",
+}
+
+
+@app.on_event("startup")
+async def create_webhook_index():
+    await db.webhook_events.create_index("delivery_id", unique=True, sparse=True)
+
+
+@api_router.post("/webhooks/woocommerce")
+async def woocommerce_webhook(request: Request):
+    if not WC_WEBHOOK_SECRET:
+        raise HTTPException(503, "WooCommerce webhook secret is not configured")
+
+    raw = await request.body()
+    supplied = request.headers.get("x-wc-webhook-signature", "")
+    expected = base64.b64encode(
+        hmac.new(WC_WEBHOOK_SECRET.encode(), raw, hashlib.sha256).digest()
+    ).decode()
+    if not hmac.compare_digest(supplied, expected):
+        raise HTTPException(401, "Invalid WooCommerce webhook signature")
+
+    topic = request.headers.get("x-wc-webhook-topic", "")
+    if topic not in ALLOWED_WC_TOPICS:
+        return {"accepted": False, "reason": "ignored topic"}
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Invalid JSON payload")
+
+    delivery_id = request.headers.get("x-wc-delivery-id")
+    if delivery_id:
+        try:
+            await db.webhook_events.insert_one({
+                "delivery_id": delivery_id,
+                "topic": topic,
+                "payload_id": payload.get("id"),
+                "received_at": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception as exc:
+            if "duplicate" in str(exc).lower():
+                return {"accepted": True, "duplicate": True}
+            raise HTTPException(500, "Could not persist webhook event")
+
+    logger.info("WooCommerce webhook accepted: %s", topic)
+    return {"accepted": True}
+
 
 # Include the router in the main app
 app.include_router(api_router)

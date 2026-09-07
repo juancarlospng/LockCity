@@ -2,12 +2,20 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { MOCK_PRODUCTS } from "@/lib/mock-data";
+import { useEffect, useRef, useState } from "react";
 import { formatPrice } from "@/lib/utils";
+
+interface SearchResult {
+  id: number;
+  name: string;
+  slug: string;
+  prices?: { price?: string; currency_code?: string; currency_minor_unit?: number };
+}
 
 export function SearchOverlay({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [available, setAvailable] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -17,15 +25,34 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return MOCK_PRODUCTS.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.code.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q)
-    );
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/store/products?search=${encodeURIComponent(q)}&per_page=8`,
+          { signal: controller.signal }
+        );
+        if (res.status === 503) {
+          setAvailable(false);
+          return;
+        }
+        if (!res.ok) throw new Error();
+        setAvailable(true);
+        setResults(await res.json());
+      } catch {
+        if (!controller.signal.aborted) setAvailable(false);
+      }
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [query]);
 
   return (
@@ -43,7 +70,7 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
       <div className="mx-auto flex h-full max-w-3xl flex-col px-6 pt-24">
         <div className="flex items-center justify-between">
           <span className="text-[10px] uppercase tracking-[0.3em] text-steel">
-            Search the city — Mock index
+            Search the city
           </span>
           <button
             type="button"
@@ -59,14 +86,22 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
           data-testid="search-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="TYPE TO SEARCH OBJECTS"
+          placeholder="TYPE TO SEARCH"
           className="mt-8 w-full border-b border-graphite bg-transparent pb-4 font-display text-4xl uppercase text-bone placeholder:text-graphite focus:border-bone focus:outline-none sm:text-5xl"
-          aria-label="Search objects"
+          aria-label="Search products"
         />
         <div className="mt-10 flex flex-col divide-y divide-graphite overflow-y-auto">
-          {query && results.length === 0 && (
+          {!available && (
+            <p
+              data-testid="search-unavailable"
+              className="py-6 text-xs uppercase tracking-[0.25em] text-steel"
+            >
+              Search opens with the first drop
+            </p>
+          )}
+          {available && query && results.length === 0 && (
             <p className="py-6 text-xs uppercase tracking-[0.25em] text-steel">
-              No objects found — Mock data
+              Nothing found
             </p>
           )}
           {results.map((p) => (
@@ -76,13 +111,15 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
               data-testid={`search-result-${p.id}`}
               className="group flex items-center justify-between py-5"
             >
-              <div>
-                <p className="text-[10px] tracking-[0.3em] text-steel">{p.code}</p>
-                <p className="mt-1 font-display text-2xl uppercase text-bone transition-transform duration-300 group-hover:translate-x-2">
-                  {p.name}
-                </p>
-              </div>
-              <span className="text-xs text-steel">{formatPrice(p.price)} — Mock</span>
+              <p className="font-display text-2xl uppercase text-bone transition-transform duration-300 group-hover:translate-x-2">
+                {p.name}
+              </p>
+              <span className="text-xs text-steel">
+                {formatPrice(
+                  Number(p.prices?.price ?? 0) / 10 ** (p.prices?.currency_minor_unit ?? 2),
+                  p.prices?.currency_code ?? "EUR"
+                )}
+              </span>
             </Link>
           ))}
         </div>

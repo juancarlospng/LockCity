@@ -1,22 +1,13 @@
 import { Media } from "@/components/Media";
 import { MaskText, Reveal } from "@/components/Reveal";
 
+// LOCKED IN — official brand concept:
+// Locked in with your purpose / your craft / your people / your city.
 const CHAPTERS = [
-  {
-    n: "01",
-    title: "Concrete Foundation",
-    body: "[CONTENT PENDING] — Brand story placeholder. Culture, street, art, music, community.",
-  },
-  {
-    n: "02",
-    title: "Uncompromising Utility",
-    body: "[CONTENT PENDING] — Design philosophy placeholder. Function before decoration.",
-  },
-  {
-    n: "03",
-    title: "Digital Perpetuity",
-    body: "[CONTENT PENDING] — The city exists beyond clothing. A system, a community.",
-  },
+  { n: "01", line: "Locked in with your purpose" },
+  { n: "02", line: "Locked in with your craft" },
+  { n: "03", line: "Locked in with your people" },
+  { n: "04", line: "Locked in with your city" },
 ];
 
 export function TheCity() {
@@ -37,14 +28,14 @@ export function TheCity() {
             id="the-city-heading"
             className="mt-6 font-display text-6xl uppercase leading-[0.9] text-bone sm:text-8xl"
           >
-            <MaskText lines={["The City"]} />
+            <MaskText lines={["Locked", "In"]} />
           </h2>
           <Reveal delay={0.15} className="mt-12">
             <Media
               seed={909}
               code="CITY"
               ratio="wide"
-              label="LOCK CITY VIDEO PENDING"
+              label="The city"
               className="min-h-[300px]"
             />
           </Reveal>
@@ -60,10 +51,9 @@ export function TheCity() {
                 <div className="flex items-baseline gap-6">
                   <span className="text-[10px] tracking-[0.3em] text-steel">{c.n}</span>
                   <h3 className="font-display text-2xl uppercase text-bone sm:text-3xl">
-                    {c.title}
+                    {c.line}
                   </h3>
                 </div>
-                <p className="mt-3 pl-12 text-xs leading-relaxed text-steel">{c.body}</p>
               </div>
             </Reveal>
           ))}

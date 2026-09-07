@@ -1,67 +1,100 @@
+// Core domain models. Products carry stable identifiers — names can change,
+// identifiers must not. WooCommerce remains the source of truth for catalog,
+// orders and revenue. Printful for fulfillment. This frontend never
+// duplicates the catalog; it maps it.
+
 export type ProductStatus =
   | "AVAILABLE"
   | "PRE_ORDER"
   | "COMING_SOON"
   | "SOLD_OUT";
 
-export type Category = "T-SHIRTS" | "HOODIES" | "BOTTOMS" | "ACCESSORIES";
+export type DropStatus = "ACTIVE" | "SOLD_OUT" | "ARCHIVED";
 
 export interface ProductVariant {
   id: string;
   size: string;
+  color?: string;
+  sku?: string;
+  wooVariationId?: number;
+  printfulVariantId?: string;
   status: ProductStatus;
+  price?: number;
 }
 
 export interface Product {
-  id: string;
+  id: string; // internal stable id (lock_product_id)
   slug: string;
-  code: string; // e.g. OBJECT_0041
-  name: string;
-  price: number; // MOCK DATA
-  currency: "EUR";
-  color: string;
-  category: Category;
+  name: string; // commercial name, e.g. LOCK HOODIE
+  code?: string; // internal editorial identity, e.g. OBJECT_0041 — secondary metadata only
+  price: number;
+  currency: string;
+  color?: string;
+  category?: string;
   status: ProductStatus;
-  collection: string; // collection slug
-  description: string;
-  materials: string;
-  seed: number; // deterministic seed for procedural placeholder media
+  collection?: string; // district slug
+  description?: string;
+  materials?: string;
+  fit?: string;
+  images: string[]; // real photography URLs; empty until assets exist
+  sku?: string;
+  wooProductId?: number;
+  printfulProductId?: string;
   variants: ProductVariant[];
 }
 
 export interface Collection {
   slug: string;
-  districtIndex: string; // e.g. "01"
-  name: string; // CORE / DROP / COLLAB / ARCHIVE
-  tagline: string;
-  description: string;
-  seed: number;
+  index: string; // district number, e.g. "02"
+  name: string;
+  description?: string;
 }
 
 export interface Drop {
   id: string;
-  code: string; // DROP_001
   name: string;
-  status: "AVAILABLE" | "ARCHIVED" | "SOLD_OUT";
-  season: string; // MOCK season label
+  status: DropStatus;
+  releasedAt?: string;
 }
 
 export interface Transmission {
   id: string;
-  code: string; // TRANSMISSION_009
+  slug: string;
   category: "EDITORIAL" | "FILM" | "COLLAB" | "CITY" | "PEOPLE";
   title: string;
-  excerpt: string;
-  minutes: number;
-  seed: number;
+  excerpt?: string;
+  image?: string;
+  publishedAt?: string;
 }
 
+// People of the City — schema-ready for the future LOCKED IN NETWORK.
+export interface Person {
+  id: string; // person_id
+  name: string;
+  alias?: string;
+  city?: string;
+  country?: string;
+  craft?: string; // artist / athlete / musician / dj / photographer / barber / designer / creator / entrepreneur / promoter / collaborator
+  bio?: string;
+  images: string[];
+  video?: string;
+  socials?: { platform: string; url: string }[];
+  productsWorn?: string[]; // lock_product_id references
+  campaign?: string;
+  lockedInStory?: string;
+}
+
+// Cart items store a display snapshot (name/price/size) taken at add-time —
+// standard headless-cart practice; WooCommerce revalidates at checkout.
 export interface CartItem {
   productId: string;
   variantId: string;
   qty: number;
-}
-
-export interface Cart {
-  items: CartItem[];
+  name: string;
+  slug: string;
+  price: number;
+  currency: string;
+  size?: string;
+  color?: string;
+  image?: string;
 }

@@ -11,22 +11,6 @@ const COLUMNS = [
       { href: "/journal", label: "Journal", testid: "footer-journal-link" },
     ],
   },
-  {
-    title: "Signal",
-    links: [
-      { href: "#", label: "Instagram", testid: "footer-instagram-link" },
-      { href: "#", label: "TikTok", testid: "footer-tiktok-link" },
-      { href: "#", label: "Contact [Pending]", testid: "footer-contact-link" },
-    ],
-  },
-  {
-    title: "System",
-    links: [
-      { href: "#", label: "Legal [Pending]", testid: "footer-legal-link" },
-      { href: "#", label: "Privacy [Pending]", testid: "footer-privacy-link" },
-      { href: "#", label: "Terms [Pending]", testid: "footer-terms-link" },
-    ],
-  },
 ];
 
 export function Footer() {
@@ -44,10 +28,7 @@ export function Footer() {
             </p>
             <p className="mt-4 text-xs leading-relaxed text-steel">
               A digital place. Collections are districts. Products are objects.
-              Prototype build — all content is mock data.
-            </p>
-            <p className="mt-6 text-[10px] uppercase tracking-[0.25em] text-steel">
-              EU / EN — [Information pending]
+              Locked in with your purpose, your craft, your people, your city.
             </p>
           </div>
 
@@ -77,14 +58,14 @@ export function Footer() {
       </div>
 
       <div className="select-none px-2 pt-16" aria-hidden>
-        <p className="whitespace-nowrap text-center font-display text-[11.5vw] uppercase leading-[0.85] tracking-tight text-graphite/60">
-          The city never sleeps
+        <p className="whitespace-nowrap text-center font-display text-[16vw] uppercase leading-[0.85] tracking-tight text-graphite/60">
+          Locked in
         </p>
       </div>
 
       <div className="flex flex-col items-start justify-between gap-2 border-t border-graphite px-4 py-6 text-[9px] uppercase tracking-[0.25em] text-steel sm:flex-row sm:items-center sm:px-8 lg:px-12">
-        <span>© 2026 Lock City — Prototype. Mock data only.</span>
-        <span>System 02 / V2.0 — [Placeholder copy, not an official slogan]</span>
+        <span>© 2026 Lock City</span>
+        <span>The city is alive</span>
       </div>
     </footer>
   );
