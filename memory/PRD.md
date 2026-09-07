@@ -62,15 +62,31 @@ PENDING].
 - Add to bag → drawer → qty +/- (subtotal €360 at 2×) → DEMO CHECKOUT modal → close
 - Newsletter success state; mobile 390px hero/menu/shop verified
 
+## Implemented (2026-09-07 — production foundation pass)
+- PHASE 0 audit executed; all public prototype/mock language removed (verified by grep)
+- Mock catalog deleted; honest empty/coming-soon states everywhere (shop, districts,
+  product, people, archive, transmissions, search, cart checkout, newsletter)
+- CommerceAdapter → WooCommerceAdapter (Store API) with EmptyCommerceAdapter fallback
+- Same-origin Store API proxy at /store/* + /join newsletter endpoint (both fail-closed 503)
+- WooCommerce webhook on FastAPI: HMAC-SHA256 validation, topic allowlist, Mongo idempotency
+- GA4/GTM layer: conditional loader, consent defaults, typed events, SPA page_view,
+  purchase dedup guard; first-touch attribution (UTM/promoter/coupon) on every event
+- Supabase schema (12 entities, RLS, service-role only) as SQL migration
+- Three.js: next/dynamic ssr:false (home First Load JS 414→156 kB), hidden-tab pause,
+  offscreen pause, quality tiers, static fallbacks
+- LOCKED IN official manifesto replaces invented copy; footer "LOCKED IN"
+- Product identifiers (lock/woo/printful + SKU) in types; snapshot-based cart
+
 ## Backlog
-- P0: real brand assets + copy when provided ([INFORMATION PENDING] items)
-- P1: LockCityApiAdapter against LOCK CITY ADMIN API when it exists
-- P1: collection-page lightweight WebGL scene, footer ambient scene
-- P2: account system, wishlist, drop countdown (needs real launch dates)
-- P2: journal article detail pages, archive item detail modal
-- P2: internationalization once country/language is defined
+- P0 blocked on credentials: WooCommerce keys (store URL + REST keys + webhook secret),
+  GA4/GTM ID, Klaviyo, real product photography, legal pages content
+- P1: Supabase connection (Transaction Pooler URI), n8n boundaries, promoter CRM UI,
+  Printful cost sync, daily reporting
+- P2: Lock City AI, ASK THE CITY concierge (tool-grounded), promoter intelligence
+- P3: VIEW IN 3D hero products (GLB), AR, adaptive scene per drop
 
 ## Next tasks
-1. Replace Media placeholders with real Lock City photography when delivered
-2. Define brand accent color (currently pure monochrome by decision)
-3. Wire newsletter to a provider via the future Admin API
+1. User adds NEXT_PUBLIC_WC_STORE_URL + WC keys via Emergent secrets → catalog goes live
+2. User adds NEXT_PUBLIC_GTM_ID → analytics live
+3. Klaviyo keys → /join switches from Null provider to KlaviyoProvider
+4. Supabase Transaction Pooler URI → run migration 001, wire webhook sync
