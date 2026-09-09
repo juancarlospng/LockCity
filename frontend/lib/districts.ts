@@ -4,11 +4,27 @@ export interface District {
   slug: string;
   index: string;
   name: string;
+  description: string;
 }
 
 export const DISTRICTS: District[] = [
-  { slug: "core", index: "01", name: "CORE" },
-  { slug: "drop", index: "02", name: "DROP" },
-  { slug: "collab", index: "03", name: "COLLAB" },
-  { slug: "archive", index: "04", name: "ARCHIVE" },
+  {
+    slug: "core",
+    index: "01",
+    name: "CORE",
+    description: "The permanent collection.",
+  },
+  { slug: "drop", index: "02", name: "DROP", description: "Limited releases." },
+  {
+    slug: "collab",
+    index: "03",
+    name: "COLLAB",
+    description: "Shared perspectives. Collaborations.",
+  },
+  {
+    slug: "archive",
+    index: "04",
+    name: "ARCHIVE",
+    description: "Past seasons and historical releases.",
+  },
 ];

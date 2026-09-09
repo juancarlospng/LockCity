@@ -1,7 +1,8 @@
+import { fileURLToPath } from 'node:url';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  outputFileTracingRoot: new URL(".", import.meta.url).pathname,
+  outputFileTracingRoot: fileURLToPath(new URL('.', import.meta.url)),
   allowedDevOrigins: [
     "*.preview.emergentagent.com",
     "*.preview.emergentcf.cloud",

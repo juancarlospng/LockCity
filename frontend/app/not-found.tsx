@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/StoreLink";
 
 export default function NotFound() {
   return (
@@ -6,7 +6,9 @@ export default function NotFound() {
       data-testid="not-found-page"
       className="flex min-h-screen flex-col items-start justify-center px-4 sm:px-8 lg:px-12"
     >
-      <p className="text-[10px] uppercase tracking-[0.3em] text-steel">Error 404</p>
+      <p className="text-[12px] uppercase tracking-[0.3em] text-steel">
+        Error 404
+      </p>
       <h1 className="mt-6 font-display text-7xl uppercase leading-[0.85] text-bone sm:text-9xl">
         This street
         <br />

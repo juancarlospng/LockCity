@@ -20,8 +20,8 @@ export function TheCity() {
       <div className="grid grid-cols-1 gap-14 lg:grid-cols-12">
         <div className="lg:col-span-7">
           <Reveal>
-            <p className="text-[10px] uppercase tracking-[0.3em] text-steel">
-              Scene 06 — Manifesto
+            <p className="text-[12px] uppercase tracking-[0.3em] text-steel">
+              The mindset
             </p>
           </Reveal>
           <h2
@@ -30,6 +30,9 @@ export function TheCity() {
           >
             <MaskText lines={["Locked", "In"]} />
           </h2>
+          <p className="mt-6 text-base text-steel">
+            LOCKED IN is the mindset behind Lock City.
+          </p>
           <Reveal delay={0.15} className="mt-12">
             <Media
               seed={909}
@@ -49,7 +52,9 @@ export function TheCity() {
                 className="border-t border-graphite py-8 first:border-t-0 lg:first:border-t"
               >
                 <div className="flex items-baseline gap-6">
-                  <span className="text-[10px] tracking-[0.3em] text-steel">{c.n}</span>
+                  <span className="text-[12px] tracking-[0.3em] text-steel">
+                    {c.n}
+                  </span>
                   <h3 className="font-display text-2xl uppercase text-bone sm:text-3xl">
                     {c.line}
                   </h3>

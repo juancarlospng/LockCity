@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence } from "framer-motion";
-import Link from "next/link";
+import Link from "@/components/StoreLink";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useCart } from "@/lib/cart";
@@ -10,10 +10,11 @@ import { SearchOverlay } from "./SearchOverlay";
 
 export const NAV_LINKS = [
   { href: "/shop", label: "SHOP" },
-  { href: "/collections/drop", label: "DROPS" },
-  { href: "/city", label: "CITY" },
+  { href: "/drops", label: "DROPS" },
+  { href: "/people", label: "PEOPLE" },
   { href: "/archive", label: "ARCHIVE" },
-  { href: "/journal", label: "JOURNAL" },
+  { href: "/transmissions", label: "TRANSMISSIONS" },
+  { href: "/city", label: "THE CITY" },
 ];
 
 export function Navigation() {
@@ -57,18 +58,24 @@ export function Navigation() {
               className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-bone"
             />
             <span className="font-display text-lg uppercase leading-none tracking-wide text-bone transition-transform duration-300 group-hover:-translate-y-0.5">
-              Lock City<sup className="text-[9px]">®</sup>
+              Lock City Clothes
             </span>
           </Link>
 
-          <nav aria-label="Primary" className="hidden items-center gap-8 lg:flex">
+          <nav
+            aria-label="Primary"
+            className="hidden items-center gap-6 xl:flex"
+          >
             {NAV_LINKS.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
+                aria-current={pathname === link.href ? "page" : undefined}
                 data-testid={`nav-${link.label.toLowerCase()}-link`}
-                className={`link-line text-[11px] uppercase tracking-[0.25em] transition-colors duration-200 ${
-                  pathname === link.href ? "text-bone" : "text-steel hover:text-bone"
+                className={`link-line text-[12px] uppercase tracking-[0.25em] transition-colors duration-200 ${
+                  pathname === link.href
+                    ? "text-bone"
+                    : "text-steel hover:text-bone"
                 }`}
               >
                 {link.label}
@@ -76,12 +83,12 @@ export function Navigation() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-5 sm:gap-7">
+          <div className="flex items-center gap-3 sm:gap-5">
             <button
               type="button"
               data-testid="nav-search-trigger"
               onClick={() => setSearchOpen(true)}
-              className="hidden text-[11px] uppercase tracking-[0.25em] text-steel transition-colors duration-200 hover:text-bone sm:block"
+              className="hidden text-[12px] uppercase tracking-[0.25em] text-steel transition-colors duration-200 hover:text-bone sm:block"
             >
               Search
             </button>
@@ -89,7 +96,7 @@ export function Navigation() {
               type="button"
               data-testid="nav-cart-trigger"
               onClick={openCart}
-              className="text-[11px] uppercase tracking-[0.25em] text-bone transition-colors duration-200 hover:text-steel"
+              className="text-[12px] uppercase tracking-[0.25em] text-bone transition-colors duration-200 hover:text-steel"
               aria-label={`Open bag, ${count} items`}
             >
               Bag ({count})
@@ -98,8 +105,9 @@ export function Navigation() {
               type="button"
               data-testid="nav-menu-trigger"
               onClick={() => setMenuOpen(true)}
-              className="flex flex-col gap-1.5 py-1 lg:hidden"
+              className="flex flex-col justify-center gap-1.5 py-1 xl:hidden"
               aria-label="Open menu"
+              aria-expanded={menuOpen}
             >
               <span className="h-px w-6 bg-bone" />
               <span className="h-px w-6 bg-bone" />

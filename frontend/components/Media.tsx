@@ -29,7 +29,14 @@ export function Media({
     const py = h * (0.05 + rand() * 0.25);
     const ph = h * (0.5 + rand() * 0.45);
     const shade = 18 + Math.floor(rand() * 16);
-    return { x: px, y: py, w: pw, h: ph, fill: `rgb(${shade},${shade},${shade})`, i };
+    return {
+      x: px,
+      y: py,
+      w: pw,
+      h: ph,
+      fill: `rgb(${shade},${shade},${shade})`,
+      i,
+    };
   });
 
   const beamX = w * (0.2 + rand() * 0.6);
@@ -41,23 +48,33 @@ export function Media({
   return (
     <div
       className={`relative overflow-hidden bg-[#0A0A0A] ${className}`}
-      style={{ aspectRatio: `${w}/${h}` }}
+      style={{
+        aspectRatio: `${w}/${h}`,
+        width: "100%",
+        minWidth: 0,
+        maxWidth: "100%",
+      }}
       role="img"
       aria-label={label}
     >
       <svg
         viewBox={`0 0 ${w} ${h}`}
-        className="h-full w-full"
+        className="absolute inset-0 h-full w-full"
         preserveAspectRatio="xMidYMid slice"
         aria-hidden
-      ><defs>
+      >
+        <defs>
           <radialGradient id={`${gid}-spot`} cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#F1EFE9" stopOpacity="0.22" />
             <stop offset="55%" stopColor="#F1EFE9" stopOpacity="0.05" />
             <stop offset="100%" stopColor="#F1EFE9" stopOpacity="0" />
           </radialGradient>
           <filter id={`${gid}-noise`}>
-            <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" />
+            <feTurbulence
+              type="fractalNoise"
+              baseFrequency="0.8"
+              numOctaves="2"
+            />
             <feColorMatrix type="saturate" values="0" />
             <feComponentTransfer>
               <feFuncA type="linear" slope="0.05" />
@@ -89,8 +106,22 @@ export function Media({
           />
         ))}
 
-        <line x1={beamX} y1={0} x2={beamX - w * 0.35} y2={h} stroke="#2A2A2A" strokeWidth="1.5" />
-        <line x1={beamX + 24} y1={0} x2={beamX - w * 0.35 + 24} y2={h} stroke="#1E1E1E" strokeWidth="1" />
+        <line
+          x1={beamX}
+          y1={0}
+          x2={beamX - w * 0.35}
+          y2={h}
+          stroke="#2A2A2A"
+          strokeWidth="1.5"
+        />
+        <line
+          x1={beamX + 24}
+          y1={0}
+          x2={beamX - w * 0.35 + 24}
+          y2={h}
+          stroke="#1E1E1E"
+          strokeWidth="1"
+        />
 
         {panels.map((p) => (
           <rect
@@ -122,8 +153,21 @@ export function Media({
           </text>
         )}
 
-        <rect x="1" y="1" width={w - 2} height={h - 2} fill="none" stroke="#222222" strokeWidth="2" />
-        <path d={`M 16 16 h 24 M 16 16 v 24 M ${w - 16} 16 h -24 M ${w - 16} 16 v 24 M 16 ${h - 16} h 24 M 16 ${h - 16} v -24 M ${w - 16} ${h - 16} h -24 M ${w - 16} ${h - 16} v -24`} stroke="#3A3A3A" strokeWidth="2" fill="none" />
+        <rect
+          x="1"
+          y="1"
+          width={w - 2}
+          height={h - 2}
+          fill="none"
+          stroke="#222222"
+          strokeWidth="2"
+        />
+        <path
+          d={`M 16 16 h 24 M 16 16 v 24 M ${w - 16} 16 h -24 M ${w - 16} 16 v 24 M 16 ${h - 16} h 24 M 16 ${h - 16} v -24 M ${w - 16} ${h - 16} h -24 M ${w - 16} ${h - 16} v -24`}
+          stroke="#3A3A3A"
+          strokeWidth="2"
+          fill="none"
+        />
       </svg>
     </div>
   );

@@ -15,7 +15,9 @@ export default async function ProductPage({
   const all = await commerce.getProducts();
   const related = all
     .filter((p) => p.id !== product.id && p.category === product.category)
-    .concat(all.filter((p) => p.id !== product.id && p.category !== product.category))
+    .concat(
+      all.filter((p) => p.id !== product.id && p.category !== product.category),
+    )
     .slice(0, 3);
 
   return <ProductDetail product={product} related={related} />;

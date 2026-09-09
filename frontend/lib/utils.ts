@@ -5,7 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatPrice(value: number, currency = "EUR") {
+export function formatPrice(value?: number, currency?: string) {
+  if (
+    value == null ||
+    !Number.isFinite(value) ||
+    !currency ||
+    !/^[A-Z]{3}$/.test(currency)
+  )
+    return "Price to be announced";
   return new Intl.NumberFormat("en-GB", {
     style: "currency",
     currency,

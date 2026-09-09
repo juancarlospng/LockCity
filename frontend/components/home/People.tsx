@@ -1,33 +1,37 @@
+import Link from "@/components/StoreLink";
+import { content, EMPTY_COPY } from "@/lib/content";
 import { EmptyState } from "@/components/EmptyState";
-import { MaskText, Reveal } from "@/components/Reveal";
-
-export function People() {
+import { PersonCard } from "@/components/ContentCards";
+export async function People() {
+  const records = await content.getPeople();
   return (
     <section
-      data-testid="people-section"
+      className="section-space border-t border-graphite"
       aria-labelledby="people-heading"
-      className="border-t border-graphite px-4 py-24 sm:px-8 lg:px-12 lg:py-36"
     >
-      <Reveal>
-        <p className="text-[10px] uppercase tracking-[0.3em] text-steel">
-          Scene 07 — Community
-        </p>
-      </Reveal>
-      <h2
-        id="people-heading"
-        className="mt-6 font-display text-5xl uppercase leading-[0.9] text-bone sm:text-7xl"
-      >
-        <MaskText lines={["People", "Of the city"]} />
-      </h2>
-
-      <Reveal delay={0.1} className="mt-14">
-        <EmptyState
-          testid="people-empty-state"
-          kicker="Artists · Athletes · Musicians · Creators · Promoters"
-          title="Profiles coming soon"
-          body="The people who move the city will be introduced here. No one is announced before their time."
-        />
-      </Reveal>
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <h2 id="people-heading" className="section-title">
+          People of the city
+        </h2>
+        <Link href="/people" className="lc-button">
+          Meet the city →
+        </Link>
+      </div>
+      <div className="mt-10">
+        {records.length ? (
+          <div className="product-grid">
+            {records.map((person) => (
+              <PersonCard key={person.id} person={person} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            kicker="People & purpose"
+            {...EMPTY_COPY.people}
+            testid="people-empty-state"
+          />
+        )}
+      </div>
     </section>
   );
 }

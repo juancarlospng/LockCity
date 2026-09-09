@@ -2,21 +2,51 @@
 
 import { useFrame, useThree } from "@react-three/fiber";
 import { Edges } from "@react-three/drei";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { MotionValue } from "framer-motion";
 import { seededRandom } from "@/lib/utils";
 import { SceneCanvas, useQuality, useReducedMotionPref } from "./SceneCanvas";
 
 function CameraRig({ progress }: { progress?: MotionValue<number> }) {
-  const { camera, pointer } = useThree();
-  useFrame(() => {
+  const { camera } = useThree();
+  const pointer = useRef({ x: 0, y: 0 });
+  useEffect(() => {
+    const hero = document.querySelector<HTMLElement>(
+      '[data-testid="hero-section"]',
+    );
+    if (!hero) return;
+    const move = (event: PointerEvent) => {
+      const box = hero.getBoundingClientRect();
+      pointer.current.x = THREE.MathUtils.clamp(
+        ((event.clientX - box.left) / box.width) * 2 - 1,
+        -1,
+        1,
+      );
+      pointer.current.y = THREE.MathUtils.clamp(
+        1 - ((event.clientY - box.top) / box.height) * 2,
+        -1,
+        1,
+      );
+    };
+    const reset = () => {
+      pointer.current = { x: 0, y: 0 };
+    };
+    hero.addEventListener("pointermove", move);
+    hero.addEventListener("pointerleave", reset);
+    return () => {
+      hero.removeEventListener("pointermove", move);
+      hero.removeEventListener("pointerleave", reset);
+    };
+  }, []);
+  useFrame((_, delta) => {
     const p = progress?.get() ?? 0;
-    const targetX = pointer.x * 0.7;
-    const targetY = 1.7 + pointer.y * 0.35;
-    camera.position.x += (targetX - camera.position.x) * 0.045;
-    camera.position.y += (targetY - camera.position.y) * 0.045;
-    camera.position.z += (10 - p * 5 - camera.position.z) * 0.07;
+    const targetX = pointer.current.x * 0.35;
+    const targetY = 1.7 + pointer.current.y * 0.2;
+    const factor = 1 - Math.exp(-3 * Math.min(delta, 0.1));
+    camera.position.x += (targetX - camera.position.x) * factor;
+    camera.position.y += (targetY - camera.position.y) * factor;
+    camera.position.z += (10 - p * 5 - camera.position.z) * factor;
     camera.lookAt(0, 1.5, 0);
   });
   return null;
@@ -50,7 +80,11 @@ function Buildings({ density }: { density: number }) {
   }, [items]);
 
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, items.length]} key={items.length}>
+    <instancedMesh
+      ref={ref}
+      args={[undefined, undefined, items.length]}
+      key={items.length}
+    >
       <boxGeometry args={[1, 1, 1]} />
       <meshStandardMaterial color="#202020" roughness={0.9} metalness={0.1} />
     </instancedMesh>
@@ -66,7 +100,7 @@ function Monoliths() {
       { x: 6.2, z: -18, h: 8, w: 1.8 },
       { x: 0.4, z: -22, h: 13, w: 3 },
     ],
-    []
+    [],
   );
   return (
     <group>
@@ -101,8 +135,7 @@ function Dust({ count }: { count: number }) {
   }, [count]);
 
   useFrame((state) => {
-    if (ref.current)
-      ref.current.rotation.y = state.clock.elapsedTime * 0.008;
+    if (ref.current) ref.current.rotation.y = state.clock.elapsedTime * 0.008;
   });
 
   return (
@@ -122,23 +155,35 @@ function Dust({ count }: { count: number }) {
   );
 }
 
-export function HeroScene({ progress }: { progress?: MotionValue<number> }) {
+function HeroContent({ progress }: { progress?: MotionValue<number> }) {
   const quality = useQuality();
   const reduced = useReducedMotionPref();
-  const particleCount = quality === "high" ? 900 : quality === "medium" ? 500 : 220;
+  const particleCount =
+    quality === "high" ? 900 : quality === "medium" ? 500 : 220;
   const density = quality === "low" ? 0.55 : 0.75;
 
   return (
-    <SceneCanvas
-      label="Abstract architectural visualization of Lock City — brutalist monoliths in fog"
-      className="absolute inset-0 h-full w-full"
-      camera={{ position: [0, 1.7, 10], fov: 42 }}
-    >
+    <>
+      <color attach="background" args={["#050505"]} />
       <fog attach="fog" args={["#050505", 8, 36]} />
       <ambientLight intensity={0.38} />
-      <directionalLight position={[6, 10, 4]} intensity={1.35} color="#F1EFE9" />
-      <directionalLight position={[-8, 6, -6]} intensity={0.35} color="#9A9A9A" />
-      <spotLight position={[0, 9, 6]} angle={0.5} penumbra={0.8} intensity={1.2} color="#F1EFE9" />
+      <directionalLight
+        position={[6, 10, 4]}
+        intensity={1.35}
+        color="#F1EFE9"
+      />
+      <directionalLight
+        position={[-8, 6, -6]}
+        intensity={0.35}
+        color="#9A9A9A"
+      />
+      <spotLight
+        position={[0, 9, 6]}
+        angle={0.5}
+        penumbra={0.8}
+        intensity={1.2}
+        color="#F1EFE9"
+      />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.4, 0]}>
         <planeGeometry args={[80, 80]} />
         <meshStandardMaterial color="#080808" roughness={1} />
@@ -147,6 +192,17 @@ export function HeroScene({ progress }: { progress?: MotionValue<number> }) {
       <Monoliths />
       <Dust count={particleCount} />
       {!reduced && <CameraRig progress={progress} />}
+    </>
+  );
+}
+export function HeroScene({ progress }: { progress?: MotionValue<number> }) {
+  return (
+    <SceneCanvas
+      label="Abstract architectural visualization of Lock City"
+      className="absolute inset-0 h-full w-full"
+      camera={{ position: [0, 1.7, 10], fov: 42 }}
+    >
+      <HeroContent progress={progress} />
     </SceneCanvas>
   );
 }

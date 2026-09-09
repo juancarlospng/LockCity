@@ -1,79 +1,88 @@
 "use client";
-
 import { useMemo, useState } from "react";
-import { ProductCard } from "@/components/ProductCard";
+import { ProductCard, ProductCardPlaceholder } from "./ProductCard";
+import { EmptyState } from "./EmptyState";
+import { EMPTY_COPY } from "@/lib/content";
 import type { Product } from "@/lib/types";
-
-const SORTS = [
-  { id: "featured", label: "Featured" },
-  { id: "price-asc", label: "Price ↑" },
-  { id: "price-desc", label: "Price ↓" },
-] as const;
-
-export function ShopGrid({ products }: { products: Product[] }) {
-  const categories = useMemo(
-    () => Array.from(new Set(products.map((p) => p.category).filter(Boolean))) as string[],
-    [products]
-  );
-  const [filter, setFilter] = useState<string>("ALL");
-  const [sort, setSort] = useState<(typeof SORTS)[number]["id"]>("featured");
-
-  const visible = useMemo(() => {
-    let list = [...products];
-    if (filter !== "ALL") list = list.filter((p) => p.category === filter);
-    if (sort === "price-asc") list.sort((a, b) => a.price - b.price);
-    if (sort === "price-desc") list.sort((a, b) => b.price - a.price);
-    return list;
-  }, [products, filter, sort]);
-
+export function ProductGrid({ products }: { products: Product[] }) {
   return (
-    <>
-      {categories.length > 1 && (
-        <div className="mt-12 flex flex-wrap items-center justify-between gap-6 border-y border-graphite py-4">
-          <div className="flex flex-wrap gap-1" role="tablist" aria-label="Filter products">
-            {["ALL", ...categories].map((c) => (
-              <button
-                key={c}
-                type="button"
-                role="tab"
-                aria-selected={filter === c}
-                data-testid={`shop-filter-${c.toLowerCase().replace(/[^a-z0-9]/g, "")}`}
-                onClick={() => setFilter(c)}
-                className={`px-4 py-2 text-[10px] uppercase tracking-[0.25em] transition-colors duration-200 ${
-                  filter === c ? "bg-bone text-bg" : "text-steel hover:text-bone"
-                }`}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-          <label className="flex items-center gap-3 text-[10px] uppercase tracking-[0.25em] text-steel">
-            Sort
+    <div className="product-grid">
+      {products.map((p) => (
+        <ProductCard key={p.id} product={p} />
+      ))}
+    </div>
+  );
+}
+export function ShopGrid({
+  products,
+  loading = false,
+}: {
+  products: Product[];
+  loading?: boolean;
+}) {
+  const [category, setCategory] = useState("All");
+  const categories = useMemo(
+    () => [
+      "All",
+      ...new Set(products.flatMap((p) => (p.category ? [p.category] : []))),
+    ],
+    [products],
+  );
+  const visible =
+    category === "All"
+      ? products
+      : products.filter((p) => p.category === category);
+  if (loading)
+    return (
+      <div
+        role="status"
+        aria-label="Loading products"
+        className="product-grid mt-12"
+      >
+        {[0, 1, 2].map((i) => (
+          <ProductCardPlaceholder key={i} />
+        ))}
+      </div>
+    );
+  return (
+    <div className="mt-12">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-y border-graphite py-4">
+        <span className="eyebrow">Clothing & objects</span>
+        {categories.length > 1 && (
+          <label className="text-sm">
+            Category{" "}
             <select
-              data-testid="shop-sort-select"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as typeof sort)}
-              className="border border-graphite bg-bg px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-bone focus:border-bone focus:outline-none"
+              className="lc-input ml-3 !w-auto"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
             >
-              {SORTS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
+              {categories.map((c) => (
+                <option key={c}>{c}</option>
               ))}
             </select>
           </label>
+        )}
+      </div>
+      {visible.length ? (
+        <div className="mt-8">
+          <ProductGrid products={visible} />
+        </div>
+      ) : (
+        <div className="mt-8">
+          <EmptyState
+            testid="shop-empty-state"
+            kicker="Shop Lock City"
+            {...EMPTY_COPY.shop}
+            ctaHref="/drops"
+            ctaLabel="Explore next drop →"
+          />
+          <div className="product-grid mt-8" aria-hidden="true">
+            {[0, 1, 2].map((i) => (
+              <ProductCardPlaceholder key={i} />
+            ))}
+          </div>
         </div>
       )}
-
-      <p className="mt-6 text-[10px] uppercase tracking-[0.25em] text-steel" aria-live="polite">
-        {visible.length} product{visible.length === 1 ? "" : "s"}
-      </p>
-
-      <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {visible.map((product, i) => (
-          <ProductCard key={product.id} product={product} index={i} />
-        ))}
-      </div>
-    </>
+    </div>
   );
 }

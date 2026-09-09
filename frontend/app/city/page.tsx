@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/StoreLink";
 import { Media } from "@/components/Media";
 import { MaskText, Reveal } from "@/components/Reveal";
 import { DISTRICTS } from "@/lib/districts";
@@ -9,7 +9,9 @@ export default function CityPage() {
       data-testid="city-page"
       className="px-4 pb-24 pt-32 sm:px-8 lg:px-12 lg:pt-40"
     >
-      <p className="text-[10px] uppercase tracking-[0.3em] text-steel">Manifesto</p>
+      <p className="text-[12px] uppercase tracking-[0.3em] text-steel">
+        Manifesto
+      </p>
       <h1 className="mt-4 font-display text-6xl uppercase leading-[0.85] text-bone sm:text-8xl lg:text-9xl">
         <MaskText lines={["The City", "Is Alive"]} />
       </h1>
@@ -41,14 +43,14 @@ export default function CityPage() {
                 className="group flex items-baseline justify-between border-t border-graphite py-5 last:border-b"
               >
                 <span className="flex items-baseline gap-5">
-                  <span className="text-[10px] tracking-[0.3em] text-steel">
+                  <span className="text-[12px] tracking-[0.3em] text-steel">
                     {d.index}
                   </span>
                   <span className="font-display text-3xl uppercase text-bone transition-transform duration-300 group-hover:translate-x-2">
                     {d.name}
                   </span>
                 </span>
-                <span className="text-[9px] uppercase tracking-[0.25em] text-steel">
+                <span className="text-[12px] uppercase tracking-[0.25em] text-steel">
                   Enter →
                 </span>
               </Link>

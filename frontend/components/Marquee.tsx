@@ -21,7 +21,7 @@ export function Marquee({ items, className = "", slow = true }: MarqueeProps) {
 
   return (
     <div
-      className={`relative flex overflow-hidden border-y border-graphite py-4 text-[11px] uppercase tracking-[0.3em] text-steel ${className}`}
+      className={`relative flex overflow-hidden border-y border-graphite py-4 text-[12px] uppercase tracking-[0.3em] text-steel ${className}`}
     >
       <div
         className="flex animate-marquee"

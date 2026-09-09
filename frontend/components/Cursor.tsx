@@ -24,7 +24,7 @@ export function Cursor() {
       x = e.clientX;
       y = e.clientY;
       const target = (e.target as HTMLElement | null)?.closest?.(
-        "[data-cursor]"
+        "[data-cursor]",
       ) as HTMLElement | null;
       setLabel(target?.dataset.cursor ?? null);
     };
@@ -67,7 +67,7 @@ export function Cursor() {
         }`}
       >
         {label && (
-          <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-bone">
+          <span className="text-[12px] font-bold uppercase tracking-[0.25em] text-bone">
             {label}
           </span>
         )}

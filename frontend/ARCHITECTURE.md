@@ -1,100 +1,46 @@
-# LOCK CITY — Architecture
+# LOCK CITY CLOTHES — Phase 1 architecture
 
-## Two coordinated layers
+## Scope and current stack
 
-**DOM interface** (semantic HTML, SEO, a11y, commerce): navigation, headings,
-product UI, filters, forms, cart drawer. All critical information lives in DOM.
+The existing Next.js 15.5.25 App Router application is retained, with React 19, TypeScript, Tailwind 3, Framer Motion and Three.js / React Three Fiber / Drei. Yarn 1.22.22 is the authoritative package manager. This phase is a storefront facade, with no external commerce, analytics, authentication, email or payment integrations. Existing backend files elsewhere in the repository are outside the active frontend and have not been connected or started.
 
-**WebGL experience** (Three.js via R3F, dynamically imported): hero city,
-districts spatial selector. Progressive enhancement only — every canvas has
-`role="img"`, an aria label, and a static fallback. Purchasing never depends
-on WebGL.
+## Routes and rendering
 
-## Project structure
+Server pages read the local interfaces in lib/commerce.ts and lib/content.ts. Critical headings, navigation, product information and empty states render in HTML. Routes: /, /shop, /shop/[slug], /product/[slug] (preserved canonical product route), /drops, /drops/[slug], /city, /people, /people/[slug], /archive, /transmissions, /transmissions/[slug], /journal (preserved), /cart and /collections/[slug]. Unknown records use Next notFound and a relevant detail template with 404 semantics. Unknown general routes use the branded global 404. There is no root loading boundary: this avoids streaming a 200 response before record lookup, and leaves critical HTML readable without JavaScript. ProductGrid provides an explicit skeleton loading state for future asynchronous feeds.
 
-```
-app/
-  layout.tsx            fonts, GTM (conditional), providers, nav, footer, cart, cursor
-  template.tsx          fast route transition
-  page.tsx              homepage scenes (Loader, Hero, LatestDrop, Districts,
-                        TheCity=LOCKED IN, People, Archive, Transmissions, Join)
-  shop|archive|city|journal/page.tsx
-  collections/[slug]/page.tsx   district header + products via adapter
-  product/[slug]/page.tsx       commercial product page (when catalog live)
-  not-found.tsx         branded 404
-  store/[...path]/route.ts      WooCommerce Store API same-origin proxy (503 if unset)
-  join/route.ts                 newsletter subscription endpoint (503 until provider)
-components/
-  Navigation, MobileMenu, SearchOverlay (live store search), CartDrawer,
-  Cursor, Media (procedural architectural graphic), ProductCard, ProductDetail,
-  ShopGrid, EmptyState, Reveal/MaskText, Marquee, StatusBadge, Newsletter, Footer,
-  AnalyticsRouteTracker
-  home/  Loader, Hero, LatestDrop, Districts, TheCity, People, ArchiveTeaser,
-         Transmissions
-  three/ SceneCanvas (perf manager), HeroScene, DistrictScene
-lib/
-  types.ts        Product/ProductVariant with stable identifiers
-                  (lock/woo/printful ids + SKU), Drop, Transmission, Person,
-                  CartItem (display snapshot pattern)
-  districts.ts    structural IA (CORE/DROP/COLLAB/ARCHIVE)
-  commerce.ts     CommerceAdapter → WooCommerceAdapter | EmptyCommerceAdapter
-  analytics.ts    typed GA4/GTM dataLayer events + purchaseOnce guard
-  attribution.ts  first-touch UTM/promoter/coupon/referrer capture
-  newsletter.ts   SubscriptionProvider abstraction (Null → Klaviyo later)
-  cart.tsx        cart context (localStorage), analytics-instrumented
-backend/ (FastAPI, platform service)
-  server.py       POST /api/webhooks/woocommerce — HMAC-SHA256 signature
-                  validation, topic allowlist, idempotent persistence via
-                  unique delivery_id in MongoDB, 503 fail-closed
-  supabase/migrations/001_initial_schema.sql — Lock City OS schema (12
-                  entities, RLS enabled, service-role only)
-```
+## Component boundaries
 
-## Source of truth rules
+- Layout: fonts, local CartProvider, Navigation, semantic main, Footer and CartDrawer.
+- Navigation: StoreLink, MobileMenu, SearchOverlay and native Modal dialogs. Dialogs handle focus trapping, Escape, body scroll locking and focus restoration.
+- Home: Hero, NextDrop, SelectedObjects, Districts, TheCity (LOCKED IN), People, ArchiveTeaser, Transmissions and Newsletter.
+- Commerce: ProductCard, ProductImage, ProductGallery, ProductDetail, SizeSelector, ProductGrid/ShopGrid, CartContents.
+- Editorial: PersonCard, DropCard, ArchiveCard, TransmissionCard, ContentIndex and detail components. PersonDetail accepts products for SHOP WHAT THEY WEAR.
+- States: EmptyState, image fallback, route error/not-found, grid skeletons and a persistent city poster.
 
-WooCommerce = catalog/orders/revenue · Printful = fulfillment/cost ·
-GA4 = behavior · Supabase = operational intelligence · Lock City AI =
-analysis only (later). The frontend never duplicates the catalog; it maps
-WooCommerce data through the adapter with stable identifiers.
+## Design system and responsive strategy
 
-## Commerce flow (launch path)
+Global tokens define background, bone foreground, steel text, graphite borders and onyx surfaces. Tailwind extends the same palette. Anton provides display headings; Space Mono handles text and metadata. Shared page/section spacing, title scales, button, input, choice and grid classes prevent route-specific drift. Controls have 44px touch targets, visible focus and deliberate hover transitions. Mobile navigation replaces the full navigation below 1280px. Grid columns and typography respond to available width. Media containers constrain their width even when a minimum height is specified.
 
-1. Set `NEXT_PUBLIC_WC_STORE_URL` → catalog, collections and search go live
-   automatically (adapter switches from Empty to WooCommerce).
-2. Checkout button redirects to the WooCommerce native checkout; cart sync via
-   Store API cart endpoints (nonce/cart-token preserved by `/store/*` proxy).
-3. WooCommerce webhooks → backend `/api/webhooks/woocommerce` → MongoDB
-   (now) → n8n/Supabase sync (P1).
+## Three.js and motion
 
-## Three.js performance
+SceneGate imports no Three code. It renders a local poster in server HTML and mounts a dynamically imported scene only near the viewport, at >=1024px with a fine pointer, without reduced motion or Save-Data. Small/touch devices keep the poster. Hero and district scenes are confined to the city experience; shop, product and cart routes do not require them. SceneCanvas probes WebGL2, caps DPR at 1/1.25/1.5, adapts density and degrades after repeated low frame rate samples. Context loss or initialization failure retains the poster. Instanced geometry, simple lighting and no shadow/postprocessing passes keep cost bounded. R3F owns declarative resource disposal; observers, listeners and idle timers clean up on unmount. Offscreen/hidden/idle rendering pauses. Camera damping uses frame delta. Critical DOM content is never hidden waiting for motion. CSS progressive reveal and native scrolling are preferred; Framer Motion supplies the hero scroll value. No GSAP or Lenis runtime is needed.
 
-- `next/dynamic` with `ssr:false` for every scene — Three.js is excluded from
-  the initial bundle; a static gradient poster renders first
-- `useQuality()` tiers HIGH/MEDIUM/LOW/STATIC (cores, memory, viewport)
-- DPR caps, instanced building grid, no post-processing, particles 900/500/220
-- Render loop pauses when canvas leaves viewport (IntersectionObserver) AND
-  when the tab is hidden (`visibilitychange`)
-- STATIC fallback for weak devices / reduced-motion / no WebGL
+## Data contracts and future integration
 
-## Analytics
+CommerceAdapter is always EmptyCommerceAdapter in Phase 1, independent of environment variables. ContentSource returns empty typed records. Product, ProductVariant, ProductMedia, Person, Drop, ArchiveEntry and Transmission describe future content without fabricating records. ProductCard prioritizes commercialName/name over objectCode/code. ProductDetail supports variants, care/fit/material/GSM/construction, size guide, story, shipping/returns, media, creator content, people, related products and bundles. Optional 3D is represented by a poster slot; interactive product model loading is deferred.
 
-Events: page_view (SPA-aware), view_home, enter_city, view_collection,
-view_item, select_size, add_to_cart, view_cart, remove_from_cart,
-begin_checkout, purchase (deduplicated), email_signup, interact_3d.
-All carry first-touch attribution metadata. Nothing loads until
-`NEXT_PUBLIC_GTM_ID` is set; consent defaults are queued before GTM starts.
+Replace the local service implementation in a separately approved integration phase, preserving these presentation props. No duplicate catalog is maintained. Cart is local and empty; purchase and checkout remain disabled. Join validates local input and explicitly says nothing was stored or sent. Legacy /store/\* and POST /join always return 503. No credentials can activate those routes. StoreLink preserves utm_source, utm_medium, utm_campaign, ref and promoter during client navigation without persistence or tracking. Without JavaScript links remain functional, but query propagation is not applied.
 
-## Security
+## Accessibility and SEO
 
-- Admin WooCommerce keys + webhook secret: server-only env vars
-- Store API proxy: public surface by design, no credentials
-- Webhooks: raw-body HMAC validation, constant-time compare, idempotency keys
-- Supabase: RLS on all tables, no public policies, service-role only
-- Financially sensitive actions (payouts, refunds, pricing) require the
-  `approvals` table — never automatic
+Semantic headings, landmarks, labeled fields, fieldsets, native disclosures and dialogs, visible keyboard focus, a skip link, reduced-motion support and DOM alternatives to every scene. Decorative graphics have appropriate image labeling or empty alt. Image dimensions reserve layout space. Metadata identifies Lock City Clothes; preview robots remain noindex/nofollow. Production origin, canonical URLs, social imagery and product structured data await approved business content; do not publish invented Product/Offer schema. Re-enable indexing only as part of an approved launch.
 
-## Asset pipeline (future)
+## Performance and asset pipeline
 
-Real campaign/product photography replaces the procedural `Media` graphic.
-Prefer optimized GLB/glTF for future hero-product VIEW IN 3D; mobile
-performance outranks cinematic weight.
+Critical HTML and the local ~99 KiB city poster precede the optional scene chunks. Fonts use next/font (downloaded at build, locally served at runtime). Keep real photography as optimized AVIF/WebP with dimensions and responsive delivery once provided. Future GLB files need explicit geometry/texture budgets and disposal review before enabling any product viewer. No large texture or GLB is required by this facade. See VALIDATION.md for actual production build and browser findings; laboratory checks are not real-user Core Web Vitals.
+
+## Known inherited debt and pending information
+
+The inherited package manifest retains unused CRA, backend-adjacent and UI dependencies. They are not automatically part of browser bundles; wholesale removal is outside this targeted pass. Dormant analytics/attribution/newsletter utilities are not imported by the active layout or facade. The older npm lockfile is superseded by yarn.lock; use Yarn consistently.
+
+[INFORMATION PENDING]: approved product catalog/media/variants/prices/stock; real drop schedule; archive history; people and consented assets; editorial content; shipping/returns rules; production origin and launch metadata. These are BLOCKED BY PHASE 2 DATA / COMMERCE. No business facts have been invented.

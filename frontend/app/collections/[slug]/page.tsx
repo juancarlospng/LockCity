@@ -22,7 +22,7 @@ export default async function CollectionPage({
       data-testid={`collection-page-${district.slug}`}
       className="px-4 pb-24 pt-32 sm:px-8 lg:px-12 lg:pt-40"
     >
-      <p className="text-[10px] uppercase tracking-[0.3em] text-steel">
+      <p className="text-[12px] uppercase tracking-[0.3em] text-steel">
         District {district.index}
       </p>
       <h1 className="mt-4 font-display text-6xl uppercase leading-[0.85] text-bone sm:text-8xl lg:text-[10rem]">
@@ -34,10 +34,14 @@ export default async function CollectionPage({
           <EmptyState
             testid={`collection-empty-${district.slug}`}
             kicker={`District ${district.index} — ${district.name}`}
-            title="This district opens soon"
-            body="Objects land here with the drops. Join the city and the signal reaches you first."
-            ctaHref="/#join"
-            ctaLabel="Join the city →"
+            title={
+              slug === "archive"
+                ? "The archive is being restored."
+                : "The selection is taking shape"
+            }
+            body={district.description}
+            ctaHref="/shop"
+            ctaLabel="Shop Lock City →"
           />
         </div>
       ) : (

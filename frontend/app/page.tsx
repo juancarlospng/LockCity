@@ -1,4 +1,4 @@
-import { Loader } from "@/components/home/Loader";
+import { SelectedObjects } from "@/components/home/SelectedObjects";
 import { Hero } from "@/components/home/Hero";
 import { LatestDrop } from "@/components/home/LatestDrop";
 import { Districts } from "@/components/home/Districts";
@@ -12,19 +12,14 @@ import { Marquee } from "@/components/Marquee";
 export default function HomePage() {
   return (
     <>
-      <Loader />
       <Hero />
-      <Marquee
-        items={[
-          "Lock City®",
-          "The city is alive",
-          "Locked in",
-          "First drop — coming soon",
-        ]}
-      />
       <LatestDrop />
+      <SelectedObjects />
       <Districts />
       <TheCity />
+      <Marquee
+        items={["Lock City Clothes", "Locked in", "The city is alive"]}
+      />
       <People />
       <ArchiveTeaser />
       <Transmissions />

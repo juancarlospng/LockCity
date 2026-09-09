@@ -27,8 +27,36 @@ export interface Product {
   slug: string;
   name: string; // commercial name, e.g. LOCK HOODIE
   code?: string; // internal editorial identity, e.g. OBJECT_0041 — secondary metadata only
-  price: number;
-  currency: string;
+  price?: number;
+  currency?: string;
+  commercialName?: string;
+  internalObjectName?: string;
+  objectCode?: string;
+  primaryImage?: string;
+  secondaryImage?: string;
+  href?: string;
+  colors?: string[];
+  sizes?: string[];
+  availability?: string;
+  district?: string;
+  drop?: string;
+  heroProduct?: boolean;
+  story?: string;
+  gsm?: number;
+  construction?: string;
+  sizeGuide?: string;
+  modelHeight?: string;
+  modelSizeWorn?: string;
+  shipping?: string;
+  returns?: string;
+  media?: ProductMedia[];
+  videos?: string[];
+  model3d?: { src: string; poster: string; alt: string };
+  creatorContent?: Transmission[];
+  // Only approved, attributable quotations from the future content source.
+  socialProof?: { quote: string; attribution: string }[];
+  peopleWearing?: Person[];
+  bundles?: Product[];
   color?: string;
   category?: string;
   status: ProductStatus;
@@ -52,9 +80,14 @@ export interface Collection {
 
 export interface Drop {
   id: string;
+  slug: string;
   name: string;
-  status: DropStatus;
+  status: DropStatus | "COMING_SOON";
   releasedAt?: string;
+  teaser?: string;
+  image?: string;
+  story?: string;
+  products?: Product[];
 }
 
 export interface Transmission {
@@ -65,11 +98,14 @@ export interface Transmission {
   excerpt?: string;
   image?: string;
   publishedAt?: string;
+  body?: string;
+  videos?: string[];
 }
 
 // People of the City — schema-ready for the future LOCKED IN NETWORK.
 export interface Person {
   id: string; // person_id
+  slug: string;
   name: string;
   alias?: string;
   city?: string;
@@ -82,6 +118,32 @@ export interface Person {
   productsWorn?: string[]; // lock_product_id references
   campaign?: string;
   lockedInStory?: string;
+  story?: string;
+  shortBio?: string;
+  videos?: string[];
+  campaigns?: string[];
+  lockedInStatement?: string;
+}
+
+export interface ProductMedia {
+  src: string;
+  alt: string;
+  kind: "product" | "detail" | "fit" | "lifestyle" | "video";
+  poster?: string;
+}
+export interface ArchiveEntry {
+  id: string;
+  slug: string;
+  title: string;
+  year?: number;
+  collection?: string;
+  drop?: string;
+  products?: Product[];
+  images: string[];
+  films?: string[];
+  people?: Person[];
+  story?: string;
+  status?: string;
 }
 
 // Cart items store a display snapshot (name/price/size) taken at add-time —

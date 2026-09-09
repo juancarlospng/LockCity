@@ -18,7 +18,7 @@ export function StatusBadge({
   return (
     <span
       data-testid={`status-${status.toLowerCase().replace("_", "-")}`}
-      className={`inline-flex items-center gap-2 text-[9px] uppercase tracking-[0.3em] ${
+      className={`inline-flex items-center gap-2 text-[12px] uppercase tracking-[0.3em] ${
         status === "SOLD_OUT" ? "text-steel line-through" : "text-bone"
       } ${className}`}
     >

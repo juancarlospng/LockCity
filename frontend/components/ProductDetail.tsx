@@ -1,215 +1,176 @@
 "use client";
-
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import { Media } from "@/components/Media";
-import { ProductCard } from "@/components/ProductCard";
-import { StatusBadge } from "@/components/StatusBadge";
-import { useCart } from "@/lib/cart";
-import { selectSize as trackSelectSize, viewItem } from "@/lib/analytics";
+import { useState } from "react";
 import type { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/utils";
-
+import { ProductGallery } from "./ProductGallery";
+import { ProductGrid } from "./ShopGrid";
+import { SizeSelector } from "./SizeSelector";
+import Link from "./StoreLink";
 export function ProductDetail({
   product,
-  related,
+  related = [],
 }: {
-  product: Product;
-  related: Product[];
+  product?: Product;
+  related?: Product[];
 }) {
-  const { addItem } = useCart();
-  const [frame, setFrame] = useState(0);
-  const [variantId, setVariantId] = useState(
-    product.variants.find((v) => v.status === "AVAILABLE")?.id ??
-      product.variants[0]?.id
-  );
-
-  useEffect(() => {
-    viewItem({
-      item_id: product.id,
-      item_name: product.name,
-      item_category: product.category,
-      price: product.price,
-    });
-  }, [product]);
-
-  const purchasable =
-    product.status === "AVAILABLE" || product.status === "PRE_ORDER";
-  const selectedVariant = product.variants.find((v) => v.id === variantId);
-
-  const ctaLabel = !purchasable
-    ? product.status === "COMING_SOON"
-      ? "Coming soon"
-      : "Sold out"
-    : product.status === "PRE_ORDER"
-      ? "Pre-order"
-      : "Add to bag";
-
-  const onAdd = () => {
-    if (!purchasable || !selectedVariant) return;
-    addItem(product, selectedVariant);
-    toast.success(`${product.name} — added to bag`);
-  };
-
-  const images = product.images;
+  const [size, setSize] = useState<string>();
+  const [color, setColor] = useState<string>();
+  const colors = product?.colors || [
+    ...new Set(
+      product?.variants.flatMap((v) => (v.color ? [v.color] : [])) || [],
+    ),
+  ];
+  const variants =
+    product?.variants.filter((v) => !color || v.color === color) || [];
+  const sizes = product?.sizes || [...new Set(variants.map((v) => v.size))];
   const details = [
-    product.description && { title: "Description", body: product.description },
-    product.materials && { title: "Materials", body: product.materials },
-    product.fit && { title: "Fit", body: product.fit },
-  ].filter(Boolean) as { title: string; body: string }[];
-
+    ["Fit", product?.fit],
+    ["Size guide", product?.sizeGuide],
+    ["Model height", product?.modelHeight],
+    ["Model size worn", product?.modelSizeWorn],
+    ["Material", product?.materials],
+    ["Fabric weight / GSM", product?.gsm ? `${product.gsm} GSM` : undefined],
+    ["Construction", product?.construction],
+    ["Description", product?.description],
+    ["Product story", product?.story],
+    ["Shipping information", product?.shipping],
+    ["Returns information", product?.returns],
+  ];
   return (
-    <div data-testid="product-page" className="px-4 pb-24 pt-32 sm:px-8 lg:px-12 lg:pt-40">
-      <div className="grid grid-cols-1 gap-12 lg:grid-cols-12">
-        <div className="lg:col-span-7">
-          <div data-testid="product-gallery" className="border border-graphite">
-            {images.length > 0 ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={images[frame] ?? images[0]}
-                alt={product.name}
-                className="aspect-[4/5] w-full object-cover"
-              />
-            ) : (
-              <div>
-                <Media
-                  seed={product.id.length * 29 + frame}
-                  code={product.code}
-                  className="min-h-[380px] lg:min-h-[620px]"
-                />
-                <p className="border-t border-graphite px-4 py-3 text-[9px] uppercase tracking-[0.25em] text-steel">
-                  Product photography coming soon
-                </p>
-              </div>
-            )}
-          </div>
-          {images.length > 1 && (
-            <div className="mt-4 flex gap-3">
-              {images.map((src, i) => (
-                <button
-                  key={src}
-                  type="button"
-                  data-testid={`gallery-frame-${i}`}
-                  onClick={() => setFrame(i)}
-                  aria-label={`View image ${i + 1}`}
-                  aria-pressed={frame === i}
-                  className={`w-20 border transition-colors duration-200 ${
-                    frame === i ? "border-bone" : "border-graphite hover:border-steel"
-                  }`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt="" className="aspect-square w-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="lg:col-span-5">
-          <div className="lg:sticky lg:top-28">
-            <div className="flex items-center justify-between">
-              {product.code ? (
-                <p className="text-[10px] tracking-[0.3em] text-steel">{product.code}</p>
-              ) : (
-                <span />
-              )}
-              <StatusBadge status={product.status} />
-            </div>
-            <h1 className="mt-4 font-display text-5xl uppercase leading-[0.9] text-bone sm:text-6xl">
-              {product.name}
-            </h1>
-            <p className="mt-6 text-lg text-bone">
-              {formatPrice(product.price, product.currency)}
+    <div data-testid="product-page" className="page-shell">
+      <Link href="/shop" className="eyebrow">
+        ← Shop Lock City
+      </Link>
+      <div className="mt-8 grid gap-10 lg:grid-cols-2">
+        <ProductGallery product={product} />
+        <div>
+          <p className="eyebrow text-steel">
+            {product?.category || "Clothing & objects"}
+          </p>
+          <h1 className="section-title">
+            {product?.commercialName || product?.name || "Product unavailable"}
+          </h1>
+          {(product?.objectCode || product?.code) && (
+            <p className="eyebrow mt-4 text-steel">
+              {product.objectCode || product.code}
             </p>
-            {product.color && (
-              <p className="mt-2 text-[10px] uppercase tracking-[0.25em] text-steel">
-                Color — {product.color}
-              </p>
-            )}
-
-            <fieldset className="mt-10">
-              <legend className="text-[10px] uppercase tracking-[0.3em] text-steel">
-                Size
-              </legend>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {product.variants.map((v) => {
-                  const soldOut = v.status === "SOLD_OUT";
-                  return (
-                    <button
-                      key={v.id}
-                      type="button"
-                      data-testid={`size-option-${v.size.toLowerCase()}`}
-                      disabled={soldOut}
-                      onClick={() => {
-                        setVariantId(v.id);
-                        trackSelectSize(product.id, v.size);
-                      }}
-                      aria-pressed={variantId === v.id}
-                      className={`min-w-12 border px-4 py-3 text-xs tracking-[0.15em] transition-colors duration-200 ${
-                        soldOut
-                          ? "cursor-not-allowed border-graphite text-graphite line-through"
-                          : variantId === v.id
-                            ? "border-bone bg-bone text-bg"
-                            : "border-graphite text-bone hover:border-steel"
-                      }`}
-                    >
-                      {v.size}
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
-
-            <button
-              type="button"
-              data-testid="add-to-bag-button"
-              disabled={!purchasable}
-              onClick={onAdd}
-              className={`mt-10 w-full border py-5 text-xs font-bold uppercase tracking-[0.3em] transition-colors duration-300 ${
-                purchasable
-                  ? "border-bone bg-bone text-bg hover:bg-transparent hover:text-bone"
-                  : "cursor-not-allowed border-graphite text-graphite"
-              }`}
-            >
-              {ctaLabel}
-            </button>
-
-            {details.length > 0 && (
-              <div className="mt-10 divide-y divide-graphite border-y border-graphite">
-                {details.map((row) => (
-                  <details
-                    key={row.title}
-                    className="group py-4"
-                    data-testid={`accordion-${row.title.toLowerCase()}`}
+          )}
+          <p className="mt-6 text-xl">
+            {formatPrice(product?.price, product?.currency)}
+          </p>
+          <p className="mt-3 text-sm text-steel">
+            {product?.availability ||
+              "Product details are not available at this address."}
+          </p>
+          <fieldset className="mt-8">
+            <legend className="eyebrow">Color</legend>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {colors.length ? (
+                colors.map((c) => (
+                  <button
+                    type="button"
+                    className="lc-choice"
+                    key={c}
+                    aria-pressed={c === color}
+                    onClick={() => {
+                      setColor(c);
+                      setSize(undefined);
+                    }}
                   >
-                    <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] uppercase tracking-[0.25em] text-bone">
-                      {row.title}
-                      <span aria-hidden className="transition-transform duration-300 group-open:rotate-45">
-                        +
-                      </span>
-                    </summary>
-                    <p className="mt-3 text-xs leading-relaxed text-steel">{row.body}</p>
-                  </details>
-                ))}
-              </div>
+                    {c}
+                  </button>
+                ))
+              ) : (
+                <p className="text-sm text-steel">
+                  Colors will be listed with the product.
+                </p>
+              )}
+            </div>
+          </fieldset>
+          <SizeSelector
+            sizes={sizes}
+            selected={size}
+            onSelect={setSize}
+            disabledSizes={sizes.filter(
+              (s) =>
+                variants.some((v) => v.size === s) &&
+                !variants.some((v) => v.size === s && v.status === "AVAILABLE"),
             )}
+          />
+          <button
+            type="button"
+            disabled
+            className="lc-button mt-8 w-full"
+            aria-describedby="purchase-note"
+          >
+            Add to bag
+          </button>
+          <p id="purchase-note" className="mt-3 text-sm text-steel">
+            Online purchasing is not available here yet.
+          </p>
+          <div className="mt-8 divide-y divide-graphite border-y border-graphite">
+            {details.map(([title, body]) => (
+              <details key={title} className="py-4">
+                <summary className="cursor-pointer py-2 text-sm uppercase">
+                  {title}
+                </summary>
+                <p className="py-3 text-sm leading-relaxed text-steel">
+                  {body || "Details will be available with this product."}
+                </p>
+              </details>
+            ))}
           </div>
         </div>
       </div>
-
+      {!!product?.socialProof?.length && (
+        <section className="mt-16">
+          <h2 className="section-title">In their words</h2>
+          {product.socialProof.map((entry, index) => (
+            <figure key={index} className="mt-8 border-l border-graphite pl-6">
+              <blockquote>{entry.quote}</blockquote>
+              <figcaption className="mt-4 text-sm text-steel">{entry.attribution}</figcaption>
+            </figure>
+          ))}
+        </section>
+      )}
       {related.length > 0 && (
-        <section aria-labelledby="related-heading" className="mt-28">
-          <h2
-            id="related-heading"
-            className="font-display text-3xl uppercase text-bone sm:text-4xl"
-          >
-            Related
-          </h2>
-          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {related.map((p, i) => (
-              <ProductCard key={p.id} product={p} index={i} />
-            ))}
-          </div>
+        <section className="mt-16">
+          <h2 className="section-title mb-8">Related products</h2>
+          <ProductGrid products={related} />
+        </section>
+      )}
+      {!!product?.bundles?.length && (
+        <section className="mt-16">
+          <h2 className="section-title mb-8">Wear together</h2>
+          <ProductGrid products={product.bundles} />
+        </section>
+      )}
+      {!!product?.peopleWearing?.length && (
+        <section className="mt-16">
+          <h2 className="section-title">People wearing this</h2>
+          {product.peopleWearing.map((p) => (
+            <Link
+              key={p.id}
+              className="lc-button mt-4"
+              href={`/people/${p.slug}`}
+            >
+              {p.name} →
+            </Link>
+          ))}
+        </section>
+      )}
+      {!!product?.creatorContent?.length && (
+        <section className="mt-16">
+          <h2 className="section-title">From the city</h2>
+          {product.creatorContent.map((t) => (
+            <Link
+              key={t.id}
+              className="lc-button mt-4"
+              href={`/transmissions/${t.slug}`}
+            >
+              {t.title} →
+            </Link>
+          ))}
         </section>
       )}
     </div>

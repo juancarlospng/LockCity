@@ -1,60 +1,34 @@
-# LOCK CITY® — Technological Commerce System
+# LOCK CITY CLOTHES — structural storefront facade
 
-**THE CITY IS ALIVE.** A cultural, cinematic storefront where collections are
-DISTRICTS, products carry internal OBJECT identities, and releases are DROPS.
-The front-end builds culture and desire; the system underneath is built to
-function like software.
+Next.js App Router storefront preserving THE CITY, districts and LOCKED IN. Phase 1 provides reusable shopping and editorial templates with intentional empty states. No production service is connected; adding environment variables does not enable commerce.
 
-## Stack
+## Development
 
-- Next.js 15 (App Router) + React 19 + TypeScript
-- Three.js + React Three Fiber (progressive enhancement — never required to buy)
-- framer-motion + lenis (motion), Tailwind CSS, sonner
-- WooCommerce (catalog/orders/revenue — source of truth) via Store API
-- Printful behind WooCommerce (production/fulfillment/cost)
-- Supabase/Postgres (operational intelligence — schema in `backend/supabase/`)
-- GA4 via GTM (behavioral analytics, gated behind `NEXT_PUBLIC_GTM_ID`)
+Use Node 22+ and Yarn 1.22.22 (the packageManager field is authoritative).
 
-## Run
-
-```bash
-yarn install
-yarn start        # dev, 0.0.0.0:3000
-yarn build        # production build (type-checked)
+```sh
+yarn install --frozen-lockfile
+yarn start
+yarn lint
+yarn typecheck
+yarn build
+yarn serve
 ```
 
-## Environment
+The default preview port is 3000. Fonts are fetched at build time by next/font, then served locally. No API credentials are required.
 
-See `.env.example`. Nothing loads or calls out until configured:
+## Browser validation
 
-| Variable | Purpose | Scope |
-| --- | --- | --- |
-| `NEXT_PUBLIC_WC_STORE_URL` | WooCommerce storefront URL (Store API is public by design) | public |
-| `NEXT_PUBLIC_GTM_ID` | GTM container (GA4 inside GTM) | public |
-| `KLAVIYO_API_KEY` / `KLAVIYO_LIST_ID` | JOIN THE CITY provider (later) | server |
-| `WC_URL` / `WC_CONSUMER_KEY` / `WC_CONSUMER_SECRET` | Admin REST API — backend only | server |
-| `WC_WEBHOOK_SECRET` | Webhook HMAC validation | server |
-| `DATABASE_URL` | Supabase Transaction Pooler URI (port 6543) | server |
+Install Microsoft Edge (the test suite uses its installed browser channel), start the built app, then:
 
-## Architecture map
+```sh
+BASE_URL=http://127.0.0.1:3000 yarn test:e2e
+```
 
-- Commerce adapter: `lib/commerce.ts` (`WooCommerceAdapter` → `EmptyCommerceAdapter`
-  fallback; UI always renders honest empty states when no store is connected)
-- Edge routes: `/store/*` (same-origin WooCommerce Store API proxy) and
-  `/join` (newsletter subscription abstraction). Note: `/api/*` is reserved
-  for the platform backend — do not create Next route handlers under `/api`.
-- Webhooks: `POST /api/webhooks/woocommerce` on the FastAPI backend —
-  HMAC-SHA256 signature validation, idempotent via `X-WC-Delivery-ID`,
-  503 fail-closed until configured.
-- Analytics: `lib/analytics.ts` typed dataLayer events with automatic
-  first-touch attribution (`lib/attribution.ts`).
-- Data model: `backend/supabase/migrations/001_initial_schema.sql`
-  (RLS enabled, service-role only).
+In PowerShell set `$env:BASE_URL='http://127.0.0.1:3000'` before running `yarn test:e2e`. Tests cover routes, empty detail states, mobile layout, dialogs, query preservation, disabled integrations, accessibility and enhancement fallbacks. See VALIDATION.md for results and limitations.
 
-## Rules
+## Integration boundary
 
-- No fabricated products, prices, people, drops or content — ever.
-- Brand language (Districts, Objects, Drops) never replaces shopping language
-  (Shop, Size, Add to Bag, Checkout).
-- Three.js for experience; standard UI for commerce.
-- Secrets live in env vars, server-side, never in the browser bundle.
+Read ARCHITECTURE.md before changing data sources. lib/commerce.ts and lib/content.ts currently return no catalog or editorial records. Add to Bag and Checkout are disabled. Join never stores or sends an email. /store/\* and POST /join return 503. Backend and legacy utility files inherited from the repository are not part of the active facade runtime.
+
+Real products, people, history, prices, release dates, shipping rules and launch configuration require approved Phase 2 data. Do not create substitute inventory or enable integrations as a shortcut.

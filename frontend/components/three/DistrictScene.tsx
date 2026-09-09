@@ -31,10 +31,26 @@ function DistrictBlock({
   const blocks = useMemo(() => {
     // Each district gets a distinct architectural silhouette
     const shapes = [
-      [{ x: 0, h: 2.6, w: 1.2 }, { x: 0.7, h: 1.4, w: 0.7 }, { x: -0.7, h: 1.8, w: 0.6 }],
-      [{ x: 0, h: 3.4, w: 0.9 }, { x: 0.6, h: 2.1, w: 0.8 }, { x: -0.6, h: 1.2, w: 0.9 }],
-      [{ x: 0, h: 1.8, w: 1.5 }, { x: 0.2, h: 3, w: 0.6 }, { x: -0.7, h: 1, w: 0.6 }],
-      [{ x: 0, h: 2.2, w: 1.4 }, { x: 0, h: 3.2, w: 0.5 }, { x: 0.8, h: 1.5, w: 0.5 }],
+      [
+        { x: 0, h: 2.6, w: 1.2 },
+        { x: 0.7, h: 1.4, w: 0.7 },
+        { x: -0.7, h: 1.8, w: 0.6 },
+      ],
+      [
+        { x: 0, h: 3.4, w: 0.9 },
+        { x: 0.6, h: 2.1, w: 0.8 },
+        { x: -0.6, h: 1.2, w: 0.9 },
+      ],
+      [
+        { x: 0, h: 1.8, w: 1.5 },
+        { x: 0.2, h: 3, w: 0.6 },
+        { x: -0.7, h: 1, w: 0.6 },
+      ],
+      [
+        { x: 0, h: 2.2, w: 1.4 },
+        { x: 0, h: 3.2, w: 0.5 },
+        { x: 0.8, h: 1.5, w: 0.5 },
+      ],
     ];
     return shapes[index % shapes.length];
   }, [index]);
@@ -43,10 +59,13 @@ function DistrictBlock({
     if (!group.current || !mat.current) return;
     const targetScale = active ? 1.08 : 1;
     const targetGlow = active ? 0.35 : 0.02;
-    group.current.scale.lerp(
-      new THREE.Vector3(targetScale, targetScale, targetScale),
-      Math.min(dt * 6, 1)
+    const scale = THREE.MathUtils.damp(
+      group.current.scale.x,
+      targetScale,
+      6,
+      Math.min(dt, 0.1),
     );
+    group.current.scale.setScalar(scale);
     mat.current.emissiveIntensity +=
       (targetGlow - mat.current.emissiveIntensity) * Math.min(dt * 6, 1);
   });
@@ -75,7 +94,11 @@ function DistrictBlock({
             emissive="#F1EFE9"
             emissiveIntensity={0.02}
           />
-          <Edges scale={1.002} color={active ? "#747474" : "#2C2C2C"} threshold={20} />
+          <Edges
+            scale={1.002}
+            color={active ? "#747474" : "#2C2C2C"}
+            threshold={20}
+          />
         </mesh>
       ))}
     </group>
@@ -84,17 +107,22 @@ function DistrictBlock({
 
 function DistrictCamera({ active }: { active: number | null }) {
   const { camera } = useThree();
-  useFrame(() => {
+  useFrame((_, delta) => {
     const targetX = active === null ? 0 : DISTRICT_X[active] * 0.28;
     const targetZ = active === null ? 9.5 : 8;
-    camera.position.x += (targetX - camera.position.x) * 0.05;
-    camera.position.z += (targetZ - camera.position.z) * 0.05;
+    const factor = 1 - Math.exp(-3 * Math.min(delta, 0.1));
+    camera.position.x += (targetX - camera.position.x) * factor;
+    camera.position.z += (targetZ - camera.position.z) * factor;
     camera.lookAt(0, 1.1, 0);
   });
   return null;
 }
 
-export function DistrictScene({ active, onHover, onSelect }: DistrictSceneProps) {
+export function DistrictScene({
+  active,
+  onHover,
+  onSelect,
+}: DistrictSceneProps) {
   const reduced = useReducedMotionPref();
   return (
     <SceneCanvas

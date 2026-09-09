@@ -1,83 +1,61 @@
-"use client";
-
-import Link from "next/link";
-import { useCart } from "@/lib/cart";
+import Link from "@/components/StoreLink";
 import type { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/utils";
-import { Media } from "./Media";
+import { ProductImage } from "./ProductImage";
 import { StatusBadge } from "./StatusBadge";
-
-export function ProductCard({ product, index }: { product: Product; index: number }) {
-  const { addItem } = useCart();
-  const quickVariant =
-    product.variants.find((v) => v.status === "AVAILABLE") ?? product.variants[0];
-  const canAdd = product.status === "AVAILABLE" && quickVariant?.status === "AVAILABLE";
-
+export function ProductCard({ product }: { product: Product; index?: number }) {
+  const name = product.commercialName || product.name;
   return (
     <article
       data-testid={`product-card-${product.id}`}
-      className="group relative flex flex-col border border-graphite bg-card transition-colors duration-300 hover:border-bone"
+      className="product-card group border border-graphite bg-card"
     >
       <Link
-        href={`/product/${product.slug}`}
-        data-testid={`product-link-${product.id}`}
-        data-cursor="view"
+        href={product.href || `/product/${product.slug}`}
         className="block"
-        aria-label={`View ${product.name}`}
+        aria-label={`View product: ${name}`}
       >
         <div className="relative overflow-hidden">
-          <div className="transition-transform duration-700 ease-out group-hover:scale-[1.04]">
-            {product.images[0] ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={product.images[0]}
-                alt={product.name}
-                className="aspect-[4/5] w-full object-cover"
-                loading="lazy"
+          <ProductImage
+            src={product.primaryImage || product.images[0]}
+            alt={name}
+            className="transition-transform duration-500 group-hover:scale-[1.025]"
+          />
+          {(product.secondaryImage || product.images[1]) && (
+            <div className="absolute inset-0 hidden opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100 sm:block">
+              <ProductImage
+                src={product.secondaryImage || product.images[1]}
+                alt={`${name}, alternative view`}
               />
-            ) : (
-              <Media seed={product.id.length * 17 + 7} code={product.code} />
-            )}
-          </div>
-          <div className="absolute left-3 top-3 flex items-center gap-3">
-            <span className="text-[9px] tracking-[0.3em] text-steel">
-              {String(index + 1).padStart(2, "0")}
-            </span>
-            <StatusBadge status={product.status} />
-          </div>
+            </div>
+          )}
         </div>
-        <div className="flex items-start justify-between gap-3 border-t border-graphite p-5">
-          <div>
-            {product.code && (
-              <p className="text-[9px] tracking-[0.3em] text-steel">{product.code}</p>
-            )}
-            <h3 className="mt-1 font-display text-xl uppercase leading-none text-bone">
-              {product.name}
-            </h3>
-            {product.color && (
-              <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-steel">
-                {product.color}
-              </p>
-            )}
-          </div>
-          <p className="shrink-0 text-xs text-bone">
-            {formatPrice(product.price, product.currency)}
-          </p>
+        <div className="space-y-3 border-t border-graphite p-5">
+          <h3 className="font-display text-2xl uppercase">{name}</h3>
+          {(product.objectCode || product.code) && (
+            <p className="eyebrow text-steel">
+              {product.objectCode || product.code}
+            </p>
+          )}
+          {product.category && (
+            <p className="text-sm text-steel">{product.category}</p>
+          )}
+          <p>{formatPrice(product.price, product.currency)}</p>
+          <StatusBadge status={product.status} />
+          <span className="block pt-3 text-sm uppercase">View product →</span>
         </div>
       </Link>
-      <button
-        type="button"
-        data-testid={`quick-add-button-${product.id}`}
-        disabled={!canAdd}
-        onClick={() => canAdd && addItem(product, quickVariant)}
-        className={`border-t border-graphite py-3 text-[10px] font-bold uppercase tracking-[0.3em] transition-colors duration-200 ${
-          canAdd
-            ? "text-bone hover:bg-bone hover:text-bg"
-            : "cursor-not-allowed text-graphite"
-        }`}
-      >
-        {canAdd ? `Quick add — ${quickVariant.size}` : "Unavailable"}
-      </button>
     </article>
+  );
+}
+export function ProductCardPlaceholder() {
+  return (
+    <div className="border border-graphite" aria-hidden="true">
+      <div className="aspect-[4/5] bg-onyx" />
+      <div className="space-y-3 p-5">
+        <div className="h-3 w-2/3 bg-graphite" />
+        <div className="h-2 w-1/3 bg-graphite" />
+      </div>
+    </div>
   );
 }
