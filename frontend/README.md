@@ -43,9 +43,13 @@ See `.env.example`. Nothing loads or calls out until configured:
   WooCommerce and configuration errors stay distinct from a valid empty result.
 - Product images render via the existing `/store/media` proxy, restricted to
   uploads on the configured WooCommerce origin. Original image metadata is retained.
-- Variations retain their IDs and attributes with `UNKNOWN` availability and no
-  invented price. `getVariationById` prepares public Store API resolution and checks
-  the returned parent; it is not connected to checkout or the cart in step 1B.
+- Variable product pages load the complete public Store API variation collection,
+  filtered by parent. Each variation retains its WooCommerce ID, parent, SKU,
+  attributes, prices, currency, stock fields and image. The parent summary is never
+  used as a variation-level price or stock fallback.
+- Attribute selection resolves exactly one variation ID. Missing combinations,
+  sold-out variants and non-purchasable variants cannot be added. This resolution
+  remains separate from the WooCommerce cart and checkout.
 - Run `npm run test:catalog`, `npm run typecheck`, and `npm run build` to verify.
   `TEST_LIVE_STORE=1` adds read-only live catalog checks to the catalog tests.
 - Edge routes: `/store/*` (same-origin WooCommerce Store API proxy) and

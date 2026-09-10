@@ -5,6 +5,7 @@ const LABELS: Record<ProductStatus, string> = {
   PRE_ORDER: "Pre-Order",
   COMING_SOON: "Coming Soon",
   SOLD_OUT: "Sold Out",
+  UNAVAILABLE: "Unavailable",
   UNKNOWN: "Availability unverified",
 };
 

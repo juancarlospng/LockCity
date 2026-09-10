@@ -24,6 +24,8 @@ export interface StoreApiProduct extends ProductAvailability {
   attributes?: ProductAttribute[];
   prices: {
     price: string;
+    regular_price?: string;
+    sale_price?: string;
     currency_code: string;
     currency_minor_unit: number;
     price_range?: { min_amount: string; max_amount: string } | null;
@@ -40,6 +42,7 @@ function availability(raw: ProductAvailability): ProductAvailability {
 }
 function status(raw: ProductAvailability): ProductStatus {
   if (raw.is_in_stock === false) return "SOLD_OUT";
+  if (raw.is_purchasable === false) return "UNAVAILABLE";
   if (raw.is_on_backorder === true && raw.is_purchasable === true) return "PRE_ORDER";
   if (raw.is_in_stock === true && raw.is_purchasable === true) return "AVAILABLE";
   return "UNKNOWN";
@@ -51,6 +54,37 @@ function money(value: string, minor: number) {
   return Number(value) / 10 ** minor;
 }
 function stripHtml(value?: string) { return value?.replace(/<[^>]*>/g, "").trim() || undefined; }
+function proxyImage(src: string) { return `/store/media?src=${encodeURIComponent(src)}`; }
+
+function mapResolvedVariant(
+  raw: StoreApiProduct,
+  parentId: number,
+  attributes: { name: string; value: string }[],
+): ProductVariant {
+  if (raw.type !== "variation" || raw.parent !== parentId) {
+    throw new CommerceError("woocommerce", "WooCommerce returned a variation for the wrong parent");
+  }
+  const minor = raw.prices.currency_minor_unit;
+  const sourceImage = raw.images?.[0];
+  return {
+    id: `woo-${raw.id}`,
+    wooVariationId: raw.id,
+    parentWooProductId: parentId,
+    sku: raw.sku || undefined,
+    size: attributes.find((a) => /size|talla/i.test(a.name))?.value ?? "OS",
+    color: attributes.find((a) => /colou?r/i.test(a.name))?.value,
+    attributes,
+    price: money(raw.prices.price, minor),
+    regularPrice: raw.prices.regular_price === undefined ? undefined : money(raw.prices.regular_price, minor),
+    salePrice: raw.prices.sale_price === undefined ? undefined : money(raw.prices.sale_price, minor),
+    currency: raw.prices.currency_code,
+    status: status(raw),
+    availability: availability(raw),
+    detailsState: "resolved",
+    sourceImage,
+    image: sourceImage?.src ? proxyImage(sourceImage.src) : undefined,
+  };
+}
 
 export function mapProduct(raw: StoreApiProduct): Product {
   if (!Number.isInteger(raw.id) || !raw.slug || !raw.name || !raw.type || !raw.prices?.currency_code) {
@@ -75,7 +109,7 @@ export function mapProduct(raw: StoreApiProduct): Product {
       max: money(raw.prices.price_range.max_amount, raw.prices.currency_minor_unit),
     } : undefined,
     sourceImages: raw.images ?? [],
-    images: (raw.images ?? []).map((i) => `/store/media?src=${encodeURIComponent(i.src)}`),
+    images: (raw.images ?? []).map((i) => proxyImage(i.src)),
     categories: raw.categories ?? [], attributes: raw.attributes ?? [],
     category: raw.categories?.[0]?.slug, collection: raw.categories?.[0]?.slug,
     hasOptions: raw.has_options ?? raw.type === "variable", variation: raw.variation,
@@ -145,13 +179,33 @@ export class WooCommerceAdapter {
   async getProductBySlug(slug: string) {
     const raw = await this.list(new URLSearchParams({ slug }));
     const match = raw.find((p) => p.slug === slug);
-    return match ? mapProduct(match) : undefined;
+    if (!match) return undefined;
+    const product = mapProduct(match);
+    if (match.type === "variable") product.variants = await this.getVariations(match);
+    return product;
   }
   async getProductsByCollection(slug: string) {
     return (await this.getProducts()).filter((p) => p.categories.some((c) => c.slug === slug));
   }
 
-  // Prepared for a later variant-selection step; no parent stock/price fallback.
+  async getVariations(parent: StoreApiProduct): Promise<ProductVariant[]> {
+    if (parent.type !== "variable") return [];
+    const summaries = parent.variations ?? [];
+    const expected = new Map(summaries.map((v) => [v.id, v.attributes ?? []]));
+    if (expected.size !== summaries.length) {
+      throw new CommerceError("woocommerce", "WooCommerce returned repeated variation IDs on the parent product");
+    }
+    const rawVariants = await this.list(new URLSearchParams({
+      parent: String(parent.id),
+      type: "variation",
+    }));
+    if (rawVariants.length !== expected.size || rawVariants.some((v) => !expected.has(v.id))) {
+      throw new CommerceError("woocommerce", "WooCommerce returned an incomplete variation set");
+    }
+    return rawVariants.map((raw) => mapResolvedVariant(raw, parent.id, expected.get(raw.id)!));
+  }
+
+  // Available for a future just-in-time stock refresh before cart operations.
   async getVariationById(parentId: number, variant: ProductVariant): Promise<ProductVariant> {
     if (!variant.wooVariationId) throw new CommerceError("woocommerce", "Missing variation ID");
     const { data } = await this.fetchStore(`/products/${variant.wooVariationId}`);
@@ -159,8 +213,6 @@ export class WooCommerceAdapter {
     if (!raw || raw.id !== variant.wooVariationId || raw.parent !== parentId || raw.type !== "variation") {
       throw new CommerceError("woocommerce", "Unexpected variation response");
     }
-    const product = mapProduct(raw);
-    return { ...variant, status: product.status, price: product.price, currency: product.currency,
-      sku: raw.sku, availability: availability(raw), detailsState: "resolved" };
+    return mapResolvedVariant(raw, parentId, variant.attributes ?? []);
   }
 }

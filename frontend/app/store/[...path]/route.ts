@@ -69,7 +69,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       if (src.origin !== base.origin || !src.pathname.startsWith("/wp-content/uploads/") || src.username || src.password) {
         return NextResponse.json({ error: "invalid_image" }, { status: 400 });
       }
-      const media = await fetch(src, { redirect: "error", signal: AbortSignal.timeout(15000), next: { revalidate: 3600 } });
+      const media = await fetch(src, { redirect: "error", signal: AbortSignal.timeout(15000), cache: "no-store" });
       if (!media.ok) return NextResponse.json({ error: "woocommerce" }, { status: media.status });
       const type = media.headers.get("content-type") ?? "";
       if (!/^image\/(jpeg|png|webp|gif|avif)(;|$)/i.test(type)) return NextResponse.json({ error: "invalid_image" }, { status: 415 });

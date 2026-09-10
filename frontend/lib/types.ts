@@ -8,12 +8,14 @@ export type ProductStatus =
   | "PRE_ORDER"
   | "COMING_SOON"
   | "SOLD_OUT"
+  | "UNAVAILABLE"
   | "UNKNOWN";
 
 export type DropStatus = "ACTIVE" | "SOLD_OUT" | "ARCHIVED";
 
 export interface ProductVariant {
   id: string;
+  parentWooProductId?: number;
   size: string;
   color?: string;
   sku?: string;
@@ -21,10 +23,14 @@ export interface ProductVariant {
   printfulVariantId?: string;
   status: ProductStatus;
   price?: number;
+  regularPrice?: number;
+  salePrice?: number;
   currency?: string;
   attributes?: { name: string; value: string }[];
   detailsState?: "unresolved" | "resolved";
   availability?: ProductAvailability;
+  image?: string;
+  sourceImage?: ProductImage;
 }
 
 export interface ProductAvailability {

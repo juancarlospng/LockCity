@@ -88,6 +88,9 @@ test('parent stock and price are never copied to unresolved variations', () => {
   assert.equal(mapped.variants[0].detailsState, 'unresolved');
   assert.equal(mapProduct({ ...raw, variations: [] }).variants.length, 0);
 });
+test('an in-stock product that WooCommerce marks non-purchasable is unavailable', () => {
+  assert.equal(mapProduct({ ...product(1), is_purchasable: false }).status, 'UNAVAILABLE');
+});
 test('real variation resolver uses its own price and stock and verifies parent', async () => {
   const variant = { id: 'woo-2', wooVariationId: 2, size: 's', status: 'UNKNOWN' };
   const raw = { ...product(2), parent: 1, type: 'variation', is_in_stock: false,
@@ -100,6 +103,49 @@ test('real variation resolver uses its own price and stock and verifies parent',
   await assert.rejects(adapter.getVariationById(99, variant), { kind: 'woocommerce' });
 });
 
+test('resolves the complete parent variation set with real commercial fields', async () => {
+  const parent = { ...product(1), type: 'variable', has_options: true,
+    variations: [
+      { id: 2, attributes: [{ name: 'Color', value: 'black' }, { name: 'Size', value: 's' }] },
+      { id: 3, attributes: [{ name: 'Color', value: 'black' }, { name: 'Size', value: 'm' }] },
+    ] };
+  const variations = [
+    { ...product(2), parent: 1, type: 'variation', sku: 'BLACK-S', variation: 'Color: Black, Size: S',
+      prices: { price: '2500', regular_price: '3000', sale_price: '2500', currency_code: 'USD', currency_minor_unit: 2 },
+      low_stock_remaining: 2, images: [{ id: 20, src: 'https://store.test/wp-content/uploads/black-s.jpg' }] },
+    { ...product(3), parent: 1, type: 'variation', sku: 'BLACK-M', variation: 'Color: Black, Size: M',
+      prices: { price: '3000', regular_price: '3000', sale_price: '3000', currency_code: 'USD', currency_minor_unit: 2 },
+      is_in_stock: false, is_purchasable: false },
+  ];
+  const adapter = new WooCommerceAdapter('https://store.test', async (url) =>
+    url.searchParams.get('slug') ? json([parent], { 'X-WP-Total': '1', 'X-WP-TotalPages': '1' })
+      : json(variations, { 'X-WP-Total': '2', 'X-WP-TotalPages': '1' }));
+  const mapped = await adapter.getProductBySlug('product-1');
+  assert.equal(mapped.variants.length, 2);
+  assert.deepEqual(mapped.variants[0], {
+    id: 'woo-2', wooVariationId: 2, parentWooProductId: 1, sku: 'BLACK-S',
+    size: 's', color: 'black', attributes: parent.variations[0].attributes,
+    price: 25, regularPrice: 30, salePrice: 25, currency: 'USD', status: 'AVAILABLE',
+    availability: { is_in_stock: true, is_purchasable: true, is_on_backorder: undefined,
+      stock_status: undefined, low_stock_remaining: 2, stock_availability: undefined },
+    detailsState: 'resolved', sourceImage: variations[0].images[0],
+    image: '/store/media?src=https%3A%2F%2Fstore.test%2Fwp-content%2Fuploads%2Fblack-s.jpg',
+  });
+  assert.equal(mapped.variants[1].status, 'SOLD_OUT');
+  assert.equal(mapped.variants[1].availability.is_purchasable, false);
+});
+
+test('rejects variation responses from another parent or with missing IDs', async () => {
+  const parent = { ...product(1), type: 'variable', variations: [{ id: 2, attributes: [] }] };
+  const wrongParent = { ...product(2), parent: 99, type: 'variation' };
+  const adapter = new WooCommerceAdapter('https://store.test', async (url) =>
+    url.searchParams.get('slug') ? json([parent]) : json([wrongParent]));
+  await assert.rejects(adapter.getProductBySlug('product-1'), { kind: 'woocommerce' });
+  const missing = new WooCommerceAdapter('https://store.test', async (url) =>
+    url.searchParams.get('slug') ? json([parent]) : json([]));
+  await assert.rejects(missing.getProductBySlug('product-1'), { kind: 'woocommerce' });
+});
+
 if (process.env.TEST_LIVE_STORE === '1') test('live catalog and three requested products', async () => {
   const adapter = new WooCommerceAdapter('https://lockcityclothes.com');
   const products = await adapter.getProducts();
@@ -110,8 +156,12 @@ if (process.env.TEST_LIVE_STORE === '1') test('live catalog and three requested 
     assert.equal(p.type, type);
     assert.equal(p.currency, 'USD');
     assert.ok(p.images.length > 0);
-    if (type === 'variable') assert.ok(p.variants.every(v => v.status === 'UNKNOWN' && v.price === undefined));
-    console.log('LIVE_PRODUCT', JSON.stringify({ id: p.wooProductId, slug, type, price: p.price, variants: p.variants.length }));
+    if (type === 'variable') assert.ok(p.variants.every(v => v.detailsState === 'resolved' && v.parentWooProductId === p.wooProductId && v.price !== undefined));
+    console.log('LIVE_PRODUCT', JSON.stringify({ id: p.wooProductId, slug, type, price: p.price, variants: p.variants.length,
+      example: p.variants[0] && { id: p.variants[0].wooVariationId, parent: p.variants[0].parentWooProductId,
+        attributes: p.variants[0].attributes, price: p.variants[0].price, regularPrice: p.variants[0].regularPrice,
+        salePrice: p.variants[0].salePrice, currency: p.variants[0].currency,
+        inStock: p.variants[0].availability?.is_in_stock, purchasable: p.variants[0].availability?.is_purchasable } }));
   }
   assert.equal(await adapter.getProductBySlug('lock-city-audit-nonexistent'), undefined);
 });

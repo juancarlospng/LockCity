@@ -67,7 +67,7 @@
     "zod": "3.24.4"
   },
   "scripts": {
-    "test:catalog": "node --test tests/commerce.test.cjs",
+    "test:catalog": "node --test tests/commerce.test.cjs tests/variant-selection.test.cjs",
     "typecheck": "tsc --noEmit",
     "start": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
