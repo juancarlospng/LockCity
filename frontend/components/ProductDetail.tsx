@@ -36,8 +36,11 @@ export function ProductDetail({
   const purchasable =
     product.status === "AVAILABLE" || product.status === "PRE_ORDER";
   const selectedVariant = product.variants.find((v) => v.id === variantId);
+  const variantVerified = selectedVariant?.status === "AVAILABLE" || selectedVariant?.status === "PRE_ORDER";
 
-  const ctaLabel = !purchasable
+  const ctaLabel = selectedVariant?.status === "UNKNOWN"
+    ? "Availability unverified"
+    : !purchasable
     ? product.status === "COMING_SOON"
       ? "Coming soon"
       : "Sold out"
@@ -46,7 +49,7 @@ export function ProductDetail({
       : "Add to bag";
 
   const onAdd = () => {
-    if (!purchasable || !selectedVariant) return;
+    if (!purchasable || !selectedVariant || !variantVerified) return;
     addItem(product, selectedVariant);
     toast.success(`${product.name} — added to bag`);
   };
@@ -120,7 +123,13 @@ export function ProductDetail({
             </h1>
             <p className="mt-6 text-lg text-bone">
               {formatPrice(product.price, product.currency)}
+              {product.priceRange && product.priceRange.max !== product.price && ` – ${formatPrice(product.priceRange.max, product.currency)}`}
             </p>
+            {product.type === "variable" && (
+              <p data-testid="variant-details-pending" className="mt-3 text-xs text-steel">
+                Select an option to inspect its attributes. Price and availability per option have not been verified yet.
+              </p>
+            )}
             {product.color && (
               <p className="mt-2 text-[10px] uppercase tracking-[0.25em] text-steel">
                 Color — {product.color}
@@ -129,7 +138,7 @@ export function ProductDetail({
 
             <fieldset className="mt-10">
               <legend className="text-[10px] uppercase tracking-[0.3em] text-steel">
-                Size
+                {product.type === "variable" ? "Options" : "Size"}
               </legend>
               <div className="mt-3 flex flex-wrap gap-2">
                 {product.variants.map((v) => {
@@ -138,7 +147,7 @@ export function ProductDetail({
                     <button
                       key={v.id}
                       type="button"
-                      data-testid={`size-option-${v.size.toLowerCase()}`}
+                      data-testid={`size-option-${v.id}`}
                       disabled={soldOut}
                       onClick={() => {
                         setVariantId(v.id);
@@ -153,7 +162,7 @@ export function ProductDetail({
                             : "border-graphite text-bone hover:border-steel"
                       }`}
                     >
-                      {v.size}
+                      {[v.color, v.size].filter(Boolean).join(" / ")}
                     </button>
                   );
                 })}
@@ -163,7 +172,7 @@ export function ProductDetail({
             <button
               type="button"
               data-testid="add-to-bag-button"
-              disabled={!purchasable}
+              disabled={!purchasable || !variantVerified}
               onClick={onAdd}
               className={`mt-10 w-full border py-5 text-xs font-bold uppercase tracking-[0.3em] transition-colors duration-300 ${
                 purchasable

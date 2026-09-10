@@ -5,6 +5,7 @@ const LABELS: Record<ProductStatus, string> = {
   PRE_ORDER: "Pre-Order",
   COMING_SOON: "Coming Soon",
   SOLD_OUT: "Sold Out",
+  UNKNOWN: "Availability unverified",
 };
 
 export function StatusBadge({

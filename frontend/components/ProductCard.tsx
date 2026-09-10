@@ -62,6 +62,7 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
           </div>
           <p className="shrink-0 text-xs text-bone">
             {formatPrice(product.price, product.currency)}
+            {product.priceRange && product.priceRange.max !== product.price && ` – ${formatPrice(product.priceRange.max, product.currency)}`}
           </p>
         </div>
       </Link>
@@ -76,7 +77,7 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
             : "cursor-not-allowed text-graphite"
         }`}
       >
-        {canAdd ? `Quick add — ${quickVariant.size}` : "Unavailable"}
+        {canAdd ? `Quick add — ${quickVariant.size}` : product.type === "variable" ? "View options" : "Unavailable"}
       </button>
     </article>
   );

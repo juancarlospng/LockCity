@@ -7,7 +7,8 @@ export type ProductStatus =
   | "AVAILABLE"
   | "PRE_ORDER"
   | "COMING_SOON"
-  | "SOLD_OUT";
+  | "SOLD_OUT"
+  | "UNKNOWN";
 
 export type DropStatus = "ACTIVE" | "SOLD_OUT" | "ARCHIVED";
 
@@ -20,9 +21,47 @@ export interface ProductVariant {
   printfulVariantId?: string;
   status: ProductStatus;
   price?: number;
+  currency?: string;
+  attributes?: { name: string; value: string }[];
+  detailsState?: "unresolved" | "resolved";
+  availability?: ProductAvailability;
+}
+
+export interface ProductAvailability {
+  is_in_stock?: boolean;
+  is_purchasable?: boolean;
+  is_on_backorder?: boolean;
+  stock_status?: string;
+  low_stock_remaining?: number | null;
+  stock_availability?: { text: string; class: string };
+}
+export interface ProductCategory { id: number; name: string; slug: string; link?: string }
+export interface ProductAttribute {
+  id: number;
+  name: string;
+  taxonomy?: string;
+  has_variations?: boolean;
+  terms: { id: number; name: string; slug: string }[];
+}
+export interface ProductImage {
+  id?: number;
+  src: string;
+  thumbnail?: string;
+  srcset?: string;
+  sizes?: string;
+  name?: string;
+  alt?: string;
 }
 
 export interface Product {
+  type: string;
+  categories: ProductCategory[];
+  attributes: ProductAttribute[];
+  hasOptions: boolean;
+  variation?: string;
+  availability: ProductAvailability;
+  sourceImages: ProductImage[]; // Original metadata; render images through V2.
+  priceRange?: { min: number; max: number };
   id: string; // internal stable id (lock_product_id)
   slug: string;
   name: string; // commercial name, e.g. LOCK HOODIE

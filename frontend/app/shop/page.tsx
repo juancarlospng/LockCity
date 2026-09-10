@@ -2,11 +2,14 @@ import { EmptyState } from "@/components/EmptyState";
 import { MaskText } from "@/components/Reveal";
 import { ShopGrid } from "@/components/ShopGrid";
 import { commerce } from "@/lib/commerce";
+import { CatalogError } from "@/components/CatalogError";
 
 export const dynamic = "force-dynamic";
 
 export default async function ShopPage() {
-  const products = await commerce.getProducts();
+  let products;
+  try { products = await commerce.getProducts(); }
+  catch (error) { return <CatalogError error={error} />; }
 
   return (
     <div
@@ -23,8 +26,8 @@ export default async function ShopPage() {
           <EmptyState
             testid="shop-empty-state"
             kicker="The store"
-            title="The first drop is coming"
-            body="The shop opens with the first drop. Join the city and the signal reaches you first."
+            title="No products published yet"
+            body="The store is connected, but there are no published products to show."
             ctaHref="/#join"
             ctaLabel="Join the city →"
           />

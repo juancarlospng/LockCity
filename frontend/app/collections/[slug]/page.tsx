@@ -3,6 +3,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ProductCard } from "@/components/ProductCard";
 import { MaskText } from "@/components/Reveal";
 import { commerce } from "@/lib/commerce";
+import { CatalogError } from "@/components/CatalogError";
 import { DISTRICTS } from "@/lib/districts";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,9 @@ export default async function CollectionPage({
   const { slug } = await params;
   const district = DISTRICTS.find((d) => d.slug === slug);
   if (!district) notFound();
-  const products = await commerce.getProductsByCollection(slug);
+  let products;
+  try { products = await commerce.getProductsByCollection(slug); }
+  catch (error) { return <CatalogError error={error} />; }
 
   return (
     <div

@@ -16,6 +16,8 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [available, setAvailable] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [errorKind, setErrorKind] = useState("network");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -29,8 +31,12 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
     const q = query.trim();
     if (!q) {
       setResults([]);
+      setLoading(false);
+      setAvailable(true);
       return;
     }
+    setResults([]);
+    setLoading(true);
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
@@ -38,15 +44,18 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
           `/store/products?search=${encodeURIComponent(q)}&per_page=8`,
           { signal: controller.signal }
         );
-        if (res.status === 503) {
+        if (!res.ok) {
+          const body = await res.json();
+          setErrorKind(body.error ?? "woocommerce");
           setAvailable(false);
           return;
         }
-        if (!res.ok) throw new Error();
         setAvailable(true);
         setResults(await res.json());
       } catch {
-        if (!controller.signal.aborted) setAvailable(false);
+        if (!controller.signal.aborted) { setAvailable(false); setErrorKind("network"); }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
       }
     }, 250);
     return () => {
@@ -96,10 +105,11 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
               data-testid="search-unavailable"
               className="py-6 text-xs uppercase tracking-[0.25em] text-steel"
             >
-              Search opens with the first drop
+              {errorKind === "network" ? "Could not connect to the store. Try again." : "Store search is temporarily unavailable. Try again."}
             </p>
           )}
-          {available && query && results.length === 0 && (
+          {loading && <p className="py-6 text-xs text-steel">Searching…</p>}
+          {available && !loading && query && results.length === 0 && (
             <p className="py-6 text-xs uppercase tracking-[0.25em] text-steel">
               Nothing found
             </p>
