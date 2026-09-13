@@ -63,6 +63,15 @@ Render start command:
 python backend/start.py
 ```
 
+Render build command:
+
+```text
+pip install -r backend/requirements-operator.txt
+```
+
+This production dependency set is isolated from the legacy backend and excludes
+Emergent, MongoDB drivers, and development/test tooling.
+
 The launcher listens on `0.0.0.0:$PORT` and forces writes off. Locally, run the
 same command from the repository root after setting the required environment.
 Use a trusted API client with the Bearer token to GET `/api/operator/v1/status`
