@@ -19,6 +19,7 @@ def test_export_matches_routes_and_has_only_operator_endpoints():
     assert {op["operationId"] for ops in document["paths"].values() for op in ops.values()} == {
         "getStatus", "getProducts", "getProduct", "updateProduct", "getAudit"}
     assert document["components"]["securitySchemes"]["OperatorBearer"] == {"type": "http", "scheme": "bearer"}
+    assert document["servers"] == [{"url": "https://lock-city-operator-api.onrender.com"}]
     assert all(op["security"] == [{"OperatorBearer": []}]
                for ops in document["paths"].values() for op in ops.values())
     assert document["components"]["schemas"]["Rename"]["additionalProperties"] is False

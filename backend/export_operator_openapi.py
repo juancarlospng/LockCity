@@ -93,8 +93,8 @@ def contract():
     return {
         "openapi": "3.1.0", "info": {
             "title": "LOCK CITY Operator API", "version": "1.0.0",
-            "description": "Digital Administrator contract. Deployment pending: set servers to the verified HTTPS "
-                           "backend origin before import. Supply Bearer credentials separately; never in this file."},
+            "description": "Digital Administrator contract. Supply Bearer credentials separately; never in this file."},
+        "servers": [{"url": "https://lock-city-operator-api.onrender.com"}],
         "security": [{"OperatorBearer": []}], "paths": paths,
         "components": {"securitySchemes": {"OperatorBearer": {"type": "http", "scheme": "bearer"}},
                        "schemas": schemas},
