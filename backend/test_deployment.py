@@ -3,10 +3,7 @@ import os
 
 import httpx
 
-os.environ.setdefault("MONGO_URL", "mongodb://127.0.0.1:27017")
-os.environ.setdefault("DB_NAME", "lockcity_test")
-
-from server import app  # noqa: E402
+from operator_server import app  # noqa: E402
 from start import production_settings  # noqa: E402
 
 
@@ -21,11 +18,30 @@ def test_public_liveness_has_no_configuration_details():
     assert response.json() == {"status": "ok"}
 
 
+def test_operator_app_imports_without_mongodb_environment(monkeypatch):
+    monkeypatch.delenv("MONGO_URL", raising=False)
+    monkeypatch.delenv("DB_NAME", raising=False)
+    assert app.title == "LOCK CITY Operator API"
+
+
+def test_independent_app_exposes_only_requested_routes():
+    routes = {(route.path, method) for route in app.routes
+              for method in (route.methods or set())}
+    assert routes == {
+        ("/api/health", "GET"),
+        ("/api/operator/v1/status", "GET"),
+        ("/api/operator/v1/products", "GET"),
+        ("/api/operator/v1/products/{product_id}", "GET"),
+        ("/api/operator/v1/products/{product_id}", "PATCH"),
+        ("/api/operator/v1/audit", "GET"),
+    }
+
+
 def test_production_launcher_binds_provider_port_and_forces_read_only(monkeypatch):
     monkeypatch.setenv("PORT", "9123")
     monkeypatch.setenv("OPERATOR_WRITES_ENABLED", "true")
     settings = production_settings()
-    assert settings == {"app": "server:app", "host": "0.0.0.0", "port": 9123}
+    assert settings == {"app": "operator_server:app", "host": "0.0.0.0", "port": 9123}
     assert os.environ["OPERATOR_WRITES_ENABLED"] == "false"
 
 

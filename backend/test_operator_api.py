@@ -5,7 +5,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from operator_api import OperatorError, WooClient, create_router, product_view
+from operator_api import OperatorError, WooClient, create_router, digest, product_view
 
 
 class Store:
@@ -204,6 +204,21 @@ def test_simultaneous_idempotent_requests(setup):
             assert (await first).status_code == 200
             assert len(setup[2].writes) == 1
     asyncio.run(run())
+
+
+def test_pending_postgres_shape_returns_in_progress(setup):
+    payload = body(setup)
+    key = digest(payload["idempotency_key"])
+    setup[1].records[key] = {
+        "operation_id": "pending-operation",
+        "fingerprint": digest({"id": 1, **payload}),
+        "result": None,
+        "http_status": None,
+    }
+    response = request(setup, "PATCH", "/products/1", json=payload)
+    assert response.status_code == 409
+    assert response.json()["error"] == "OPERATION_IN_PROGRESS"
+    assert not setup[2].writes
 
 
 def test_post_write_read_failure_keeps_lock(setup):

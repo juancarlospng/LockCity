@@ -1,128 +1,82 @@
 # LOCK CITY Operator API v1
 
-Implemented in the existing FastAPI service; `/api` is routed to this service
-by the platform ingress. No Next.js UI or Store API cart changes are required.
-No separate Operator specification was present in the repository; this contract
-implements phase one from the task and follows the existing server-only model.
+The Operator API is an independent FastAPI deployment. Render starts
+`operator_server:app`; this module does not import or initialize the MongoDB-backed
+legacy `server.py`. WooCommerce stays behind the server and the frontend is not
+part of this service.
 
-## Server environment (names only)
+## Supabase/Postgres setup
 
-- `MONGO_URL`, `DB_NAME`: existing durable backend database.
-- `WC_REST_URL`, `WC_REST_CONSUMER_KEY`, `WC_REST_CONSUMER_SECRET`: existing
-  REST credential names, now consumed by the backend as well. Inject through
-  backend deployment secrets or backend `.env`; never import frontend `.env.local`.
-- `OPERATOR_API_TOKEN`: new shared operator bearer secret, at least 32 characters;
-  generate a cryptographically random token. Only trusted operator clients use it.
-- `OPERATOR_WRITES_ENABLED`: explicit write gate, disabled unless exactly `true`.
+The project already used the server-side variable `DATABASE_URL` for its Supabase
+schema. Operator API reuses that variable and connects directly with `asyncpg`.
+Use the Supabase Transaction Pooler URI (port 6543) or another server-only Postgres
+connection string. Do not use a browser anon/public key.
 
-The existing `WC_WEBHOOK_SECRET` and `CORS_ORIGINS` remain unchanged. No secrets
-belong in public variables, committed examples, browser code, URLs or logs.
-Existing read-only WooCommerce credentials suffice for GETs, not PATCH. No
-production credential permissions were changed by this implementation.
+Apply migrations in order:
+
+```text
+psql $DATABASE_URL -f backend/supabase/migrations/001_initial_schema.sql
+psql $DATABASE_URL -f backend/supabase/migrations/002_operator_api.sql
+```
+
+Migration 002 creates `operator_audit` and `operator_locks`. Both tables have RLS
+enabled, no browser policy, and explicit revocation for `anon` and `authenticated`.
+The database credential and all API credentials belong only in Render secrets.
+
+## Render environment (names only)
+
+- `DATABASE_URL` — secret server-side Supabase/Postgres connection string.
+- `WC_REST_URL` — WooCommerce origin; configuration rather than a credential.
+- `WC_REST_CONSUMER_KEY` — secret.
+- `WC_REST_CONSUMER_SECRET` — secret.
+- `OPERATOR_API_TOKEN` — secret Bearer token, at least 32 characters.
+- `OPERATOR_WRITES_ENABLED` — set to `false`; `start.py` also forces it to false.
+- `PORT` — provided by Render.
+
+`MONGO_URL` and `DB_NAME` are not used by this service. They remain documented in
+`legacy.env.example` for the separate legacy backend.
 
 ## Routes
 
-All five routes require `Authorization: Bearer <operator secret>` and return
-`Cache-Control: no-store`.
+`GET /api/health` is an unauthenticated liveness probe and returns only
+`{"status":"ok"}`. All routes under `/api/operator/v1` require
+`Authorization: Bearer <operator token>` and return `Cache-Control: no-store`:
 
-- `GET /api/operator/v1/status`: reads MongoDB and WooCommerce health; no write probe.
-- `GET /api/operator/v1/products?page=1&per_page=20`: explicit pagination,
-  total/total_pages/next_page; maximum page size 100, no silent catalog truncation.
-- `GET /api/operator/v1/products/{id}`: safe product projection plus version hash.
-- `PATCH /api/operator/v1/products/{id}`: JSON with exactly `name`, `reason`,
-  `expected_version`, `idempotency_key`. Only name is forwarded to WooCommerce.
-- `GET /api/operator/v1/audit?page=1&per_page=20`: durable operation records,
-  including safe before/after projections, reason, state and sanitized outcome.
+- `GET /api/operator/v1/status`
+- `GET /api/operator/v1/products?page=1&per_page=20`
+- `GET /api/operator/v1/products/{id}`
+- `PATCH /api/operator/v1/products/{id}`
+- `GET /api/operator/v1/audit?page=1&per_page=20`
 
-Do not include private data or secrets in names or reasons. The shared credential
-identifies the actor as `operator`; per-person identities are a future phase.
+PATCH accepts exactly `name`, `reason`, `expected_version`, and `idempotency_key`.
+It reads before writing, checks the complete product version, reserves a hashed
+idempotency key, locks the product, writes only `name`, reads again, and records
+before/after plus `operation_id` and `verified`. A stale version returns
+`409 VERSION_CONFLICT`. Write outcomes that cannot be verified remain locked for
+manual reconciliation and are never automatically replayed.
 
-## Read-only local smoke checks
+## Run and verify
 
-Run the existing backend from its directory with dependencies installed:
-`python -m uvicorn server:app --host 127.0.0.1 --port 8001`.
-Use a trusted API client to send GET requests to
-`http://127.0.0.1:8001/api/operator/v1/status` and
-`http://127.0.0.1:8001/api/operator/v1/products/3704`, with the Authorization header
-provided from the client's secret store. Do not paste the token into a URL or
-terminal history. A missing backend configuration fails closed with 503;
-missing/incorrect authorization returns 401 when configured.
+Render start command:
 
-## Mutation semantics and limits
+```text
+python backend/start.py
+```
 
-Use the latest GET version as `expected_version`; it hashes the complete upstream
-product without exposing its metadata. A pre-write mismatch returns
-`409 VERSION_CONFLICT`. Idempotency keys are global and stored as hashes; reusing
-a key with a different payload returns 409. Identical requests replay the stored
-response without writing again, including failed outcomes.
+The launcher listens on `0.0.0.0:$PORT` and forces writes off. Locally, run the
+same command from the repository root after setting the required environment.
+Use a trusted API client with the Bearer token to GET `/api/operator/v1/status`
+and `/api/operator/v1/products/3704`. Keep the token in the client's secret store;
+do not put it in a URL or shell history.
 
-MongoDB `_id` uniqueness atomically reserves idempotency keys and product locks
-across workers. Audit intent and before state are persisted before the mutation.
-Read-after-write verifies the returned ID and exact name. Uncertain writes,
-verification failures or process crashes retain the product lock; they are never
-automatically replayed or unlocked on a timer. An administrator must reconcile
-the actual WooCommerce product against the pending audit record before manually
-resolving a lock. Restrict database access; define backups/retention operationally.
+Validation commands from `backend/`:
 
-**WooCommerce REST has no atomic compare-and-swap here.** Operator workers are
-serialized, but a WordPress/external edit between GET and PUT can still race.
-Full atomic concurrency across every writer requires an upstream conditional
-write endpoint/plugin, outside this phase. Keep writes disabled until this limit
-is accepted or resolved. Name writes never include price, stock or other fields.
+```text
+python -m pytest
+python -m flake8 operator_api.py operator_server.py start.py test_operator_api.py test_operator_postgres.py test_deployment.py --max-line-length=120
+python -m mypy operator_api.py operator_server.py start.py --ignore-missing-imports --follow-imports=silent
+```
 
-## Validation
-
-`python -m pytest test_operator_api.py` (uses existing xdist configuration).
-Tests use only fake WooCommerce/Mongo repositories and mocked HTTP transport.
-`python -m flake8 operator_api.py test_operator_api.py --max-line-length=120`
-`python -m mypy operator_api.py --ignore-missing-imports --follow-imports=silent`
-Frontend checks remain `npm run typecheck` and `npm test`.
-
-No product deletion, refunds, payments or bulk mutations are implemented.
-
-## Digital Administrator / deployment handoff
-
-`operator-openapi.json` is the standalone OpenAPI 3.1 contract, generated by
-`python export_operator_openapi.py`. It contains only the five Operator operations
-and Bearer security, with no credential examples or values. Its stable operation
-IDs are getStatus, getProducts, getProduct, updateProduct and getAudit.
-The exporter does not import server.py or load environment files.
-
-Deployment remains pending: no linked backend hosting project or remote environment
-access was found in this checkout. The local environment lacks MongoDB configuration
-and an Operator token. `.env.example` is an empty configuration template with writes
-explicitly disabled; it is not evidence of a configured remote deployment.
-
-After obtaining access to the backend hosting project, verify all required variable
-names are present without printing their values, explicitly configure
-`OPERATOR_WRITES_ENABLED=false`, and deploy the unchanged FastAPI application.
-Set the OpenAPI `servers` entry to the verified HTTPS backend origin before import.
-Run authenticated GET smoke checks for status, products, products/3704 and audit;
-expect HTTP 200, status/audit/woocommerce healthy and writes_enabled false.
-Do not issue PATCH or use a production write as a health probe.
-
-### Hosting discovery and production command
-
-The repository's only detected public deployment is the Next.js frontend project
-`lock-city` on Vercel. It serves `/store/*` but returns 404 for `/api/health`
-and `/api/operator/v1/*`; therefore it is not an existing FastAPI deployment.
-No backend hosting manifest, GitHub Actions workflow or backend public URL was
-found. The `.emergent` metadata describes the original development environment
-and an internal cron dispatcher, not a verified public backend service.
-
-No hosting provider is selected by this repository. `Procfile` supplies a
-neutral production command: `python backend/start.py`. The launcher runs the
-existing `server:app` on `0.0.0.0`, reads the provider's `PORT` (default
-8000 locally), and forces `OPERATOR_WRITES_ENABLED=false` for this phase.
-
-Providers may use `/api/health` as an unauthenticated liveness check. It exposes
-only `{"status":"ok"}`. Digital Administrator must use authenticated
-`/api/operator/v1/status` as the readiness check for MongoDB and WooCommerce.
-
-The deployment environment must define `MONGO_URL`, `DB_NAME`,
-`WC_REST_URL`, `WC_REST_CONSUMER_KEY`, `WC_REST_CONSUMER_SECRET`,
-`OPERATOR_API_TOKEN`, and `OPERATOR_WRITES_ENABLED=false`.
-`CORS_ORIGINS` should contain only approved frontend origins if browser access
-is needed. `WC_WEBHOOK_SECRET` is required only for the existing WooCommerce
-webhook endpoint. `PORT` is normally injected by the hosting provider. Values
-and credentials must remain in provider secrets.
+Tests use fake persistence and WooCommerce clients. They do not send a production
+PATCH. Product deletion, refunds, payments, bulk updates, and unnecessary PII are
+not implemented.

@@ -1,4 +1,4 @@
-"""Provider-neutral production launcher for the existing FastAPI application."""
+"""Production launcher for the independent Operator API application."""
 import os
 
 import uvicorn
@@ -13,7 +13,7 @@ def production_settings():
         raise RuntimeError("PORT must be an integer") from exc
     if not 1 <= port <= 65535:
         raise RuntimeError("PORT must be between 1 and 65535")
-    return {"app": "server:app", "host": "0.0.0.0", "port": port}
+    return {"app": "operator_server:app", "host": "0.0.0.0", "port": port}
 
 
 def main():

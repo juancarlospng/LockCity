@@ -1,4 +1,5 @@
 """Server-only Operator API. Never return upstream errors or raw WC objects."""
+import asyncio
 import hashlib
 import hmac
 import json
@@ -7,10 +8,10 @@ import uuid
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
+import asyncpg
 import httpx
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError
-from pymongo.errors import DuplicateKeyError
 from starlette.responses import JSONResponse
 
 
@@ -76,41 +77,151 @@ class WooClient:
         await self.call("PUT", f"products/{product_id}", payload={"name": name})
 
 
-class MongoStore:
-    def __init__(self, db):
-        self.db = db
+class PostgresStore:
+    """Supabase/Postgres persistence for audit records and product locks."""
+
+    _SAVE_COLUMNS = {
+        "state": ("state", False),
+        "before": ("before_payload", True),
+        "after": ("after_payload", True),
+        "result": ("result_payload", True),
+        "http_status": ("http_status", False),
+    }
+
+    def __init__(self, database_url=None):
+        self.database_url = database_url or ""
+        self._pool = None
+        self._pool_lock = asyncio.Lock()
+
+    async def _get_pool(self):
+        if not self.database_url:
+            raise OperatorError(503, "AUDIT_NOT_CONFIGURED")
+        if self._pool is None:
+            async with self._pool_lock:
+                if self._pool is None:
+                    try:
+                        self._pool = await asyncpg.create_pool(
+                            dsn=self.database_url,
+                            min_size=1,
+                            max_size=5,
+                            command_timeout=20,
+                            statement_cache_size=0,
+                        )
+                    except Exception:
+                        raise OperatorError(503, "AUDIT_UNAVAILABLE") from None
+        return self._pool
+
+    @staticmethod
+    def _record(row):
+        if row is None:
+            return None
+        record = dict(row)
+        for field in ("operation_id", "created_at"):
+            if record.get(field) is not None:
+                record[field] = str(record[field])
+        for field in ("before", "after", "result"):
+            value = record.get(field)
+            if isinstance(value, str):
+                record[field] = json.loads(value)
+        return record
 
     async def find(self, key):
-        return await self.db.operator_audit.find_one({"_id": key}, {"_id": 0})
+        pool = await self._get_pool()
+        row = await pool.fetchrow(
+            """SELECT operation_id, product_id, fingerprint, reason, actor,
+                      created_at, state, before_payload AS before,
+                      after_payload AS after, result_payload AS result, http_status
+               FROM public.operator_audit
+               WHERE idempotency_key_hash = $1""",
+            key,
+        )
+        return self._record(row)
 
     async def reserve(self, key, record):
-        try:
-            await self.db.operator_audit.insert_one({"_id": key, **record})
-            return True
-        except DuplicateKeyError:
-            return False
+        pool = await self._get_pool()
+        row = await pool.fetchrow(
+            """INSERT INTO public.operator_audit
+                   (idempotency_key_hash, operation_id, product_id, fingerprint,
+                    reason, actor, created_at, state, before_payload, after_payload)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)
+               ON CONFLICT (idempotency_key_hash) DO NOTHING
+               RETURNING idempotency_key_hash""",
+            key,
+            uuid.UUID(record["operation_id"]),
+            record["product_id"],
+            record["fingerprint"],
+            record["reason"],
+            record["actor"],
+            datetime.fromisoformat(record["created_at"]),
+            record["state"],
+            json.dumps(record.get("before")),
+            json.dumps(record.get("after")),
+        )
+        return row is not None
 
     async def lock(self, product_id, operation_id):
-        try:
-            await self.db.operator_locks.insert_one(
-                {"_id": product_id, "operation_id": operation_id})
-            return True
-        except DuplicateKeyError:
-            return False
+        pool = await self._get_pool()
+        row = await pool.fetchrow(
+            """INSERT INTO public.operator_locks (product_id, operation_id)
+               VALUES ($1, $2)
+               ON CONFLICT (product_id) DO NOTHING
+               RETURNING product_id""",
+            product_id,
+            uuid.UUID(operation_id),
+        )
+        return row is not None
 
     async def unlock(self, product_id, operation_id):
-        await self.db.operator_locks.delete_one(
-            {"_id": product_id, "operation_id": operation_id})
+        pool = await self._get_pool()
+        await pool.execute(
+            """DELETE FROM public.operator_locks
+               WHERE product_id = $1 AND operation_id = $2""",
+            product_id,
+            uuid.UUID(operation_id),
+        )
 
     async def save(self, key, fields):
-        await self.db.operator_audit.update_one({"_id": key}, {"$set": fields})
+        if not fields:
+            return
+        unknown = set(fields) - self._SAVE_COLUMNS.keys()
+        if unknown:
+            raise OperatorError(500, "INVALID_AUDIT_UPDATE")
+        assignments, values = [], []
+        for field, value in fields.items():
+            column, is_json = self._SAVE_COLUMNS[field]
+            values.append(json.dumps(value) if is_json else value)
+            cast = "::jsonb" if is_json else ""
+            assignments.append(f"{column} = ${len(values)}{cast}")
+        values.append(key)
+        pool = await self._get_pool()
+        await pool.execute(
+            f"UPDATE public.operator_audit SET {', '.join(assignments)} "
+            f"WHERE idempotency_key_hash = ${len(values)}",
+            *values,
+        )
 
     async def audit(self, page, size):
-        return await self.db.operator_audit.find({}, {"_id": 0, "fingerprint": 0})\
-            .sort("created_at", -1).skip((page - 1) * size).limit(size).to_list(size)
+        pool = await self._get_pool()
+        rows = await pool.fetch(
+            """SELECT operation_id, product_id, reason, actor, created_at, state,
+                      before_payload AS before, after_payload AS after,
+                      result_payload AS result, http_status
+               FROM public.operator_audit
+               ORDER BY created_at DESC
+               LIMIT $1 OFFSET $2""",
+            size,
+            (page - 1) * size,
+        )
+        return [self._record(row) for row in rows]
 
     async def ping(self):
-        await self.db.command("ping")
+        pool = await self._get_pool()
+        await pool.fetchval("SELECT 1")
+
+    async def close(self):
+        if self._pool is not None:
+            await self._pool.close()
+            self._pool = None
 
 
 class OperatorService:
@@ -124,8 +235,8 @@ class OperatorService:
         if previous:
             if previous["fingerprint"] != fingerprint:
                 raise OperatorError(409, "IDEMPOTENCY_CONFLICT")
-            return previous.get("http_status", 409), previous.get("result", {
-                "error": "OPERATION_IN_PROGRESS", "operation_id": previous["operation_id"]})
+            return previous.get("http_status") or 409, previous.get("result") or {
+                "error": "OPERATION_IN_PROGRESS", "operation_id": previous["operation_id"]}
         op = str(uuid.uuid4())
         record = {"operation_id": op, "product_id": product_id,
                   "fingerprint": fingerprint, "reason": body.reason,
