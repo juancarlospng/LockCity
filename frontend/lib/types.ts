@@ -129,16 +129,25 @@ export interface Person {
   lockedInStory?: string;
 }
 
-// Cart items store a display snapshot (name/price/size) taken at add-time —
-// standard headless-cart practice; WooCommerce revalidates at checkout.
+// Cart items are mapped from the current WooCommerce Store API response.
 export interface CartItem {
-  productId: string;
-  variantId: string;
+  key: string;
+  id: number;
+  productId?: number;
+  variationId?: number;
+  type: "simple" | "variation";
   qty: number;
+  quantityLimits: { minimum: number; maximum: number; multipleOf: number; editable: boolean };
   name: string;
   slug: string;
+  sku?: string;
   price: number;
+  regularPrice: number;
+  salePrice: number;
+  subtotal: number;
+  total: number;
   currency: string;
+  attributes: { name: string; value: string }[];
   size?: string;
   color?: string;
   image?: string;

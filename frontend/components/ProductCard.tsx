@@ -1,17 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { toast } from "sonner";
 import { useCart } from "@/lib/cart";
+import { cartErrorMessage } from "@/lib/cart-core";
 import type { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/utils";
 import { Media } from "./Media";
 import { StatusBadge } from "./StatusBadge";
 
 export function ProductCard({ product, index }: { product: Product; index: number }) {
-  const { addItem } = useCart();
+  const { addItem, isMutating } = useCart();
   const quickVariant =
     product.variants.find((v) => v.status === "AVAILABLE") ?? product.variants[0];
-  const canAdd = product.status === "AVAILABLE" && quickVariant?.status === "AVAILABLE";
+  const isEligible = product.status === "AVAILABLE" && quickVariant?.status === "AVAILABLE";
+  const canAdd = !isMutating && isEligible;
 
   return (
     <article
@@ -70,14 +73,18 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
         type="button"
         data-testid={`quick-add-button-${product.id}`}
         disabled={!canAdd}
-        onClick={() => canAdd && addItem(product, quickVariant)}
+        onClick={async () => {
+          if (!canAdd) return;
+          try { await addItem(product, quickVariant); }
+          catch (cause) { toast.error(cartErrorMessage(cause)); }
+        }}
         className={`border-t border-graphite py-3 text-[10px] font-bold uppercase tracking-[0.3em] transition-colors duration-200 ${
           canAdd
             ? "text-bone hover:bg-bone hover:text-bg"
             : "cursor-not-allowed text-graphite"
         }`}
       >
-        {canAdd ? `Quick add — ${quickVariant.size}` : product.type === "variable" ? "View options" : "Unavailable"}
+        {isEligible ? `Quick add — ${quickVariant?.size}` : product.type === "variable" ? "View options" : "Unavailable"}
       </button>
     </article>
   );

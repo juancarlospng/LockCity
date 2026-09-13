@@ -35,13 +35,14 @@ components/
 lib/
   types.ts        Product/ProductVariant with stable identifiers
                   (lock/woo/printful ids + SKU), Drop, Transmission, Person,
-                  CartItem (display snapshot pattern)
+                  CartItem (mapped from WooCommerce cart responses)
   districts.ts    structural IA (CORE/DROP/COLLAB/ARCHIVE)
   commerce.ts     CommerceAdapter → WooCommerceAdapter | EmptyCommerceAdapter
   analytics.ts    typed GA4/GTM dataLayer events + purchaseOnce guard
   attribution.ts  first-touch UTM/promoter/coupon/referrer capture
   newsletter.ts   SubscriptionProvider abstraction (Null → Klaviyo later)
-  cart.tsx        cart context (localStorage), analytics-instrumented
+  cart-core.ts    Store API cart mapping, validation and same-origin client
+  cart.tsx        WooCommerce-backed cart context, analytics-instrumented
 backend/ (FastAPI, platform service)
   server.py       POST /api/webhooks/woocommerce — HMAC-SHA256 signature
                   validation, topic allowlist, idempotent persistence via
@@ -59,11 +60,11 @@ WooCommerce data through the adapter with stable identifiers.
 
 ## Commerce flow (launch path)
 
-1. Set `NEXT_PUBLIC_WC_STORE_URL` → catalog, collections and search go live
-   automatically (adapter switches from Empty to WooCommerce).
-2. Checkout button redirects to the WooCommerce native checkout; cart sync via
-   Store API cart endpoints (nonce/cart-token preserved by `/store/*` proxy).
-3. WooCommerce webhooks → backend `/api/webhooks/woocommerce` → MongoDB
+1. Set server-only `WC_STORE_URL` → catalog, collections, search and cart go live.
+2. `/store/*` keeps WooCommerce's Cart-Token in an HttpOnly same-site cookie;
+   the browser receives cart data but never receives or stores the token itself.
+3. Checkout remains intentionally disconnected until the next commerce step.
+4. WooCommerce webhooks → backend `/api/webhooks/woocommerce` → MongoDB
    (now) → n8n/Supabase sync (P1).
 
 ## Three.js performance

@@ -1,170 +1,111 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-import type { CartItem, Product, ProductVariant } from "./types";
-import {
-  addToCart as trackAddToCart,
-  removeFromCart as trackRemoveFromCart,
-  viewCart,
-} from "./analytics";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { Product, ProductVariant } from "./types";
+import { WooCartClient, buildAddItemPayload, cartErrorMessage, emptyCart, type CartSnapshot } from "./cart-core";
+import { addToCart as trackAddToCart, removeFromCart as trackRemoveFromCart, viewCart } from "./analytics";
 
-interface CartContextValue {
-  items: CartItem[];
+interface CartContextValue extends CartSnapshot {
   isOpen: boolean;
+  isLoading: boolean;
+  isMutating: boolean;
+  error?: string;
   openCart: () => void;
   closeCart: () => void;
-  addItem: (product: Product, variant: ProductVariant) => void;
-  removeItem: (productId: string, variantId: string) => void;
-  setQty: (productId: string, variantId: string, qty: number) => void;
-  count: number;
-  subtotal: number;
-  currency: string;
+  refreshCart: () => Promise<void>;
+  addItem: (product: Product, variant: ProductVariant) => Promise<void>;
+  removeItem: (key: string) => Promise<void>;
+  setQty: (key: string, qty: number) => Promise<void>;
+  clearCart: () => Promise<void>;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
-const STORAGE_KEY = "lc-cart";
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>([]);
+  const client = useMemo(() => new WooCartClient(), []);
+  const [cart, setCart] = useState<CartSnapshot>(emptyCart);
   const [isOpen, setIsOpen] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isMutating, setIsMutating] = useState(false);
+  const [error, setError] = useState<string>();
+  const mutationActive = useRef(false);
 
-  useEffect(() => {
+  const refreshCart = useCallback(async () => {
+    setIsLoading(true);
+    setError(undefined);
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setItems(JSON.parse(raw));
-    } catch {}
-    setHydrated(true);
+      setCart(await client.getCart());
+    } catch (cause) {
+      setError(cartErrorMessage(cause));
+      throw cause;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [client]);
+
+  useEffect(() => { refreshCart().catch(() => undefined); }, [refreshCart]);
+
+  const mutate = useCallback(async (operation: () => Promise<CartSnapshot>) => {
+    if (mutationActive.current) throw new Error("A cart update is already in progress.");
+    mutationActive.current = true;
+    setIsMutating(true);
+    setError(undefined);
+    try {
+      const next = await operation();
+      setCart(next);
+      return next;
+    } catch (cause) {
+      setError(cartErrorMessage(cause));
+      throw cause;
+    } finally {
+      mutationActive.current = false;
+      setIsMutating(false);
+    }
   }, []);
 
-  useEffect(() => {
-    if (hydrated) localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, [items, hydrated]);
-
-  const addItem = useCallback((product: Product, variant: ProductVariant) => {
-    setItems((prev) => {
-      const existing = prev.find(
-        (i) => i.productId === product.id && i.variantId === variant.id
-      );
-      if (existing) {
-        return prev.map((i) =>
-          i === existing ? { ...i, qty: Math.min(i.qty + 1, 9) } : i
-        );
-      }
-      return [
-        ...prev,
-        {
-          productId: product.id,
-          variantId: variant.id,
-          qty: 1,
-          name: product.name,
-          slug: product.slug,
-          price: variant.price ?? product.price,
-          currency: product.currency,
-          size: variant.size,
-          color: variant.color ?? product.color,
-          image: product.images[0],
-        },
-      ];
-    });
+  const addItem = useCallback(async (product: Product, variant: ProductVariant) => {
+    const payload = buildAddItemPayload(product, variant);
+    await mutate(() => client.addItem(payload));
     trackAddToCart({
-      item_id: product.id,
-      item_name: product.name,
-      item_variant: variant.size,
-      item_category: product.category,
-      price: variant.price ?? product.price,
-      quantity: 1,
+      item_id: String(payload.id), item_name: product.name,
+      item_variant: variant.attributes?.map((item) => item.value).join(" / ") || variant.size,
+      item_category: product.category, price: variant.price ?? product.price, quantity: 1,
     });
     setIsOpen(true);
-  }, []);
+  }, [client, mutate]);
 
-  const removeItem = useCallback((productId: string, variantId: string) => {
-    setItems((prev) => {
-      const item = prev.find(
-        (i) => i.productId === productId && i.variantId === variantId
-      );
-      if (item) {
-        trackRemoveFromCart({
-          item_id: item.productId,
-          item_name: item.name,
-          item_variant: item.size,
-          price: item.price,
-          quantity: item.qty,
-        });
-      }
-      return prev.filter(
-        (i) => !(i.productId === productId && i.variantId === variantId)
-      );
-    });
-  }, []);
+  const removeItem = useCallback(async (key: string) => {
+    const item = cart.items.find((candidate) => candidate.key === key);
+    await mutate(() => client.removeItem(key));
+    if (item) {
+      trackRemoveFromCart({
+        item_id: String(item.id), item_name: item.name,
+        item_variant: item.attributes.map((attribute) => attribute.value).join(" / "),
+        price: item.price, quantity: item.qty,
+      });
+    }
+  }, [cart.items, client, mutate]);
 
-  const setQty = useCallback(
-    (productId: string, variantId: string, qty: number) => {
-      setItems((prev) =>
-        qty <= 0
-          ? prev.filter(
-              (i) => !(i.productId === productId && i.variantId === variantId)
-            )
-          : prev.map((i) =>
-              i.productId === productId && i.variantId === variantId
-                ? { ...i, qty }
-                : i
-            )
-      );
-    },
-    []
-  );
+  const setQty = useCallback(async (key: string, qty: number) => {
+    if (qty <= 0) return removeItem(key);
+    await mutate(() => client.updateItem(key, qty));
+  }, [client, mutate, removeItem]);
+
+  const clearCart = useCallback(async () => { await mutate(() => client.clearCart()); }, [client, mutate]);
 
   const openCart = useCallback(() => {
     setIsOpen(true);
-    setItems((current) => {
-      viewCart(
-        current.map((i) => ({
-          item_id: i.productId,
-          item_name: i.name,
-          item_variant: i.size,
-          price: i.price,
-          quantity: i.qty,
-        })),
-        current.reduce((sum, i) => sum + i.price * i.qty, 0)
-      );
-      return current;
-    });
-  }, []);
+    viewCart(cart.items.map((item) => ({
+      item_id: String(item.id), item_name: item.name,
+      item_variant: item.attributes.map((attribute) => attribute.value).join(" / "),
+      price: item.price, quantity: item.qty,
+    })), cart.total);
+  }, [cart]);
 
-  const { count, subtotal, currency } = useMemo(() => {
-    let count = 0;
-    let subtotal = 0;
-    for (const item of items) {
-      count += item.qty;
-      subtotal += item.price * item.qty;
-    }
-    return { count, subtotal, currency: items[0]?.currency ?? "EUR" };
-  }, [items]);
-
-  const value = useMemo(
-    () => ({
-      items,
-      isOpen,
-      openCart,
-      closeCart: () => setIsOpen(false),
-      addItem,
-      removeItem,
-      setQty,
-      count,
-      subtotal,
-      currency,
-    }),
-    [items, isOpen, openCart, addItem, removeItem, setQty, count, subtotal, currency]
-  );
+  const value = useMemo(() => ({
+    ...cart, isOpen, isLoading, isMutating, error, openCart,
+    closeCart: () => setIsOpen(false), refreshCart, addItem, removeItem, setQty, clearCart,
+  }), [cart, isOpen, isLoading, isMutating, error, openCart, refreshCart, addItem, removeItem, setQty, clearCart]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List
 import uuid
 from datetime import datetime, timezone
+from operator_api import MongoStore, create_router
 
 
 ROOT_DIR = Path(__file__).parent
@@ -25,6 +26,7 @@ db = client[os.environ['DB_NAME']]
 
 # Create the main app without a prefix
 app = FastAPI()
+app.include_router(create_router(MongoStore(db)))
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -45,6 +47,13 @@ class StatusCheckCreate(BaseModel):
 @api_router.get("/")
 async def root():
     return {"message": "Hello World"}
+
+
+@api_router.get("/health", include_in_schema=False)
+async def health():
+    """Unauthenticated liveness probe; readiness stays on authenticated Operator status."""
+    return {"status": "ok"}
+
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):

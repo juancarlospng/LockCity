@@ -48,9 +48,12 @@ See `.env.example`. Nothing loads or calls out until configured:
   attributes, prices, currency, stock fields and image. The parent summary is never
   used as a variation-level price or stock fallback.
 - Attribute selection resolves exactly one variation ID. Missing combinations,
-  sold-out variants and non-purchasable variants cannot be added. This resolution
-  remains separate from the WooCommerce cart and checkout.
-- Run `npm run test:catalog`, `npm run typecheck`, and `npm run build` to verify.
+  sold-out variants and non-purchasable variants cannot be added.
+- The WooCommerce cart is accessed only through `/store/cart*`. Its `Cart-Token`
+  is held in an HttpOnly, SameSite=Lax cookie (Secure in production), never in
+  localStorage or client JavaScript. WooCommerce responses supply all cart item
+  prices, quantity limits and totals. Checkout remains disconnected.
+- Run `npm test`, `npm run typecheck`, and `npm run build` to verify.
   `TEST_LIVE_STORE=1` adds read-only live catalog checks to the catalog tests.
 - Edge routes: `/store/*` (same-origin WooCommerce Store API proxy) and
   `/join` (newsletter subscription abstraction). Note: `/api/*` is reserved

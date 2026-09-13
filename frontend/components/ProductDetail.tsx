@@ -6,6 +6,7 @@ import { Media } from "@/components/Media";
 import { ProductCard } from "@/components/ProductCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useCart } from "@/lib/cart";
+import { cartErrorMessage } from "@/lib/cart-core";
 import { selectSize as trackSelectSize, viewItem } from "@/lib/analytics";
 import type { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/utils";
@@ -25,6 +26,7 @@ export function ProductDetail({
   related: Product[];
 }) {
   const { addItem } = useCart();
+  const [isAdding, setIsAdding] = useState(false);
   const [frame, setFrame] = useState(0);
   const initialVariant = product.type === "simple"
     ? product.variants[0]
@@ -61,10 +63,17 @@ export function ProductDetail({
             ? "Pre-order"
             : "Add to bag";
 
-  const onAdd = () => {
-    if (!canAdd || !selectedVariant) return;
-    addItem(product, selectedVariant);
-    toast.success(`${product.name} — added to bag`);
+  const onAdd = async () => {
+    if (!canAdd || !selectedVariant || isAdding) return;
+    setIsAdding(true);
+    try {
+      await addItem(product, selectedVariant);
+      toast.success(`${product.name} — added to bag`);
+    } catch (cause) {
+      toast.error(cartErrorMessage(cause));
+    } finally {
+      setIsAdding(false);
+    }
   };
 
   const images = useMemo(() => {
@@ -238,15 +247,15 @@ export function ProductDetail({
             <button
               type="button"
               data-testid="add-to-bag-button"
-              disabled={!canAdd}
+              disabled={!canAdd || isAdding}
               onClick={onAdd}
               className={`mt-10 w-full border py-5 text-xs font-bold uppercase tracking-[0.3em] transition-colors duration-300 ${
-                canAdd
+                canAdd && !isAdding
                   ? "border-bone bg-bone text-bg hover:bg-transparent hover:text-bone"
                   : "cursor-not-allowed border-graphite text-graphite"
               }`}
             >
-              {ctaLabel}
+              {isAdding ? "Adding…" : ctaLabel}
             </button>
 
             {details.length > 0 && (

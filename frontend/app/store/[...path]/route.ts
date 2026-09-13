@@ -4,12 +4,12 @@ export const runtime = "nodejs";
 
 // Same-origin proxy to the public WooCommerce Store API. The Store API is
 // customer-facing by design; no admin credential is ever involved here.
-// Cart/session headers (nonce, cart-token, cookies) are preserved so a
-// real WooCommerce cart can be synced later.
+// The WooCommerce Cart-Token stays server-side in an HttpOnly cookie.
 // NOTE: mounted at /store (not /api) — the /api prefix is reserved for the
 // backend service by the platform ingress.
 
 const storeUrl = process.env.WC_STORE_URL;
+const CART_COOKIE = "lc_wc_cart_token";
 
 function notConfigured() {
   return NextResponse.json(
@@ -23,35 +23,62 @@ async function proxy(req: NextRequest, path: string[]) {
 
   const upstream = new URL(`/wp-json/wc/store/v1/${path.join("/")}`, storeUrl);
   upstream.search = req.nextUrl.search;
+  const isCartRequest = path[0] === "cart";
+  const isCartRead = isCartRequest && req.method === "GET";
+  // The live store has an intermediary cache that ignores Cart-Token on
+  // repeated GET URLs. A private cache buster prevents one customer's empty
+  // cart response being reused for another cart session.
+  if (isCartRead) upstream.searchParams.set("_lc_cart", crypto.randomUUID());
 
   const headers = new Headers();
-  for (const name of ["content-type", "nonce", "cart-token", "cookie"]) {
+  for (const name of ["content-type"]) {
     const value = req.headers.get(name);
     if (value) headers.set(name, value);
   }
+  if (isCartRead) headers.set("Cache-Control", "no-cache");
+  const cartToken = isCartRequest ? req.cookies.get(CART_COOKIE)?.value : undefined;
+  if (cartToken) headers.set("Cart-Token", cartToken);
 
   const body = ["GET", "HEAD"].includes(req.method)
     ? undefined
     : await req.arrayBuffer();
 
-  const response = await fetch(upstream, {
+  let response = await fetch(upstream, {
     method: req.method,
     headers,
     body,
     cache: "no-store",
+    signal: AbortSignal.timeout(15000),
   });
+
+  // An expired token cannot recover the old cart. Only an idempotent GET may
+  // safely initialize a replacement session; mutations are never replayed.
+  if (cartToken && req.method === "GET" && path.length === 1 && path[0] === "cart" && [401, 403].includes(response.status)) {
+    headers.delete("Cart-Token");
+    response = await fetch(upstream, { method: "GET", headers, cache: "no-store", signal: AbortSignal.timeout(15000) });
+  }
 
   const output = new NextResponse(response.body, { status: response.status });
   for (const name of [
     "content-type",
-    "set-cookie",
     "nonce",
-    "cart-token",
     "x-wp-total",
     "x-wp-totalpages",
   ]) {
     const value = response.headers.get(name);
     if (value) output.headers.set(name, value);
+  }
+  const nextToken = isCartRequest ? response.headers.get("cart-token") : null;
+  if (nextToken) {
+    output.cookies.set({
+      name: CART_COOKIE,
+      value: nextToken,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
   }
   return output;
 }
