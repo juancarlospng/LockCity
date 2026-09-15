@@ -112,10 +112,13 @@ export function CartDrawer() {
                   <span className="text-steel">WooCommerce total</span>
                   <span data-testid="cart-total" className="text-bone">{formatPrice(total, currency)}</span>
                 </div>
+                <Link href="/checkout" onClick={closeCart} data-testid="cart-checkout-link"
+                  className="mt-5 block w-full border border-bone py-4 text-center text-[10px] uppercase tracking-[0.25em] text-bone transition-colors hover:bg-bone hover:text-bg">
+                  Checkout
+                </Link>
                 <button type="button" data-testid="cart-clear-button" disabled={isMutating}
                   onClick={() => update(clearCart)}
-                  className="mt-5 w-full border border-graphite py-3 text-[10px] uppercase tracking-[0.25em] text-steel hover:border-bone hover:text-bone disabled:cursor-not-allowed disabled:text-graphite">Empty bag</button>
-                <p className="mt-4 text-center text-[10px] uppercase tracking-[0.2em] text-steel">Checkout will be connected in the next step</p>
+                  className="mt-3 w-full border border-graphite py-3 text-[10px] uppercase tracking-[0.25em] text-steel hover:border-bone hover:text-bone disabled:cursor-not-allowed disabled:text-graphite">Empty bag</button>
               </div>
             )}
           </motion.aside>

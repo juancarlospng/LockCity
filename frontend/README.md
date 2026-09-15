@@ -30,6 +30,9 @@ See `.env.example`. Nothing loads or calls out until configured:
 | Variable | Purpose | Scope |
 | --- | --- | --- |
 | `WC_STORE_URL` | WooCommerce Store API origin; configured in `.env.local` | server only |
+| `PAYPAL_CHECKOUT_EXECUTION_ENABLED` | Gates the order-creating Store API POST; keep `false` until a controlled checkout is explicitly approved | server only |
+| `CHECKOUT_BRIDGE_SECRET` | Authenticates V2 when redeeming one-time WordPress return codes | secret, server only |
+| `CHECKOUT_RETURN_SECRET` | Signs short-lived HttpOnly confirmation results | secret, server only |
 | `NEXT_PUBLIC_GTM_ID` | GTM container (GA4 inside GTM) | public |
 | `KLAVIYO_API_KEY` / `KLAVIYO_LIST_ID` | JOIN THE CITY provider (later) | server |
 | `WC_URL` / `WC_CONSUMER_KEY` / `WC_CONSUMER_SECRET` | Admin REST API — backend only | server |
@@ -52,7 +55,15 @@ See `.env.example`. Nothing loads or calls out until configured:
 - The WooCommerce cart is accessed only through `/store/cart*`. Its `Cart-Token`
   is held in an HttpOnly, SameSite=Lax cookie (Secure in production), never in
   localStorage or client JavaScript. WooCommerce responses supply all cart item
-  prices, quantity limits and totals. Checkout remains disconnected.
+  prices, quantity limits and totals.
+- `/checkout` sends address changes and shipping selections to the Store API and
+  renders WooCommerce's returned items, rates, taxes and USD totals. The generic
+  proxy blocks checkout mutations. `/checkout/execute` is the only order-creating
+  path and fails closed unless `PAYPAL_CHECKOUT_EXECUTION_ENABLED=true`.
+- `wordpress/lock-city-v2-return-bridge` is an uninstalled bridge package for the
+  future live flow. PayPal success still returns through the WooCommerce callback;
+  WooCommerce validates the order and payment, then V2 redeems a five-minute code
+  server-to-server. `/order-confirmation` trusts only a signed HttpOnly result.
 - Run `npm test`, `npm run typecheck`, and `npm run build` to verify.
   `TEST_LIVE_STORE=1` adds read-only live catalog checks to the catalog tests.
 - Edge routes: `/store/*` (same-origin WooCommerce Store API proxy) and

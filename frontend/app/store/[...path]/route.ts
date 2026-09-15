@@ -20,6 +20,15 @@ function notConfigured() {
 
 async function proxy(req: NextRequest, path: string[]) {
   if (!storeUrl) return notConfigured();
+  // Order creation is intentionally available only through the separately
+  // gated server route. A browser cannot bypass the review step by posting to
+  // this generic Store API proxy.
+  if (path.length === 1 && path[0] === "checkout" && req.method !== "GET") {
+    return NextResponse.json(
+      { error: "checkout_execution_disabled", message: "Live checkout is disabled." },
+      { status: 403 }
+    );
+  }
 
   const upstream = new URL(`/wp-json/wc/store/v1/${path.join("/")}`, storeUrl);
   upstream.search = req.nextUrl.search;

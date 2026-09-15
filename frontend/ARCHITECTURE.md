@@ -63,8 +63,13 @@ WooCommerce data through the adapter with stable identifiers.
 1. Set server-only `WC_STORE_URL` → catalog, collections, search and cart go live.
 2. `/store/*` keeps WooCommerce's Cart-Token in an HttpOnly same-site cookie;
    the browser receives cart data but never receives or stores the token itself.
-3. Checkout remains intentionally disconnected until the next commerce step.
-4. WooCommerce webhooks → backend `/api/webhooks/woocommerce` → MongoDB
+3. `/checkout` updates the WooCommerce customer address, selects only returned
+   shipping rates and displays WooCommerce totals. PayPal payload preparation is
+   active; the order-creating POST remains gated off by default.
+4. PayPal returns to WooCommerce first. The versioned WordPress bridge validates
+   the real order and payment and posts a one-time opaque code to V2; V2 never
+   trusts browser query parameters as proof of payment.
+5. WooCommerce webhooks → backend `/api/webhooks/woocommerce` → MongoDB
    (now) → n8n/Supabase sync (P1).
 
 ## Three.js performance
