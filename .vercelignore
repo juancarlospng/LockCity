@@ -1,0 +1,9 @@
+backend/
+memory/
+test_reports/
+tests/
+wordpress/
+.emergent/
+frontend/node_modules/
+frontend/.next/
+.env.local
