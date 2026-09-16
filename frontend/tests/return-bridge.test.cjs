@@ -33,11 +33,29 @@ test('a browser value cannot declare payment success without verified server dat
   assert.throws(() => parseBridgeVerification({ verified: true, status: 'paid', order_number: '../secret' }), /Invalid/);
 });
 
+test('paid cart finalization is repeatable and accepts only an empty WooCommerce cart', async () => {
+  const { checkoutFinalizationReceipt, wooCartIsEmpty } = bridgeModule();
+  const signed = 'opaque.signed-result';
+  const first = await checkoutFinalizationReceipt(signed);
+  assert.equal(first, await checkoutFinalizationReceipt(signed));
+  assert.notEqual(first, await checkoutFinalizationReceipt(`${signed}x`));
+  assert.equal(wooCartIsEmpty({ items: [], items_count: 0 }), true);
+  assert.equal(wooCartIsEmpty({ items: [{ key: 'old' }], items_count: 1 }), false);
+  assert.equal(wooCartIsEmpty(null), false);
+});
+
 test('cancel flow returns only a non-sensitive cancellation state', () => {
   const { cancelCheckoutUrl } = bridgeModule();
   const url = new URL(cancelCheckoutUrl('https://lock-city.vercel.app'));
   assert.equal(url.pathname, '/checkout');
   assert.deepEqual([...url.searchParams.entries()], [['payment', 'cancelled']]);
+  const checkout = readFileSync(join(__dirname, '../components/CheckoutForm.tsx'), 'utf8');
+  assert.match(checkout, /PayPal was cancelled\. The order is not marked as paid/);
+  assert.doesNotMatch(checkout, /payment.*cancelled[\s\S]{0,500}clearCart/);
+  const plugin = readFileSync(join(__dirname, '../../wordpress/lock-city-v2-return-bridge/lock-city-v2-return-bridge.php'), 'utf8');
+  assert.match(plugin, /is_object\( \$paypal \).*is_array\( \$paypal->experience_context \)/s);
+  assert.match(plugin, /\$paypal->experience_context\['cancel_url'\] = \$cancel_url/);
+  assert.match(plugin, /woocommerce_api_lock_city_v2_cancel/);
 });
 
 test('WordPress bridge keeps keys server-side and validates payment before V2 success', () => {
@@ -51,6 +69,27 @@ test('WordPress bridge keeps keys server-side and validates payment before V2 su
   assert.match(source, /method="post"/);
   assert.doesNotMatch(source, /order_key=.*order-confirmation/);
   assert.doesNotMatch(source, /order_id=.*order-confirmation/);
+  assert.ok(source.indexOf('delete_transient( $key )') < source.lastIndexOf('lc_v2_verified_order_result( $record )'));
+});
+
+test('paid cart cleanup requires the signed server result and is idempotent', () => {
+  const route = readFileSync(join(__dirname, '../app/order-confirmation/finalize/route.ts'), 'utf8');
+  const page = readFileSync(join(__dirname, '../app/order-confirmation/page.tsx'), 'utf8');
+  const sync = readFileSync(join(__dirname, '../app/order-confirmation/OrderConfirmationCartSync.tsx'), 'utf8');
+  assert.match(route, /verifyCheckoutResult\(signed, secret\)/);
+  assert.match(route, /result\.status !== "paid"/);
+  assert.match(route, /wooStoreRequest\("cart\/items", token, \{ method: "DELETE" \}\)/);
+  assert.match(route, /wooCartIsEmpty\(cart\)/);
+  assert.match(route, /repeated: true/);
+  assert.match(page, /paid \? <OrderConfirmationCartSync \/> : null/);
+  assert.match(sync, /return refreshCart\(\)/);
+});
+
+test('checkout protects the PayPal handoff from a double click', () => {
+  const source = readFileSync(join(__dirname, '../components/CheckoutForm.tsx'), 'utf8');
+  assert.match(source, /if \(!prepared\?\.executionEnabled \|\| mutationActive\.current\) return/);
+  assert.match(source, /mutationActive\.current = true;[\s\S]{0,200}client\.executePayPal\(\)/);
+  assert.match(source, /disabled=\{busy\}/);
 });
 
 test('WordPress bridge secret settings are admin-only, nonce-protected and never prefilled', () => {

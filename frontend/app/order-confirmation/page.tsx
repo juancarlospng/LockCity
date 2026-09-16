@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { CHECKOUT_RESULT_COOKIE, verifyCheckoutResult } from "@/lib/return-bridge-core";
+import { OrderConfirmationCartSync } from "./OrderConfirmationCartSync";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export default async function OrderConfirmationPage() {
 
   return (
     <div data-testid="order-confirmation-page" className="min-h-[75vh] px-4 pb-24 pt-36 sm:px-8 lg:px-12 lg:pt-44">
+      {paid ? <OrderConfirmationCartSync /> : null}
       <p className="text-[10px] uppercase tracking-[0.3em] text-steel">Order status</p>
       <h1 className="mt-4 max-w-5xl font-display text-5xl uppercase leading-[0.9] text-bone sm:text-7xl lg:text-8xl">
         {paid ? "Order confirmed" : pending ? "Payment processing" : "Verification required"}

@@ -248,8 +248,9 @@ function readableError(payload: unknown, fallback: string): { message: string; c
 }
 
 export function extractPayPalRedirect(payload: unknown): string {
-  const paymentResult = record(record(payload).payment_result);
-  const candidate = text(paymentResult.redirect_url);
+  const response = record(payload);
+  const paymentResult = record(response.payment_result);
+  const candidate = text(paymentResult.redirect_url) || text(response.redirect_url);
   let redirect: URL;
   try { redirect = new URL(candidate); }
   catch { throw new CartApiError("WooCommerce did not return a valid PayPal redirect."); }

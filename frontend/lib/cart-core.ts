@@ -25,6 +25,15 @@ export class CartApiError extends Error {
 
 export const emptyCart = (): CartSnapshot => ({ items: [], count: 0, subtotal: 0, total: 0, currency: "USD" });
 
+/** Prevent an older cart request from replacing a newer server-authoritative result. */
+export class CartRequestEpoch {
+  private value = 0;
+
+  begin(): number { return ++this.value; }
+  invalidate(): void { this.value += 1; }
+  isCurrent(epoch: number): boolean { return epoch === this.value; }
+}
+
 function amount(value: unknown, minorUnit: unknown): number {
   const raw = typeof value === "string" || typeof value === "number" ? Number(value) : 0;
   const decimals = Number.isInteger(Number(minorUnit)) ? Number(minorUnit) : 2;

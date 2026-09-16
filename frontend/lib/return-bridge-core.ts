@@ -87,3 +87,15 @@ export function cancelCheckoutUrl(origin: string): string {
   url.searchParams.set("payment", "cancelled");
   return url.toString();
 }
+
+export async function checkoutFinalizationReceipt(signedResult: string): Promise<string> {
+  if (!signedResult) return "";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(signedResult));
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+export function wooCartIsEmpty(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const cart = value as Record<string, unknown>;
+  return Array.isArray(cart.items) && cart.items.length === 0 && Number(cart.items_count) === 0;
+}

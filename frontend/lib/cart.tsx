@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Product, ProductVariant } from "./types";
-import { WooCartClient, buildAddItemPayload, cartErrorMessage, emptyCart, type CartSnapshot } from "./cart-core";
+import { CartRequestEpoch, WooCartClient, buildAddItemPayload, cartErrorMessage, emptyCart, type CartSnapshot } from "./cart-core";
 import { addToCart as trackAddToCart, removeFromCart as trackRemoveFromCart, viewCart } from "./analytics";
 
 interface CartContextValue extends CartSnapshot {
@@ -29,12 +29,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string>();
   const mutationActive = useRef(false);
+  const requestEpoch = useRef(new CartRequestEpoch());
 
   const refreshCart = useCallback(async () => {
+    const epoch = requestEpoch.current.begin();
     setIsLoading(true);
     setError(undefined);
     try {
-      setCart(await client.getCart());
+      const next = await client.getCart();
+      if (requestEpoch.current.isCurrent(epoch)) setCart(next);
     } catch (cause) {
       setError(cartErrorMessage(cause));
       throw cause;
@@ -50,6 +53,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     mutationActive.current = true;
     setIsMutating(true);
     setError(undefined);
+    requestEpoch.current.invalidate();
     try {
       const next = await operation();
       setCart(next);

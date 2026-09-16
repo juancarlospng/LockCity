@@ -126,6 +126,7 @@ test('falls back to ISO presentation data when this WooCommerce has no countries
 test('accepts PayPal/WooCommerce HTTPS redirects and rejects open redirects', () => {
   const { extractPayPalRedirect } = checkoutModule();
   assert.match(extractPayPalRedirect({ payment_result: { redirect_url: 'https://www.paypal.com/checkoutnow?token=fake' } }), /^https:\/\/www\.paypal\.com/);
+  assert.match(extractPayPalRedirect({ redirect_url: 'https://www.sandbox.paypal.com/checkoutnow?token=fake' }), /^https:\/\/www\.sandbox\.paypal\.com/);
   assert.match(extractPayPalRedirect({ payment_result: { redirect_url: 'https://lockcityclothes.com/?wc-ajax=ppc-return-url' } }), /^https:\/\/lockcityclothes\.com/);
   assert.throws(() => extractPayPalRedirect({ payment_result: { redirect_url: 'https://evil.example/pay' } }), /unsafe/);
   assert.throws(() => extractPayPalRedirect({ payment_result: { redirect_url: 'http://paypal.com/pay' } }), /unsafe/);

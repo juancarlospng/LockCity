@@ -12,7 +12,7 @@ compiled.paths = module.paths;
 compiled._compile(ts.transpileModule(readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, filename);
-const { WooCartClient, buildAddItemPayload, mapCart } = compiled.exports;
+const { CartRequestEpoch, WooCartClient, buildAddItemPayload, mapCart } = compiled.exports;
 
 const rawCart = (items = []) => ({
   items, items_count: items.reduce((sum, entry) => sum + entry.quantity, 0),
@@ -89,4 +89,14 @@ test('clear deletes then reloads; WooCommerce rejection remains a real error', a
   await assert.rejects(rejected.addItem({ id: 1, quantity: 1 }), {
     message: 'Sold out', status: 400, code: 'woocommerce_rest_product_out_of_stock',
   });
+});
+
+test('a stale cart response cannot replace the refresh started after payment', () => {
+  const epoch = new CartRequestEpoch();
+  const beforePayment = epoch.begin();
+  const afterPayment = epoch.begin();
+  assert.equal(epoch.isCurrent(beforePayment), false);
+  assert.equal(epoch.isCurrent(afterPayment), true);
+  epoch.invalidate();
+  assert.equal(epoch.isCurrent(afterPayment), false);
 });

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Lock City V2 Return Bridge
  * Description: Validates WooCommerce PayPal returns before handing a one-time result to Lock City V2.
- * Version: 0.2.0
+ * Version: 0.2.1
  * Requires PHP: 7.4
  * Requires Plugins: woocommerce, woocommerce-paypal-payments
  */
@@ -139,11 +139,20 @@ add_filter(
 		}
 		$cancel_url = home_url( '/?wc-api=lock_city_v2_cancel' );
 		$paypal     = $data['payment_source']['paypal'];
-		if ( is_object( $paypal ) && isset( $paypal->experience_context ) && is_object( $paypal->experience_context ) ) {
-			$paypal->experience_context->cancel_url = $cancel_url;
-			$data['payment_source']['paypal']        = $paypal;
-		} elseif ( is_array( $paypal ) && isset( $paypal['experience_context'] ) && is_array( $paypal['experience_context'] ) ) {
-			$data['payment_source']['paypal']['experience_context']['cancel_url'] = $cancel_url;
+		if ( is_object( $paypal ) && isset( $paypal->experience_context ) ) {
+			if ( is_object( $paypal->experience_context ) ) {
+				$paypal->experience_context->cancel_url = $cancel_url;
+			} elseif ( is_array( $paypal->experience_context ) ) {
+				$paypal->experience_context['cancel_url'] = $cancel_url;
+			}
+			$data['payment_source']['paypal'] = $paypal;
+		} elseif ( is_array( $paypal ) && isset( $paypal['experience_context'] ) ) {
+			if ( is_object( $paypal['experience_context'] ) ) {
+				$paypal['experience_context']->cancel_url = $cancel_url;
+			} elseif ( is_array( $paypal['experience_context'] ) ) {
+				$paypal['experience_context']['cancel_url'] = $cancel_url;
+			}
+			$data['payment_source']['paypal'] = $paypal;
 		}
 		return $data;
 	},
