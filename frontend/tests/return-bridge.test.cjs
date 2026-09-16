@@ -53,6 +53,17 @@ test('WordPress bridge keeps keys server-side and validates payment before V2 su
   assert.doesNotMatch(source, /order_id=.*order-confirmation/);
 });
 
+test('WordPress bridge secret settings are admin-only, nonce-protected and never prefilled', () => {
+  const source = readFileSync(join(__dirname, '../../wordpress/lock-city-v2-return-bridge/lock-city-v2-return-bridge.php'), 'utf8');
+  assert.match(source, /get_option\( 'lc_v2_bridge_secret'/);
+  assert.match(source, /current_user_can\( 'manage_options' \)/);
+  assert.match(source, /check_admin_referer\( 'lc_v2_save_bridge_settings' \)/);
+  assert.match(source, /type="password"/);
+  assert.match(source, /autocomplete="new-password"/);
+  assert.match(source, /add_option\( 'lc_v2_bridge_secret', \$secret, '', false \)/);
+  assert.doesNotMatch(source, /value="<\?php echo[^\n]*bridge_secret/);
+});
+
 test('generic Store API proxy blocks a direct checkout POST', () => {
   const source = readFileSync(join(__dirname, '../app/store/[...path]/route.ts'), 'utf8');
   assert.match(source, /path\[0\] === "checkout" && req\.method !== "GET"/);

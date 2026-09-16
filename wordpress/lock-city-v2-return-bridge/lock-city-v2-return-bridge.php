@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Lock City V2 Return Bridge
  * Description: Validates WooCommerce PayPal returns before handing a one-time result to Lock City V2.
- * Version: 0.1.0
+ * Version: 0.2.0
  * Requires PHP: 7.4
  * Requires Plugins: woocommerce, woocommerce-paypal-payments
  */
@@ -15,8 +15,77 @@ function lc_v2_frontend_url(): string {
 }
 
 function lc_v2_bridge_secret(): string {
-	return defined( 'LOCK_CITY_V2_BRIDGE_SECRET' ) ? (string) LOCK_CITY_V2_BRIDGE_SECRET : '';
+	if ( defined( 'LOCK_CITY_V2_BRIDGE_SECRET' ) ) {
+		return (string) LOCK_CITY_V2_BRIDGE_SECRET;
+	}
+	return (string) get_option( 'lc_v2_bridge_secret', '' );
 }
+
+function lc_v2_store_bridge_secret( string $secret ): bool {
+	if ( strlen( $secret ) < 32 ) {
+		return false;
+	}
+	if ( false === get_option( 'lc_v2_bridge_secret', false ) ) {
+		return add_option( 'lc_v2_bridge_secret', $secret, '', false );
+	}
+	return update_option( 'lc_v2_bridge_secret', $secret, false );
+}
+
+add_action(
+	'admin_menu',
+	static function (): void {
+		add_options_page(
+			'Lock City V2 Bridge',
+			'Lock City V2 Bridge',
+			'manage_options',
+			'lock-city-v2-bridge',
+			'lc_v2_bridge_settings_page'
+		);
+	}
+);
+
+function lc_v2_bridge_settings_page(): void {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return;
+	}
+	$configured = strlen( lc_v2_bridge_secret() ) >= 32;
+	?>
+	<div class="wrap">
+		<h1><?php esc_html_e( 'Lock City V2 Return Bridge', 'lock-city-v2' ); ?></h1>
+		<?php if ( isset( $_GET['updated'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
+			<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Bridge settings saved.', 'lock-city-v2' ); ?></p></div>
+		<?php endif; ?>
+		<p><?php echo esc_html( $configured ? 'Bridge secret is configured.' : 'Bridge secret is not configured.' ); ?></p>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+			<input type="hidden" name="action" value="lc_v2_save_bridge_settings">
+			<?php wp_nonce_field( 'lc_v2_save_bridge_settings' ); ?>
+			<table class="form-table" role="presentation"><tbody><tr>
+				<th scope="row"><label for="lc-v2-bridge-secret"><?php esc_html_e( 'Bridge secret', 'lock-city-v2' ); ?></label></th>
+				<td><input id="lc-v2-bridge-secret" name="bridge_secret" type="password" class="regular-text" autocomplete="new-password" minlength="32" required>
+				<p class="description"><?php esc_html_e( 'Enter the server-side secret. The saved value is never displayed.', 'lock-city-v2' ); ?></p></td>
+			</tr></tbody></table>
+			<?php submit_button( 'Save bridge secret' ); ?>
+		</form>
+	</div>
+	<?php
+}
+
+add_action(
+	'admin_post_lc_v2_save_bridge_settings',
+	static function (): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Unauthorized.', 'lock-city-v2' ), '', array( 'response' => 403 ) );
+		}
+		check_admin_referer( 'lc_v2_save_bridge_settings' );
+		$secret = isset( $_POST['bridge_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['bridge_secret'] ) ) : '';
+		if ( strlen( $secret ) < 32 ) {
+			wp_die( esc_html__( 'The bridge secret must contain at least 32 characters.', 'lock-city-v2' ), '', array( 'response' => 400 ) );
+		}
+		lc_v2_store_bridge_secret( $secret );
+		wp_safe_redirect( add_query_arg( 'updated', '1', admin_url( 'options-general.php?page=lock-city-v2-bridge' ) ) );
+		exit;
+	}
+);
 
 function lc_v2_code(): string {
 	return rtrim( strtr( base64_encode( random_bytes( 32 ) ), '+/', '-_' ), '=' );
