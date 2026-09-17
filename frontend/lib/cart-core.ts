@@ -156,7 +156,23 @@ function readableError(payload: unknown, fallback: string): { message: string; c
 }
 
 export function cartErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "The cart could not be updated.";
+  if (!(error instanceof Error)) return "We couldn’t update your bag. Please try again.";
+  const code = error instanceof CartApiError ? (error.code ?? "").toLocaleLowerCase() : "";
+  const detail = error.message.toLocaleLowerCase();
+
+  if (/billing region/.test(detail)) return "Select the billing region.";
+  if (/shipping region/.test(detail)) return "Select the shipping region.";
+  if (/calculate shipping/.test(detail)) return "Enter your address to calculate shipping before continuing.";
+  if (/shipping rate|shipping method|shipping package/.test(detail)) return "Shipping is currently unavailable for this destination.";
+  if (/out.of.stock|stock/.test(code) || /out of stock|sold out/.test(detail)) return "This item is currently out of stock.";
+  if (/quantity/.test(code) || /quantity/.test(detail)) return "That quantity is currently unavailable.";
+  if (/variation/.test(code) || /variation|combination|option/.test(detail)) return "This option is currently unavailable.";
+  if (/checkout_execution_disabled|redirect|payment|gateway/.test(`${code} ${detail}`)) {
+    return "We couldn’t start your payment. Please try again later.";
+  }
+  if (/network|reach|connect|fetch/.test(`${code} ${detail}`)) return "We’re having trouble connecting. Please try again.";
+  if (/empty/.test(detail)) return "Your bag is empty.";
+  return "We couldn’t update your bag. Please try again.";
 }
 
 export class WooCartClient {

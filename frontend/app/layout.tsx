@@ -57,7 +57,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${display.variable} ${mono.variable}`}>
+    <html lang="en" className={`${display.variable} ${mono.variable} overflow-x-hidden`}>
       {gtmId ? (
         <>
           <Script id="lc-consent-defaults" strategy="beforeInteractive">
@@ -66,7 +66,7 @@ export default function RootLayout({
           <GoogleTagManager gtmId={gtmId} />
         </>
       ) : null}
-      <body className="grain bg-bg text-bone antialiased">
+      <body className="grain overflow-x-hidden bg-bg text-bone antialiased">
         <CartProvider>
           <SmoothScroll />
           {gtmId ? (

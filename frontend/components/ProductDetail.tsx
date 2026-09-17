@@ -160,9 +160,8 @@ export function ProductDetail({
             {product.type === "variable" && (
               <div className="mt-3 text-xs text-steel">
                 {selectedVariant ? (
-                  <p data-testid="selected-variation-id">
-                    Variation #{selectedVariant.wooVariationId}
-                    {selectedVariant.sku ? ` · SKU ${selectedVariant.sku}` : ""}
+                  <p data-testid="selected-variation-id" data-variation-id={selectedVariant.wooVariationId}>
+                    {selectedVariant.sku ? `SKU ${selectedVariant.sku}` : "Option selected"}
                   </p>
                 ) : validSelection ? (
                   <p data-testid="invalid-variant-combination">This combination is not available.</p>

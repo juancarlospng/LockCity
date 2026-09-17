@@ -40,13 +40,13 @@ export function CartDrawer() {
               {!isLoading && error && items.length === 0 && (
                 <div className="py-8" role="alert">
                   <p className="text-xs text-bone">{error}</p>
-                  <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-steel">Your WooCommerce bag could not be loaded.</p>
+                  <p className="mt-2 text-[10px] uppercase tracking-[0.2em] text-steel">Please try again shortly.</p>
                 </div>
               )}
               {!isLoading && !error && items.length === 0 && (
                 <div className="flex h-full flex-col items-start justify-center gap-4">
                   <p className="font-display text-3xl uppercase text-graphite">Your bag is empty</p>
-                  <p className="text-xs uppercase tracking-[0.25em] text-steel">WooCommerce cart ready</p>
+                  <p className="text-xs uppercase tracking-[0.25em] text-steel">Find your next piece</p>
                 </div>
               )}
               {error && items.length > 0 && <p className="mt-4 text-xs text-bone" role="alert">{error}</p>}
@@ -65,10 +65,7 @@ export function CartDrawer() {
                         <div>
                           <Link href={`/product/${item.slug}`} onClick={closeCart}
                             className="text-sm font-bold uppercase text-bone hover:underline">{item.name}</Link>
-                          <p className="mt-0.5 text-[10px] uppercase tracking-[0.2em] text-steel">
-                            {item.type === "variation" ? `Variation #${item.variationId}` : `Product #${item.productId}`}
-                            {item.sku ? ` · ${item.sku}` : ""}
-                          </p>
+                          {item.sku ? <p className="mt-0.5 text-[10px] uppercase tracking-[0.2em] text-steel">SKU {item.sku}</p> : null}
                           {item.attributes.length > 0 && (
                             <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-steel">
                               {item.attributes.map((attribute) => `${attribute.name}: ${attribute.value}`).join(" · ")}
@@ -109,7 +106,7 @@ export function CartDrawer() {
                   <span data-testid="cart-subtotal" className="text-bone">{formatPrice(subtotal, currency)}</span>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-xs uppercase tracking-[0.2em]">
-                  <span className="text-steel">WooCommerce total</span>
+                  <span className="text-steel">Total</span>
                   <span data-testid="cart-total" className="text-bone">{formatPrice(total, currency)}</span>
                 </div>
                 <Link href="/checkout" onClick={closeCart} data-testid="cart-checkout-link"

@@ -118,7 +118,7 @@ function AddressFields({
       </label>
       {billing ? (
         <div className="sm:col-span-2">
-          <CheckoutInput label="Phone (optional unless WooCommerce requests it)" name="phone" value={value.phone ?? ""}
+          <CheckoutInput label="Phone (optional unless required for delivery)" name="phone" value={value.phone ?? ""}
             onChange={onChange} type="tel" autoComplete="tel" />
         </div>
       ) : null}
@@ -210,7 +210,7 @@ export function CheckoutForm() {
     catch (cause) { setError(cartErrorMessage(cause)); setBusy(false); mutationActive.current = false; }
   };
 
-  if (!checkout && !error) return <p className="mt-16 text-xs uppercase tracking-[0.2em] text-steel">Loading WooCommerce checkout…</p>;
+  if (!checkout && !error) return <p className="mt-16 text-xs uppercase tracking-[0.2em] text-steel">Loading checkout…</p>;
   if (!checkout) return <p className="mt-16 text-sm text-bone" role="alert">{error}</p>;
   if (checkout.items.length === 0) return (
     <div className="mt-16 border border-graphite bg-onyx p-8">
@@ -240,7 +240,7 @@ export function CheckoutForm() {
             </label>
           </div>
           {!shippingSame ? <AddressFields value={shipping} onChange={changeShipping} countries={countries} billing={false} /> : (
-            <p className="text-sm leading-7 text-steel">WooCommerce will use the billing address for delivery.</p>
+            <p className="text-sm leading-7 text-steel">Your billing address will also be used for delivery.</p>
           )}
           <button type="submit" disabled={busy || countries.length === 0}
             className="mt-8 w-full border border-bone px-6 py-4 text-[10px] uppercase tracking-[0.24em] text-bone transition-colors hover:bg-bone hover:text-bg disabled:cursor-not-allowed disabled:border-graphite disabled:text-steel">
@@ -251,7 +251,7 @@ export function CheckoutForm() {
         {checkout.shippingPackages.map((pkg) => (
           <section key={pkg.packageId} className="border border-graphite bg-onyx p-5 sm:p-8" data-testid={`shipping-package-${pkg.packageId}`}>
             <p className="mb-5 text-[10px] uppercase tracking-[0.28em] text-steel">Shipping method</p>
-            {pkg.rates.length === 0 ? <p className="text-sm text-bone">WooCommerce returned no shipping method for this address.</p> : (
+            {pkg.rates.length === 0 ? <p className="text-sm text-bone">Shipping is currently unavailable for this destination.</p> : (
               <div className="space-y-3">
                 {pkg.rates.map((rate) => (
                   <label key={rate.rateId} className="flex cursor-pointer items-start justify-between gap-4 border border-graphite p-4 text-sm text-bone has-[:checked]:border-bone">
@@ -273,7 +273,7 @@ export function CheckoutForm() {
         {error ? <p role="alert" className="border border-graphite px-5 py-4 text-sm text-bone">{error}</p> : null}
       </form>
 
-      <aside className="h-fit border border-graphite bg-onyx p-5 lg:sticky lg:top-28 sm:p-8" aria-label="WooCommerce order summary">
+      <aside className="h-fit border border-graphite bg-onyx p-5 lg:sticky lg:top-28 sm:p-8" aria-label="Order summary">
         <p className="text-[10px] uppercase tracking-[0.28em] text-steel">Order summary</p>
         <ul className="mt-5 divide-y divide-graphite">
           {checkout.items.map((item) => (
@@ -297,20 +297,26 @@ export function CheckoutForm() {
         </dl>
         <button type="button" disabled={busy} onClick={() => void preparePayPal()}
           className="mt-7 w-full border border-bone px-6 py-4 text-[10px] uppercase tracking-[0.24em] text-bone transition-colors hover:bg-bone hover:text-bg disabled:cursor-not-allowed disabled:border-graphite disabled:text-steel">
-          {busy ? "Checking…" : "Review PayPal handoff"}
+          {busy ? "Checking…" : "Review order"}
         </button>
         {prepared ? (
           <div data-testid="paypal-preparation" className="mt-4 border border-graphite p-4 text-xs leading-6 text-steel">
-            <p>Gateway: {prepared.gateway}</p>
-            <p>WooCommerce total: {formatPrice(checkout.total, prepared.currency)}</p>
+            <p>Your final total is {formatPrice(checkout.total, prepared.currency)}.</p>
             {prepared.executionEnabled ? (
               <button type="button" disabled={busy} onClick={() => void continueToPayPal()}
                 className="mt-4 w-full border border-bone px-4 py-3 text-[10px] uppercase tracking-[0.2em] text-bone">
                 Continue to PayPal
               </button>
-            ) : <p className="mt-2 text-bone">Live payment remains disabled. No order or payment was created.</p>}
+            ) : <p className="mt-2 text-bone">Checkout is temporarily unavailable. Please try again later.</p>}
           </div>
         ) : null}
+        <p className="mt-6 text-[10px] leading-5 tracking-[0.08em] text-steel">
+          By placing your order, you agree to our <Link className="text-bone underline underline-offset-4" href="/terms">Terms &amp; Conditions</Link> and acknowledge our <Link className="text-bone underline underline-offset-4" href="/privacy">Privacy Policy</Link>.
+        </p>
+        <nav aria-label="Checkout policies" className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[10px] uppercase tracking-[0.14em] text-steel">
+          <Link className="hover:text-bone" href="/shipping">Shipping Policy</Link>
+          <Link className="hover:text-bone" href="/returns">Returns &amp; Refunds</Link>
+        </nav>
       </aside>
     </div>
   );

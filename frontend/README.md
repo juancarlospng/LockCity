@@ -84,3 +84,11 @@ See `.env.example`. Nothing loads or calls out until configured:
   (Shop, Size, Add to Bag, Checkout).
 - Three.js for experience; standard UI for commerce.
 - Secrets live in env vars, server-side, never in the browser bundle.
+
+## Contact delivery
+
+`[CONTACT DELIVERY PROVIDER PENDING]` No approved server-side contact delivery
+provider is configured. The public contact form validates the message and opens
+the visitor's email application addressed to `info@lockcityclothes.com`; it does
+not claim that a message was delivered. Add a provider only after explicit
+approval and keep its credentials server-side.

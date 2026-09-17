@@ -11,6 +11,21 @@ const COLUMNS = [
       { href: "/journal", label: "Journal", testid: "footer-journal-link" },
     ],
   },
+  {
+    title: "Customer care",
+    links: [
+      { href: "/shipping", label: "Shipping", testid: "footer-shipping-link" },
+      { href: "/returns", label: "Returns", testid: "footer-returns-link" },
+      { href: "/contact", label: "Contact", testid: "footer-contact-link" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { href: "/terms", label: "Terms", testid: "footer-terms-link" },
+      { href: "/privacy", label: "Privacy", testid: "footer-privacy-link" },
+    ],
+  },
 ];
 
 export function Footer() {
@@ -32,7 +47,7 @@ export function Footer() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-12 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-x-10 gap-y-12 sm:grid-cols-3 sm:gap-12">
             {COLUMNS.map((col) => (
               <div key={col.title}>
                 <h3 className="text-[10px] uppercase tracking-[0.3em] text-steel">

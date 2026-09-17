@@ -12,7 +12,7 @@ compiled.paths = module.paths;
 compiled._compile(ts.transpileModule(readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, filename);
-const { CartRequestEpoch, WooCartClient, buildAddItemPayload, mapCart } = compiled.exports;
+const { CartApiError, CartRequestEpoch, WooCartClient, buildAddItemPayload, cartErrorMessage, mapCart } = compiled.exports;
 
 const rawCart = (items = []) => ({
   items, items_count: items.reduce((sum, entry) => sum + entry.quantity, 0),
@@ -99,4 +99,19 @@ test('a stale cart response cannot replace the refresh started after payment', (
   assert.equal(epoch.isCurrent(afterPayment), true);
   epoch.invalidate();
   assert.equal(epoch.isCurrent(afterPayment), false);
+});
+
+test('customer cart errors never expose commerce infrastructure details', () => {
+  assert.equal(
+    cartErrorMessage(new CartApiError('WooCommerce rejected the cart request (500).', 500, 'woocommerce')),
+    'We couldn’t update your bag. Please try again.',
+  );
+  assert.equal(
+    cartErrorMessage(new CartApiError('Sold out', 400, 'woocommerce_rest_product_out_of_stock')),
+    'This item is currently out of stock.',
+  );
+  assert.equal(
+    cartErrorMessage(new CartApiError('checkout_execution_disabled', 403, 'checkout_execution_disabled')),
+    'We couldn’t start your payment. Please try again later.',
+  );
 });

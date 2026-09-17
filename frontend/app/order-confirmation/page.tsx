@@ -23,20 +23,20 @@ export default async function OrderConfirmationPage() {
         {paid ? (
           <>
             <p data-testid="verified-paid-status" className="text-sm leading-7 text-bone">
-              WooCommerce verified the payment and order status on the server.
+              Your payment and order have been confirmed.
             </p>
             <p className="mt-4 text-xs uppercase tracking-[0.2em] text-steel">Order {result.orderNumber}</p>
           </>
         ) : pending ? (
           <>
             <p data-testid="verified-pending-status" className="text-sm leading-7 text-bone">
-              WooCommerce verified the order, but payment is not confirmed yet. Refresh after the gateway finishes processing.
+              We received your order, but payment is still processing. Refresh this page in a moment.
             </p>
             <p className="mt-4 text-xs uppercase tracking-[0.2em] text-steel">Order {result.orderNumber}</p>
           </>
         ) : (
           <p data-testid="unverified-order-status" className="text-sm leading-7 text-bone">
-            This page has no valid server verification. No payment success is being claimed.
+            We could not confirm an order from this page. Return to checkout to review your bag.
           </p>
         )}
         <Link href={paid ? "/shop" : "/checkout"}
