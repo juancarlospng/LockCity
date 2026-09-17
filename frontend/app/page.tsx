@@ -8,10 +8,23 @@ import { ArchiveTeaser } from "@/components/home/ArchiveTeaser";
 import { Transmissions } from "@/components/home/Transmissions";
 import { Newsletter } from "@/components/Newsletter";
 import { Marquee } from "@/components/Marquee";
+import { pageMetadata, serializeJsonLd, SITE_DESCRIPTION } from "@/lib/seo";
+import { onlineStoreStructuredData } from "@/lib/structured-data";
+
+export const metadata = pageMetadata({
+  title: "Lock City",
+  description: SITE_DESCRIPTION,
+  path: "/",
+  absoluteTitle: true,
+});
 
 export default function HomePage() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(onlineStoreStructuredData()) }}
+      />
       <Loader />
       <Hero />
       <Marquee

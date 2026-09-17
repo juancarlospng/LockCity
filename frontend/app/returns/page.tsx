@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
 import { PolicyPage, PolicySection } from "@/components/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Returns & Refunds | Lock City",
+export const metadata = pageMetadata({
+  title: "Returns & Refunds",
   description: "Lock City policy for made-to-order returns, damaged or incorrect items, lost packages and approved refunds.",
-};
+  path: "/returns",
+});
 
 export default function ReturnsPage() {
   return (

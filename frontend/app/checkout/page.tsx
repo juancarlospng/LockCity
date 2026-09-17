@@ -1,7 +1,14 @@
 import { Suspense } from "react";
 import { CheckoutForm } from "@/components/CheckoutForm";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+export const metadata = pageMetadata({
+  title: "Checkout",
+  description: "Review delivery details and the final total for your Lock City order.",
+  path: "/checkout",
+  noIndex: true,
+});
 
 export default function CheckoutPage() {
   return (

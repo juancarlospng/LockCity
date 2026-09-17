@@ -1,12 +1,50 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { EmptyState } from "@/components/EmptyState";
 import { ProductCard } from "@/components/ProductCard";
 import { MaskText } from "@/components/Reveal";
 import { commerce } from "@/lib/commerce";
 import { CatalogError } from "@/components/CatalogError";
 import { DISTRICTS } from "@/lib/districts";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+
+const getCollectionProducts = cache((slug: string) => commerce.getProductsByCollection(slug));
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const district = DISTRICTS.find((entry) => entry.slug === slug);
+  if (!district) {
+    return pageMetadata({
+      title: "District not found",
+      description: "This Lock City district does not exist.",
+      path: `/collections/${encodeURIComponent(slug)}`,
+      noIndex: true,
+    });
+  }
+  try {
+    const products = await getCollectionProducts(slug);
+    return pageMetadata({
+      title: `${district.name} District`,
+      description: `Explore products published in the Lock City ${district.name} district.`,
+      path: `/collections/${encodeURIComponent(slug)}`,
+      noIndex: products.length === 0,
+    });
+  } catch {
+    return pageMetadata({
+      title: `${district.name} District`,
+      description: `Explore the Lock City ${district.name} district.`,
+      path: `/collections/${encodeURIComponent(slug)}`,
+      noIndex: true,
+    });
+  }
+}
 
 export default async function CollectionPage({
   params,
@@ -17,7 +55,7 @@ export default async function CollectionPage({
   const district = DISTRICTS.find((d) => d.slug === slug);
   if (!district) notFound();
   let products;
-  try { products = await commerce.getProductsByCollection(slug); }
+  try { products = await getCollectionProducts(slug); }
   catch (error) { return <CatalogError error={error} />; }
 
   return (

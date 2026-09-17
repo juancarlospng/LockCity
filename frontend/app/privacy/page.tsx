@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
 import { PolicyPage, PolicySection } from "@/components/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Privacy Policy | Lock City",
+export const metadata = pageMetadata({
+  title: "Privacy Policy",
   description: "How Lock City collects, uses, protects and shares personal information, and the privacy rights available to you.",
-};
+  path: "/privacy",
+});
 
 export default function PrivacyPage() {
   return (

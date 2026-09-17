@@ -29,6 +29,8 @@ See `.env.example`. Nothing loads or calls out until configured:
 
 | Variable | Purpose | Scope |
 | --- | --- | --- |
+| `SITE_URL` | Canonical public origin used by metadata, robots, sitemap and structured data | server only |
+| `SEO_INDEXING_ENABLED` | Enables `index,follow` only after the final domain cutover; keep `false` before launch | server only |
 | `WC_STORE_URL` | WooCommerce Store API origin; configured in `.env.local` | server only |
 | `PAYPAL_CHECKOUT_EXECUTION_ENABLED` | Gates the order-creating Store API POST; keep `false` until a controlled checkout is explicitly approved | server only |
 | `CHECKOUT_BRIDGE_SECRET` | Authenticates V2 when redeeming one-time WordPress return codes | secret, server only |
@@ -48,6 +50,10 @@ See `.env.example`. Nothing loads or calls out until configured:
   WooCommerce and configuration errors stay distinct from a valid empty result.
 - Product images render via the existing `/store/media` proxy, restricted to
   uploads on the configured WooCommerce origin. Original image metadata is retained.
+- SEO uses `SITE_URL` as its single canonical origin. `SEO_INDEXING_ENABLED=false`
+  keeps the pre-launch Vercel site `noindex,nofollow` while leaving pages crawlable
+  so crawlers can read that directive. Robots and the dynamic sitemap are generated
+  through the Next.js metadata conventions.
 - Variable product pages load the complete public Store API variation collection,
   filtered by parent. Each variation retains its WooCommerce ID, parent, SKU,
   attributes, prices, currency, stock fields and image. The parent summary is never

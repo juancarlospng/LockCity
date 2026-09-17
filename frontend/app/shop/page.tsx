@@ -3,6 +3,13 @@ import { MaskText } from "@/components/Reveal";
 import { ShopGrid } from "@/components/ShopGrid";
 import { commerce } from "@/lib/commerce";
 import { CatalogError } from "@/components/CatalogError";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Shop",
+  description: "Shop the current Lock City clothing and accessories catalog.",
+  path: "/shop",
+});
 
 export const dynamic = "force-dynamic";
 

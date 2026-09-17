@@ -2,6 +2,13 @@ import Link from "next/link";
 import { Media } from "@/components/Media";
 import { MaskText, Reveal } from "@/components/Reveal";
 import { DISTRICTS } from "@/lib/districts";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "The City",
+  description: "Enter the Lock City manifesto and explore its districts.",
+  path: "/city",
+});
 
 export default function CityPage() {
   return (

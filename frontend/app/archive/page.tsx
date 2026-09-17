@@ -1,5 +1,13 @@
 import { EmptyState } from "@/components/EmptyState";
 import { MaskText } from "@/components/Reveal";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Archive",
+  description: "The Lock City archive will preserve past drops, campaigns, films and people.",
+  path: "/archive",
+  noIndex: true,
+});
 
 export default function ArchivePage() {
   return (

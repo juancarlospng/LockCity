@@ -2,8 +2,15 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { CHECKOUT_RESULT_COOKIE, verifyCheckoutResult } from "@/lib/return-bridge-core";
 import { OrderConfirmationCartSync } from "./OrderConfirmationCartSync";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+export const metadata = pageMetadata({
+  title: "Order confirmation",
+  description: "Verify the current status of your Lock City order.",
+  path: "/order-confirmation",
+  noIndex: true,
+});
 
 export default async function OrderConfirmationPage() {
   const signed = (await cookies()).get(CHECKOUT_RESULT_COOKIE)?.value ?? "";

@@ -11,6 +11,7 @@ import { Footer } from "@/components/Footer";
 import { CartDrawer } from "@/components/CartDrawer";
 import { Cursor } from "@/components/Cursor";
 import { AnalyticsRouteTracker } from "@/components/AnalyticsRouteTracker";
+import { absoluteUrl, publicRobots, SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/seo";
 import "./globals.css";
 
 const display = Anton({
@@ -26,9 +27,24 @@ const mono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LOCK CITY® — THE CITY IS ALIVE",
-  description:
-    "Lock City. A streetwear system rendered as a place. Collections are districts. Products are objects. Locked in.",
+  metadataBase: siteUrl(),
+  applicationName: SITE_NAME,
+  title: { default: SITE_NAME, template: `%s | ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
+  alternates: { canonical: absoluteUrl("/") },
+  robots: publicRobots(),
+  openGraph: {
+    type: "website",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: absoluteUrl("/"),
+    siteName: SITE_NAME,
+  },
+  twitter: {
+    card: "summary",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export const viewport: Viewport = {

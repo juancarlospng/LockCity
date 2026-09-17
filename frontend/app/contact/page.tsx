@@ -1,11 +1,12 @@
-import type { Metadata } from "next";
 import { ContactForm } from "@/components/ContactForm";
 import { PolicyPage } from "@/components/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Contact Lock City",
   description: "Contact Lock City about an order, shipping, product issue, collaboration or general question.",
-};
+  path: "/contact",
+});
 
 export default function ContactPage() {
   return (

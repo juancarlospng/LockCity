@@ -1,11 +1,12 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { PolicyPage, PolicySection } from "@/components/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Terms & Conditions | Lock City",
+export const metadata = pageMetadata({
+  title: "Terms & Conditions",
   description: "Terms governing purchases from the Lock City online store, including made-to-order products and pre-orders.",
-};
+  path: "/terms",
+});
 
 export default function TermsPage() {
   return (

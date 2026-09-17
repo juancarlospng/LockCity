@@ -1,5 +1,13 @@
 import { EmptyState } from "@/components/EmptyState";
 import { MaskText } from "@/components/Reveal";
+import { pageMetadata } from "@/lib/seo";
+
+export const metadata = pageMetadata({
+  title: "Journal",
+  description: "Lock City editorial stories, films and profiles will be published here.",
+  path: "/journal",
+  noIndex: true,
+});
 
 export default function JournalPage() {
   return (

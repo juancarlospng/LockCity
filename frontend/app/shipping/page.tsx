@@ -1,11 +1,12 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { PolicyPage, PolicySection } from "@/components/PolicyPage";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Shipping Policy | Lock City",
+export const metadata = pageMetadata({
+  title: "Shipping Policy",
   description: "Production times, worldwide delivery, tracking, customs and address information for Lock City orders.",
-};
+  path: "/shipping",
+});
 
 export default function ShippingPage() {
   return (

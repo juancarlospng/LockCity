@@ -1,10 +1,12 @@
-import type { Metadata } from "next";
 import Link from "next/link";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Welcome to The City | Lock City",
+export const metadata = pageMetadata({
+  title: "Welcome to The City",
   description: "Your place in The City is confirmed.",
-};
+  path: "/join/confirmed",
+  noIndex: true,
+});
 
 export default function JoinConfirmedPage() {
   return (
