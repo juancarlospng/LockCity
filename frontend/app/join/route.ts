@@ -1,41 +1,45 @@
 import { NextResponse } from "next/server";
+import { MAX_JOIN_BODY_BYTES, JoinValidationError, parseJoinPayload } from "@/lib/newsletter-core";
 import { subscriptionProvider } from "@/lib/newsletter";
 
 export const runtime = "nodejs";
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const genericError = () => NextResponse.json(
+  { status: "error", message: "We couldn’t complete your request right now. Please try again." },
+  { status: 400, headers: { "Cache-Control": "no-store" } },
+);
 
-export async function POST(req: Request) {
-  let body: { email?: unknown; consent?: unknown; country?: unknown; language?: unknown };
+export async function POST(request: Request) {
+  const declaredLength = Number(request.headers.get("content-length") ?? 0);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_JOIN_BODY_BYTES) return genericError();
+
+  let text: string;
   try {
-    body = await req.json();
+    text = await request.text();
   } catch {
-    return NextResponse.json({ error: "invalid_body" }, { status: 400 });
+    return genericError();
+  }
+  if (new TextEncoder().encode(text).byteLength > MAX_JOIN_BODY_BYTES) return genericError();
+
+  let input;
+  try {
+    input = parseJoinPayload(JSON.parse(text));
+  } catch (error) {
+    if (error instanceof JoinValidationError) return genericError();
+    return genericError();
   }
 
-  const email = typeof body.email === "string" ? body.email.trim() : "";
-  if (!EMAIL_RE.test(email)) {
-    return NextResponse.json({ error: "invalid_email" }, { status: 400 });
-  }
-  if (body.consent !== true) {
-    return NextResponse.json({ error: "consent_required" }, { status: 400 });
-  }
+  const result = await subscriptionProvider.subscribe(input);
 
-  const result = await subscriptionProvider.subscribe({
-    email,
-    consent: true,
-    country: typeof body.country === "string" ? body.country : undefined,
-    language: typeof body.language === "string" ? body.language : undefined,
-  });
-
-  if (result.status === "unavailable") {
+  if (result.status !== "pending_confirmation") {
     return NextResponse.json(
-      { error: "subscription_unavailable", message: "The city list is not open yet." },
-      { status: 503 }
+      { status: "error", message: "We couldn’t complete your request right now. Please try again." },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
     );
   }
-  if (result.status === "error") {
-    return NextResponse.json({ error: "subscription_failed" }, { status: 502 });
-  }
-  return NextResponse.json({ status: "subscribed" });
+
+  return NextResponse.json(
+    { status: "pending_confirmation", message: "Check your inbox to confirm your place in The City." },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }

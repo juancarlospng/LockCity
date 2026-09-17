@@ -1,39 +1,52 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useRef, useState, type FormEvent } from "react";
 import { emailSignup } from "@/lib/analytics";
 import { MaskText, Reveal } from "./Reveal";
 
-type State = "idle" | "loading" | "subscribed" | "unavailable" | "error";
+type State = "idle" | "loading" | "pending_confirmation" | "error";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function Newsletter() {
   const [email, setEmail] = useState("");
   const [consent, setConsent] = useState(false);
+  const [website, setWebsite] = useState("");
   const [state, setState] = useState<State>("idle");
+  const submitting = useRef(false);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (submitting.current) return;
+    const normalizedEmail = email.trim().toLocaleLowerCase("en-US");
+    if (!consent || normalizedEmail.length > 254 || !EMAIL_RE.test(normalizedEmail)) {
+      setState("error");
+      return;
+    }
+    submitting.current = true;
     setState("loading");
     try {
       const res = await fetch("/join", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          email,
+          email: normalizedEmail,
           consent,
-          language: navigator.language,
+          website,
         }),
       });
       if (res.ok) {
         emailSignup();
-        setState("subscribed");
-      } else if (res.status === 503) {
-        setState("unavailable");
+        setEmail(normalizedEmail);
+        setState("pending_confirmation");
       } else {
         setState("error");
       }
     } catch {
       setState("error");
+    } finally {
+      submitting.current = false;
     }
   };
 
@@ -60,20 +73,25 @@ export function Newsletter() {
         </div>
 
         <div className="w-full max-w-md">
-          {state === "subscribed" ? (
+          {state === "pending_confirmation" ? (
             <div
               data-testid="newsletter-success"
               className="border border-graphite p-8"
             >
               <p className="font-display text-2xl uppercase text-bone">
-                Welcome to the city
+                Check your inbox
               </p>
               <p className="mt-3 text-xs leading-relaxed text-steel">
-                You are on the list. The signal arrives with the first drop.
+                Confirm your place in The City.
               </p>
             </div>
           ) : (
             <form onSubmit={onSubmit} className="border-b border-graphite pb-2">
+              <div hidden aria-hidden="true">
+                <label htmlFor="newsletter-website">Website</label>
+                <input id="newsletter-website" name="website" tabIndex={-1} autoComplete="off"
+                  value={website} onChange={(event) => setWebsite(event.target.value)} />
+              </div>
               <label
                 htmlFor="newsletter-email"
                 className="text-[10px] uppercase tracking-[0.3em] text-steel"
@@ -86,6 +104,7 @@ export function Newsletter() {
                   data-testid="newsletter-email-input"
                   type="email"
                   required
+                  maxLength={254}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="YOU@THECITY.COM"
@@ -94,7 +113,7 @@ export function Newsletter() {
                 <button
                   type="submit"
                   data-testid="newsletter-submit-button"
-                  disabled={state === "loading"}
+                  disabled={state === "loading" || !consent}
                   className="shrink-0 text-xs font-bold uppercase tracking-[0.3em] text-bone transition-colors duration-200 hover:text-steel disabled:text-graphite"
                 >
                   {state === "loading" ? "…" : "Enter →"}
@@ -109,22 +128,17 @@ export function Newsletter() {
                   onChange={(e) => setConsent(e.target.checked)}
                   className="mt-0.5 h-3.5 w-3.5 shrink-0 appearance-none border border-graphite bg-transparent checked:border-bone checked:bg-bone"
                 />
-                I agree to receive Lock City communications
+                <span>
+                  I agree to receive Lock City drops, releases, pre-order updates and selected news. I can unsubscribe at any time. See our{" "}
+                  <Link href="/privacy" className="text-bone underline underline-offset-4">Privacy Policy</Link>.
+                </span>
               </label>
-              {state === "unavailable" && (
-                <p
-                  data-testid="newsletter-unavailable"
-                  className="pb-3 text-[10px] uppercase tracking-[0.2em] text-steel"
-                >
-                  The list is not open yet — the signal arrives soon
-                </p>
-              )}
               {state === "error" && (
                 <p
                   data-testid="newsletter-error"
                   className="pb-3 text-[10px] uppercase tracking-[0.2em] text-steel"
                 >
-                  Something failed — check the email and try again
+                  We couldn’t complete your request right now. Please try again.
                 </p>
               )}
             </form>

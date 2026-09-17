@@ -34,7 +34,9 @@ See `.env.example`. Nothing loads or calls out until configured:
 | `CHECKOUT_BRIDGE_SECRET` | Authenticates V2 when redeeming one-time WordPress return codes | secret, server only |
 | `CHECKOUT_RETURN_SECRET` | Signs short-lived HttpOnly confirmation results | secret, server only |
 | `NEXT_PUBLIC_GTM_ID` | GTM container (GA4 inside GTM) | public |
-| `KLAVIYO_API_KEY` / `KLAVIYO_LIST_ID` | JOIN THE CITY provider (later) | server |
+| `BREVO_API_KEY` | JOIN THE CITY Double Opt-In authentication | secret, server only |
+| `BREVO_LIST_ID` / `BREVO_DOI_TEMPLATE_ID` | JOIN THE CITY list and confirmation template IDs | server only |
+| `BREVO_DOI_REDIRECT_URL` | Optional absolute confirmation return URL | server only |
 | `WC_URL` / `WC_CONSUMER_KEY` / `WC_CONSUMER_SECRET` | Admin REST API — backend only | server |
 | `WC_WEBHOOK_SECRET` | Webhook HMAC validation | server |
 | `DATABASE_URL` | Supabase Transaction Pooler URI (port 6543) | server |
@@ -92,3 +94,11 @@ provider is configured. The public contact form validates the message and opens
 the visitor's email application addressed to `info@lockcityclothes.com`; it does
 not claim that a message was delivered. Add a provider only after explicit
 approval and keep its credentials server-side.
+
+## Join The City
+
+`/join` submits only to the server-side Double Opt-In provider. The confirmation
+URL defaults to `https://lock-city.vercel.app/join/confirmed`. Set
+`BREVO_DOI_REDIRECT_URL` if the final public domain changes. No distributed rate
+limiter is configured; the endpoint instead uses strict payload validation, a
+honeypot and a small request-body limit.
