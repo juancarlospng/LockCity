@@ -255,7 +255,10 @@ export function extractPayPalRedirect(payload: unknown): string {
   try { redirect = new URL(candidate); }
   catch { throw new CartApiError("WooCommerce did not return a valid PayPal redirect."); }
   const host = redirect.hostname.toLowerCase();
-  const allowed = host === "paypal.com" || host.endsWith(".paypal.com") || host === "lockcityclothes.com";
+  const allowed = host === "paypal.com"
+    || host.endsWith(".paypal.com")
+    || host === "lockcityclothes.com"
+    || host === "commerce.lockcityclothes.com";
   if (redirect.protocol !== "https:" || !allowed || redirect.username || redirect.password) {
     throw new CartApiError("WooCommerce returned an unsafe PayPal redirect.");
   }
