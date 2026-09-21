@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Media } from "@/components/Media";
 import { ProductCard } from "@/components/ProductCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useCart } from "@/lib/cart";
 import { cartErrorMessage } from "@/lib/cart-core";
+import { getColorAccent, isColorAttribute } from "@/lib/color-accent";
+import { orderedProductImages } from "@/lib/product-media";
 import { selectSize as trackSelectSize, viewItem } from "@/lib/analytics";
 import type { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/utils";
@@ -28,6 +30,7 @@ export function ProductDetail({
   const { addItem } = useCart();
   const [isAdding, setIsAdding] = useState(false);
   const [frame, setFrame] = useState(0);
+  const thumbnailStrip = useRef<HTMLDivElement>(null);
   const initialVariant = product.type === "simple"
     ? product.variants[0]
     : product.variants.find(canPurchaseVariant) ?? product.variants[0];
@@ -78,10 +81,15 @@ export function ProductDetail({
 
   const images = useMemo(() => {
     const selectedImage = selectedVariant?.image;
+    const ordered = orderedProductImages(product);
     return selectedImage
-      ? [selectedImage, ...product.images.filter((image) => image !== selectedImage)]
-      : product.images;
-  }, [product.images, selectedVariant?.image]);
+      ? [selectedImage, ...ordered.filter((image) => image !== selectedImage)]
+      : ordered;
+  }, [product, selectedVariant?.image]);
+
+  const scrollThumbnails = (direction: -1 | 1) => {
+    thumbnailStrip.current?.scrollBy({ left: direction * 276, behavior: "smooth" });
+  };
 
   useEffect(() => setFrame(0), [selectedVariant?.id]);
   const details = [
@@ -96,12 +104,14 @@ export function ProductDetail({
         <div className="lg:col-span-7">
           <div data-testid="product-gallery" className="border border-graphite">
             {images.length > 0 ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={images[frame] ?? images[0]}
-                alt={product.name}
-                className="aspect-[4/5] w-full object-cover"
-              />
+              <div className="aspect-[4/5] w-full bg-[#f2f1ed] p-4 sm:p-8 lg:p-10">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={images[frame] ?? images[0]}
+                  alt={product.name}
+                  className="h-full w-full object-contain"
+                />
+              </div>
             ) : (
               <div>
                 <Media
@@ -116,23 +126,45 @@ export function ProductDetail({
             )}
           </div>
           {images.length > 1 && (
-            <div className="mt-4 flex gap-3">
-              {images.map((src, i) => (
-                <button
-                  key={src}
-                  type="button"
-                  data-testid={`gallery-frame-${i}`}
-                  onClick={() => setFrame(i)}
-                  aria-label={`View image ${i + 1}`}
-                  aria-pressed={frame === i}
-                  className={`w-20 border transition-colors duration-200 ${
-                    frame === i ? "border-bone" : "border-graphite hover:border-steel"
-                  }`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt="" className="aspect-square w-full object-cover" />
-                </button>
-              ))}
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => scrollThumbnails(-1)}
+                aria-label="Previous product images"
+                className="h-20 w-8 shrink-0 border border-graphite text-sm text-steel transition-colors hover:border-bone hover:text-bone"
+              >
+                ←
+              </button>
+              <div
+                ref={thumbnailStrip}
+                data-testid="gallery-thumbnail-strip"
+                className="flex min-w-0 flex-1 snap-x gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                {images.map((src, i) => (
+                  <button
+                    key={`${src}-${i}`}
+                    type="button"
+                    data-testid={`gallery-frame-${i}`}
+                    onClick={() => setFrame(i)}
+                    aria-label={`View image ${i + 1}`}
+                    aria-pressed={frame === i}
+                    className={`h-20 w-20 shrink-0 snap-start border bg-[#f2f1ed] p-1 transition-colors duration-200 ${
+                      frame === i ? "border-bone" : "border-graphite hover:border-steel"
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt="" className="h-full w-full object-contain" />
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => scrollThumbnails(1)}
+                aria-label="Next product images"
+                className="h-20 w-8 shrink-0 border border-graphite text-sm text-steel transition-colors hover:border-bone hover:text-bone"
+              >
+                →
+              </button>
             </div>
           )}
         </div>
@@ -187,6 +219,7 @@ export function ProductDetail({
                 <div className="mt-3 flex flex-wrap gap-2">
                   {group.values.map((value) => {
                     const selected = selection[group.key] === value;
+                    const colorAccent = isColorAttribute(group.name) ? getColorAccent(value) : undefined;
                     const candidate = findExactVariant(product.variants, {
                       ...selection,
                       [group.key]: value,
@@ -203,7 +236,7 @@ export function ProductDetail({
                           if (/size|talla/i.test(group.name)) trackSelectSize(product.id, value);
                         }}
                         aria-pressed={selected}
-                        className={`min-w-12 border px-4 py-3 text-xs uppercase tracking-[0.15em] transition-colors duration-200 ${
+                        className={`relative min-w-12 overflow-hidden border px-4 py-3 text-xs uppercase tracking-[0.15em] transition-colors duration-200 ${
                           unavailable
                             ? "cursor-not-allowed border-graphite text-graphite line-through"
                             : selected
@@ -211,7 +244,15 @@ export function ProductDetail({
                               : "border-graphite text-bone hover:border-steel"
                         }`}
                       >
-                        {value}
+                        {colorAccent ? (
+                          <span
+                            aria-hidden
+                            data-testid={`color-accent-${value.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                            className="absolute inset-y-0 left-0 w-1.5 border-r"
+                            style={colorAccent}
+                          />
+                        ) : null}
+                        <span className={colorAccent ? "pl-1" : undefined}>{value}</span>
                       </button>
                     );
                   })}

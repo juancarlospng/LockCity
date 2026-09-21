@@ -4,6 +4,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { useCart } from "@/lib/cart";
 import { cartErrorMessage } from "@/lib/cart-core";
+import { getProductCardAction } from "@/lib/product-card-state";
+import { mainProductImage } from "@/lib/product-media";
 import type { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/utils";
 import { Media } from "./Media";
@@ -11,10 +13,9 @@ import { StatusBadge } from "./StatusBadge";
 
 export function ProductCard({ product, index }: { product: Product; index: number }) {
   const { addItem, isMutating } = useCart();
-  const quickVariant =
-    product.variants.find((v) => v.status === "AVAILABLE") ?? product.variants[0];
-  const isEligible = product.status === "AVAILABLE" && quickVariant?.status === "AVAILABLE";
-  const canAdd = !isMutating && isEligible;
+  const mainImage = mainProductImage(product);
+  const action = getProductCardAction(product);
+  const canQuickAdd = action.kind === "quick-add" && !isMutating;
 
   return (
     <article
@@ -30,14 +31,16 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
       >
         <div className="relative overflow-hidden">
           <div className="transition-transform duration-700 ease-out group-hover:scale-[1.04]">
-            {product.images[0] ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={product.images[0]}
-                alt={product.name}
-                className="aspect-[4/5] w-full object-cover"
-                loading="lazy"
-              />
+            {mainImage ? (
+              <div className="aspect-[4/5] w-full bg-[#f2f1ed] p-4 sm:p-6">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={mainImage}
+                  alt={product.name}
+                  className="h-full w-full object-contain"
+                  loading="lazy"
+                />
+              </div>
             ) : (
               <Media seed={product.id.length * 17 + 7} code={product.code} />
             )}
@@ -69,23 +72,33 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
           </p>
         </div>
       </Link>
-      <button
-        type="button"
-        data-testid={`quick-add-button-${product.id}`}
-        disabled={!canAdd}
-        onClick={async () => {
-          if (!canAdd) return;
-          try { await addItem(product, quickVariant); }
-          catch (cause) { toast.error(cartErrorMessage(cause)); }
-        }}
-        className={`border-t border-graphite py-3 text-[10px] font-bold uppercase tracking-[0.3em] transition-colors duration-200 ${
-          canAdd
-            ? "text-bone hover:bg-bone hover:text-bg"
-            : "cursor-not-allowed text-graphite"
-        }`}
-      >
-        {isEligible ? `Quick add — ${quickVariant?.size}` : product.type === "variable" ? "View options" : "Unavailable"}
-      </button>
+      {action.kind === "select-options" ? (
+        <Link
+          href={`/product/${product.slug}`}
+          data-testid={`select-options-link-${product.id}`}
+          className="border-t border-graphite py-3 text-center text-[10px] font-bold uppercase tracking-[0.3em] text-bone transition-colors duration-200 hover:bg-bone hover:text-bg"
+        >
+          {action.label}
+        </Link>
+      ) : (
+        <button
+          type="button"
+          data-testid={`quick-add-button-${product.id}`}
+          disabled={!canQuickAdd}
+          onClick={async () => {
+            if (!canQuickAdd || action.kind !== "quick-add") return;
+            try { await addItem(product, action.variant); }
+            catch (cause) { toast.error(cartErrorMessage(cause)); }
+          }}
+          className={`border-t border-graphite py-3 text-[10px] font-bold uppercase tracking-[0.3em] transition-colors duration-200 ${
+            canQuickAdd
+              ? "text-bone hover:bg-bone hover:text-bg"
+              : "cursor-not-allowed text-graphite"
+          }`}
+        >
+          {action.label}
+        </button>
+      )}
     </article>
   );
 }

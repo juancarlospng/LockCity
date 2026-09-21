@@ -77,7 +77,10 @@ export function Footer() {
 
       <div className="flex flex-col items-start justify-between gap-2 border-t border-graphite px-4 py-6 text-[9px] uppercase tracking-[0.25em] text-steel sm:flex-row sm:items-center sm:px-8 lg:px-12">
         <span>© 2026 Lock City</span>
-        <span>The city is alive</span>
+        <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
+          <span>The city is alive</span>
+          <span className="text-steel/60">Powered by Blueether</span>
+        </span>
       </div>
     </footer>
   );
