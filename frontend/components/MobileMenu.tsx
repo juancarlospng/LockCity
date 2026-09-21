@@ -42,7 +42,7 @@ export function MobileMenu({ onClose }: { onClose: () => void }) {
         aria-label="Mobile"
         className="flex flex-1 flex-col justify-center gap-2 px-6"
       >
-        {[{ href: "/", label: "ENTER" }, ...NAV_LINKS].map((link, i) => (
+        {NAV_LINKS.map((link, i) => (
           <motion.div
             key={link.href}
             initial={{ y: 40, opacity: 0 }}

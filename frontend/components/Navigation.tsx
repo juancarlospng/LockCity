@@ -6,20 +6,16 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useCart } from "@/lib/cart";
 import { MobileMenu } from "./MobileMenu";
-import { SearchOverlay } from "./SearchOverlay";
 
 export const NAV_LINKS = [
   { href: "/shop", label: "SHOP" },
-  { href: "/collections/drop", label: "DROPS" },
-  { href: "/city", label: "CITY" },
-  { href: "/archive", label: "ARCHIVE" },
-  { href: "/journal", label: "JOURNAL" },
+  { href: "/collections/core", label: "CORE" },
+  { href: "/contact", label: "CONTACT" },
 ];
 
 export function Navigation() {
   const { count, openCart } = useCart();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
 
@@ -32,7 +28,6 @@ export function Navigation() {
 
   useEffect(() => {
     setMenuOpen(false);
-    setSearchOpen(false);
   }, [pathname]);
 
   return (
@@ -79,14 +74,6 @@ export function Navigation() {
           <div className="flex items-center gap-5 sm:gap-7">
             <button
               type="button"
-              data-testid="nav-search-trigger"
-              onClick={() => setSearchOpen(true)}
-              className="hidden text-[11px] uppercase tracking-[0.25em] text-steel transition-colors duration-200 hover:text-bone sm:block"
-            >
-              Search
-            </button>
-            <button
-              type="button"
               data-testid="nav-cart-trigger"
               onClick={openCart}
               className="text-[11px] uppercase tracking-[0.25em] text-bone transition-colors duration-200 hover:text-steel"
@@ -110,7 +97,6 @@ export function Navigation() {
 
       <AnimatePresence>
         {menuOpen && <MobileMenu onClose={() => setMenuOpen(false)} />}
-        {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} />}
       </AnimatePresence>
     </>
   );

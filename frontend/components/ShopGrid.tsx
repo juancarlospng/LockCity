@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ProductCard } from "@/components/ProductCard";
+import { isActiveDropProduct, isCoreProduct } from "@/lib/merchandising";
 import type { Product } from "@/lib/types";
 
 const SORTS = [
@@ -11,16 +12,14 @@ const SORTS = [
 ] as const;
 
 export function ShopGrid({ products }: { products: Product[] }) {
-  const categories = useMemo(
-    () => Array.from(new Map(products.flatMap((p) => p.categories).map((c) => [c.slug, c])).values()),
-    [products]
-  );
+  const hasDrop = useMemo(() => products.some((product) => isActiveDropProduct(product.wooProductId)), [products]);
   const [filter, setFilter] = useState<string>("ALL");
   const [sort, setSort] = useState<(typeof SORTS)[number]["id"]>("featured");
 
   const visible = useMemo(() => {
     let list = [...products];
-    if (filter !== "ALL") list = list.filter((p) => p.categories.some((c) => c.slug === filter));
+    if (filter === "CORE") list = list.filter((product) => isCoreProduct(product.wooProductId));
+    if (filter === "DROP") list = list.filter((product) => isActiveDropProduct(product.wooProductId));
     if (sort === "price-asc") list.sort((a, b) => a.price - b.price);
     if (sort === "price-desc") list.sort((a, b) => b.price - a.price);
     return list;
@@ -28,10 +27,9 @@ export function ShopGrid({ products }: { products: Product[] }) {
 
   return (
     <>
-      {categories.length > 1 && (
-        <div className="mt-12 flex flex-wrap items-center justify-between gap-6 border-y border-graphite py-4">
+      <div className="mt-12 flex flex-col gap-5 border-y border-graphite py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-1" role="tablist" aria-label="Filter products">
-            {[{ slug: "ALL", name: "All" }, ...categories].map((c) => (
+            {[{ slug: "ALL", name: "All" }, { slug: "CORE", name: "Core" }, ...(hasDrop ? [{ slug: "DROP", name: "Drop" }] : [])].map((c) => (
               <button
                 key={c.slug}
                 type="button"
@@ -63,7 +61,6 @@ export function ShopGrid({ products }: { products: Product[] }) {
             </select>
           </label>
         </div>
-      )}
 
       <p className="mt-6 text-[10px] uppercase tracking-[0.25em] text-steel" aria-live="polite">
         {visible.length} product{visible.length === 1 ? "" : "s"}

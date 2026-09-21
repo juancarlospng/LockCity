@@ -44,12 +44,15 @@ test('robots permits crawling for noindex discovery and protects technical route
 
 test('sitemap includes public content and products but excludes private routes', () => {
   const sitemap = read('app/sitemap.ts');
-  for (const route of ['/shop', '/city', '/shipping', '/returns', '/contact', '/privacy', '/terms']) {
+  for (const route of ['/shop', '/shipping', '/returns', '/contact', '/privacy', '/terms']) {
     assert.match(sitemap, new RegExp(`"${route}"`));
   }
   assert.match(sitemap, /commerce\.getProducts\(\)/);
+  assert.match(sitemap, /publicStoreProducts\(allProducts\)/);
+  assert.match(sitemap, /coreProducts\(allProducts\)\.length > 0/);
+  assert.match(sitemap, /activeDropProducts\(allProducts\)\.length > 0/);
   assert.match(sitemap, /\/product\/\$\{encodeURIComponent\(product\.slug\)\}/);
-  for (const route of ['/checkout', '/order-confirmation', '/join/confirmed']) {
+  for (const route of ['/city', '/checkout', '/order-confirmation', '/join/confirmed']) {
     assert.doesNotMatch(sitemap, new RegExp(route));
   }
 });

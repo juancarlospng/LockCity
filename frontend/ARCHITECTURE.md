@@ -58,6 +58,12 @@ GA4 = behavior · Supabase = operational intelligence · Lock City AI =
 analysis only (later). The frontend never duplicates the catalog; it maps
 WooCommerce data through the adapter with stable identifiers.
 
+`lib/merchandising.ts` is a temporary launch visibility layer. It groups stable
+WooCommerce product IDs into Core, Shop extras, active Drop and Legacy without
+copying names, prices, images, stock or other commercial data. An Admin API or
+WooCommerce-managed collection should replace this allowlist when merchandising
+management is available.
+
 ## Commerce flow (launch path)
 
 1. Set server-only `WC_STORE_URL` → catalog, collections, search and cart go live.

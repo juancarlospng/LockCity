@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRef } from "react";
 import { MaskText } from "@/components/Reveal";
-import { enterCity, interact3D, viewHome } from "@/lib/analytics";
+import { interact3D, viewHome } from "@/lib/analytics";
 import { useEffect } from "react";
 
 const HeroScene = dynamic(
@@ -29,16 +29,6 @@ export function Hero() {
   const opacity = useTransform(scrollYProgress, [0, 0.75], [1, 0]);
 
   useEffect(() => viewHome(), []);
-
-  const scrollToDrop = () => {
-    enterCity();
-    const target = document.getElementById("scene-drop");
-    const lenis = (
-      window as Window & { __lenis?: { scrollTo: (t: HTMLElement, o?: object) => void } }
-    ).__lenis;
-    if (target && lenis && !reduced) lenis.scrollTo(target, { duration: 1.4 });
-    else target?.scrollIntoView({ behavior: "auto" });
-  };
 
   return (
     <section
@@ -86,24 +76,13 @@ export function Hero() {
               Products are objects.
             </p>
 
-            <div className="flex flex-wrap items-center gap-4">
-              <button
-                type="button"
-                data-testid="hero-enter-city-button"
-                data-cursor="explore"
-                onClick={scrollToDrop}
-                className="border border-bone bg-bone px-8 py-4 text-xs font-bold uppercase tracking-[0.3em] text-bg transition-colors duration-300 hover:bg-transparent hover:text-bone"
-              >
-                Enter the city ↓
-              </button>
-              <Link
-                href="/shop"
-                data-testid="hero-shop-link"
-                className="link-line px-1 py-4 text-xs uppercase tracking-[0.3em] text-bone"
-              >
-                Shop →
-              </Link>
-            </div>
+            <Link
+              href="/shop"
+              data-testid="hero-shop-link"
+              className="border border-bone bg-bone px-8 py-4 text-xs font-bold uppercase tracking-[0.3em] text-bg transition-colors duration-300 hover:bg-transparent hover:text-bone"
+            >
+              Shop →
+            </Link>
           </div>
         </div>
       </motion.div>

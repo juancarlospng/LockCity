@@ -5,6 +5,7 @@ import { ProductDetail } from "@/components/ProductDetail";
 import { commerce } from "@/lib/commerce";
 import { CatalogError } from "@/components/CatalogError";
 import type { Product } from "@/lib/types";
+import { isPublicStoreProduct, relatedStoreProducts } from "@/lib/merchandising";
 import { pageMetadata, plainText, productImagePath, serializeJsonLd } from "@/lib/seo";
 import { productBreadcrumbData, productStructuredData } from "@/lib/structured-data";
 
@@ -33,6 +34,7 @@ export async function generateMetadata({
       description: plainText(product.description) ?? `${product.name} by Lock City.`,
       path: `/product/${encodeURIComponent(product.slug)}`,
       image: product.sourceImages[0]?.src ? productImagePath(product.slug) : undefined,
+      noIndex: !isPublicStoreProduct(product.wooProductId),
     });
   } catch {
     return pageMetadata({
@@ -58,10 +60,7 @@ export default async function ProductPage({
   let relatedError: unknown;
   try { all = await commerce.getProducts(); }
   catch (error) { relatedError = error; }
-  const related = all
-    .filter((p) => p.id !== product.id && p.category === product.category)
-    .concat(all.filter((p) => p.id !== product.id && p.category !== product.category))
-    .slice(0, 3);
+  const related = relatedStoreProducts(product, all);
 
   return <>
     <script

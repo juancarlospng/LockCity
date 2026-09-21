@@ -5,10 +5,7 @@ const COLUMNS = [
     title: "City",
     links: [
       { href: "/shop", label: "Shop", testid: "footer-shop-link" },
-      { href: "/collections/drop", label: "Drops", testid: "footer-drops-link" },
-      { href: "/archive", label: "Archive", testid: "footer-archive-link" },
-      { href: "/city", label: "City", testid: "footer-city-link" },
-      { href: "/journal", label: "Journal", testid: "footer-journal-link" },
+      { href: "/collections/core", label: "Core", testid: "footer-core-link" },
     ],
   },
   {

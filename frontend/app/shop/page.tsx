@@ -3,6 +3,7 @@ import { MaskText } from "@/components/Reveal";
 import { ShopGrid } from "@/components/ShopGrid";
 import { commerce } from "@/lib/commerce";
 import { CatalogError } from "@/components/CatalogError";
+import { publicStoreProducts } from "@/lib/merchandising";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ShopPage() {
   let products;
-  try { products = await commerce.getProducts(); }
+  try { products = publicStoreProducts(await commerce.getProducts()); }
   catch (error) { return <CatalogError error={error} />; }
 
   return (

@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { Media } from "@/components/Media";
 import { MaskText, Reveal } from "@/components/Reveal";
-import { DISTRICTS } from "@/lib/districts";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "The City",
   description: "Enter the Lock City manifesto and explore its districts.",
   path: "/city",
+  noIndex: true,
 });
 
 export default function CityPage() {
@@ -39,28 +39,19 @@ export default function CityPage() {
               </p>
             ))}
           </div>
-          <div className="mt-12 space-y-0">
-            {DISTRICTS.map((d) => (
-              <Link
-                key={d.slug}
-                href={`/collections/${d.slug}`}
-                data-testid={`city-district-${d.slug}-link`}
-                className="group flex items-baseline justify-between border-t border-graphite py-5 last:border-b"
-              >
-                <span className="flex items-baseline gap-5">
-                  <span className="text-[10px] tracking-[0.3em] text-steel">
-                    {d.index}
-                  </span>
-                  <span className="font-display text-3xl uppercase text-bone transition-transform duration-300 group-hover:translate-x-2">
-                    {d.name}
-                  </span>
-                </span>
-                <span className="text-[9px] uppercase tracking-[0.25em] text-steel">
-                  Enter →
-                </span>
-              </Link>
-            ))}
-          </div>
+          <Link
+            href="/collections/core"
+            data-testid="city-district-core-link"
+            className="group mt-12 flex items-baseline justify-between border-y border-graphite py-5"
+          >
+            <span className="flex items-baseline gap-5">
+              <span className="text-[10px] tracking-[0.3em] text-steel">02</span>
+              <span className="font-display text-3xl uppercase text-bone transition-transform duration-300 group-hover:translate-x-2">
+                Core
+              </span>
+            </span>
+            <span className="text-[9px] uppercase tracking-[0.25em] text-steel">Enter →</span>
+          </Link>
         </Reveal>
         <Reveal delay={0.1} className="lg:col-span-7">
           <Media
