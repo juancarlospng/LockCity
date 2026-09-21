@@ -73,8 +73,10 @@ test('product UI keeps media contained, thumbnails fixed and footer credit subtl
   const detail = read('components/ProductDetail.tsx');
   const footer = read('components/Footer.tsx');
   assert.match(card, /object-contain/);
+  assert.match(card, /bg-white/);
   assert.match(card, /select-options-link/);
   assert.match(detail, /object-contain/);
+  assert.match(detail, /bg-white/);
   assert.match(detail, /h-20 w-20 shrink-0 snap-start/);
   assert.match(detail, /overflow-x-auto/);
   assert.match(detail, /Previous product images/);

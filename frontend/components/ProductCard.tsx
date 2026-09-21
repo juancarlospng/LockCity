@@ -32,7 +32,7 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
         <div className="relative overflow-hidden">
           <div className="transition-transform duration-700 ease-out group-hover:scale-[1.04]">
             {mainImage ? (
-              <div className="aspect-[4/5] w-full bg-[#f2f1ed] p-4 sm:p-6">
+              <div className="aspect-[4/5] w-full bg-white p-4 sm:p-6">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={mainImage}

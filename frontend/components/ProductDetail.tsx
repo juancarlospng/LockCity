@@ -104,7 +104,7 @@ export function ProductDetail({
         <div className="lg:col-span-7">
           <div data-testid="product-gallery" className="border border-graphite">
             {images.length > 0 ? (
-              <div className="aspect-[4/5] w-full bg-[#f2f1ed] p-4 sm:p-8 lg:p-10">
+              <div className="aspect-[4/5] w-full bg-white p-4 sm:p-8 lg:p-10">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={images[frame] ?? images[0]}
@@ -148,7 +148,7 @@ export function ProductDetail({
                     onClick={() => setFrame(i)}
                     aria-label={`View image ${i + 1}`}
                     aria-pressed={frame === i}
-                    className={`h-20 w-20 shrink-0 snap-start border bg-[#f2f1ed] p-1 transition-colors duration-200 ${
+                    className={`h-20 w-20 shrink-0 snap-start border bg-white p-1 transition-colors duration-200 ${
                       frame === i ? "border-bone" : "border-graphite hover:border-steel"
                     }`}
                   >
