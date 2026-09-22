@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Media } from "@/components/Media";
 import { ProductCard } from "@/components/ProductCard";
+import { ProductSizeGuide } from "@/components/ProductSizeGuide";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useCart } from "@/lib/cart";
 import { cartErrorMessage } from "@/lib/cart-core";
 import { getColorAccent, isColorAttribute } from "@/lib/color-accent";
-import { orderedProductImages } from "@/lib/product-media";
+import { orderedProductImages, shouldPrioritizeVariantImage } from "@/lib/product-media";
 import { selectSize as trackSelectSize, viewItem } from "@/lib/analytics";
 import type { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/utils";
@@ -48,6 +49,10 @@ export function ProductDetail({
   }, [product]);
 
   const optionGroups = useMemo(() => getVariantOptions(product.variants), [product.variants]);
+  const soldSizes = useMemo(
+    () => optionGroups.find((group) => /size|talla/i.test(group.name))?.values,
+    [optionGroups],
+  );
   const selectedVariant = product.type === "simple"
     ? product.variants[0]
     : findExactVariant(product.variants, selection);
@@ -82,7 +87,7 @@ export function ProductDetail({
   const images = useMemo(() => {
     const selectedImage = selectedVariant?.image;
     const ordered = orderedProductImages(product);
-    return selectedImage
+    return selectedImage && shouldPrioritizeVariantImage(selectedVariant?.sourceImage)
       ? [selectedImage, ...ordered.filter((image) => image !== selectedImage)]
       : ordered;
   }, [product, selectedVariant?.image]);
@@ -94,8 +99,7 @@ export function ProductDetail({
   useEffect(() => setFrame(0), [selectedVariant?.id]);
   const details = [
     product.description && { title: "Description", body: product.description },
-    product.materials && { title: "Materials", body: product.materials },
-    product.fit && { title: "Fit", body: product.fit },
+    ...(product.details ?? []),
   ].filter(Boolean) as { title: string; body: string }[];
 
   return (
@@ -189,6 +193,11 @@ export function ProductDetail({
               {!selectedVariant && product.priceRange && product.priceRange.max !== product.price &&
                 ` – ${formatPrice(product.priceRange.max, product.currency)}`}
             </p>
+            {product.shortDescription ? (
+              <p className="mt-5 max-w-xl text-sm leading-6 text-steel" data-testid="product-short-description">
+                {product.shortDescription}
+              </p>
+            ) : null}
             {product.type === "variable" && (
               <div className="mt-3 text-xs text-steel">
                 {selectedVariant ? (
@@ -315,6 +324,7 @@ export function ProductDetail({
                     <p className="mt-3 text-xs leading-relaxed text-steel">{row.body}</p>
                   </details>
                 ))}
+                <ProductSizeGuide content={product.sizeGuide} soldSizes={soldSizes} />
               </div>
             )}
           </div>

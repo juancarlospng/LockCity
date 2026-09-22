@@ -59,6 +59,27 @@ export interface ProductImage {
   alt?: string;
 }
 
+export interface ProductDetailContent {
+  title: string;
+  body: string;
+}
+
+export interface ProductSizeGuideMeasurement {
+  label: string;
+  valuesCm: number[];
+}
+
+export interface ProductSizeGuideContent {
+  sizes?: string[];
+  measurements?: ProductSizeGuideMeasurement[];
+  notes?: string[];
+  circumference?: {
+    label: string;
+    cm: string;
+    inches: string;
+  };
+}
+
 export interface Product {
   type: string;
   categories: ProductCategory[];
@@ -78,7 +99,10 @@ export interface Product {
   category?: string;
   status: ProductStatus;
   collection?: string; // district slug
+  shortDescription?: string;
   description?: string;
+  details?: ProductDetailContent[];
+  sizeGuide?: ProductSizeGuideContent;
   materials?: string;
   fit?: string;
   images: string[]; // real photography URLs; empty until assets exist

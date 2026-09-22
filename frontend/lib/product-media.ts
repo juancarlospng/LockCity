@@ -17,6 +17,11 @@ function sourceText(source?: ProductImage): string {
   return [source?.name, source?.alt, source?.src].filter(Boolean).join(" ");
 }
 
+export function shouldPrioritizeVariantImage(source?: ProductImage): boolean {
+  const text = sourceText(source);
+  return !/\bback\b|\brear\b|flat[ -]?lay|print[ -]?file|design[ -]?file|template/i.test(text);
+}
+
 export function productImageScore(source: ProductImage | undefined, index: number): number {
   const text = sourceText(source);
   const signalScore = [...PREFERRED_SIGNALS, ...FLAT_SIGNALS]
