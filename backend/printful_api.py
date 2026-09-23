@@ -85,7 +85,7 @@ class PrintfulClient:
     def __init__(self, transport=None):
         self.transport = transport
 
-    async def get(self, path, params=None):
+    async def get(self, path, params=None, extra_headers=None):
         token = os.getenv("PRINTFUL_API_TOKEN", "")
         if not token:
             raise OperatorError(503, "PRINTFUL_NOT_CONFIGURED")
@@ -94,15 +94,19 @@ class PrintfulClient:
                     timeout=httpx.Timeout(15.0, connect=5.0),
                     follow_redirects=False,
                     transport=self.transport) as client:
+                headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
+                if extra_headers:
+                    headers.update(extra_headers)
                 response = await client.get(
                     PRINTFUL_BASE_URL + path,
                     params=params,
-                    headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
+                    headers=headers,
                 )
         except httpx.HTTPError:
             raise OperatorError(502, "PRINTFUL_UNAVAILABLE") from None
 
         errors = {
+            400: (502, "PRINTFUL_BAD_REQUEST"),
             401: (502, "PRINTFUL_UNAUTHORIZED"),
             403: (502, "PRINTFUL_FORBIDDEN"),
             404: (404, "PRINTFUL_NOT_FOUND"),
@@ -123,6 +127,28 @@ class PrintfulClient:
             raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
         return payload
 
+    async def store_id(self):
+        configured = os.getenv("PRINTFUL_STORE_ID", "").strip()
+        if configured:
+            if not configured.isascii() or not configured.isdecimal() or int(configured) < 1:
+                raise OperatorError(503, "PRINTFUL_STORE_NOT_CONFIGURED")
+            return int(configured)
+        payload = await self.get("/stores", {"limit": 100, "offset": 0})
+        stores = payload.get("result")
+        if not isinstance(stores, list):
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+        valid = [store for store in stores
+                 if isinstance(store, dict) and isinstance(store.get("id"), int)]
+        woo = [store for store in valid
+               if "woocommerce" in str(store.get("type", "")).lower()]
+        candidates = woo if len(woo) == 1 else valid
+        if len(candidates) != 1:
+            raise OperatorError(503, "PRINTFUL_STORE_NOT_CONFIGURED")
+        return candidates[0]["id"]
+
+    async def store_headers(self):
+        return {"X-PF-Store-Id": str(await self.store_id())}
+
     async def templates(self, limit, offset):
         payload = await self.get("/product-templates", {"limit": limit, "offset": offset})
         result = payload.get("result")
@@ -142,7 +168,8 @@ class PrintfulClient:
         return normalize_template(payload.get("result"))
 
     async def sync_products(self, limit, offset):
-        payload = await self.get("/sync/products", {"limit": limit, "offset": offset})
+        payload = await self.get("/sync/products", {"limit": limit, "offset": offset},
+                                 await self.store_headers())
         result = payload.get("result")
         if not isinstance(result, list):
             raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
@@ -155,7 +182,7 @@ class PrintfulClient:
         }
 
     async def sync_product(self, product_id):
-        payload = await self.get(f"/sync/products/{product_id}")
+        payload = await self.get(f"/sync/products/{product_id}", extra_headers=await self.store_headers())
         result = payload.get("result")
         if not isinstance(result, dict):
             raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")

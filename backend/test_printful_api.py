@@ -92,6 +92,7 @@ def test_single_template_normalization(monkeypatch):
 
 def test_sync_product_normalization(monkeypatch):
     monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("PRINTFUL_STORE_ID", "123")
     raw = {
         "sync_product": {"id": 99, "external_id": "3704", "name": "Soul Piece Cap",
                          "variants": 1, "synced": 1, "thumbnail_url": "https://example.invalid/cap.jpg"},
@@ -107,6 +108,38 @@ def test_sync_product_normalization(monkeypatch):
     assert result["syncProductId"] == 99
     assert result["variants"][0]["catalogVariantId"] == 7854
     assert result["variants"][0]["externalId"] == "3704"
+
+
+def test_account_token_resolves_single_woocommerce_store(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.delenv("PRINTFUL_STORE_ID", raising=False)
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if request.url.path == "/stores":
+            return httpx.Response(200, json={"code": 200, "result": [
+                {"id": 321, "name": "Lock City", "type": "woocommerce"}]})
+        assert request.headers["X-PF-Store-Id"] == "321"
+        return httpx.Response(200, json={"code": 200, "result": [],
+                                         "paging": {"total": 0, "limit": 20, "offset": 0}})
+
+    result = run(client_for(handler).sync_products(20, 0))
+    assert result["total"] == 0
+    assert [request.method for request in requests] == ["GET", "GET"]
+
+
+def test_multiple_stores_require_explicit_store_id(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.delenv("PRINTFUL_STORE_ID", raising=False)
+
+    def handler(_request):
+        return httpx.Response(200, json={"code": 200, "result": [
+            {"id": 1, "type": "woocommerce"}, {"id": 2, "type": "woocommerce"}]})
+
+    with pytest.raises(OperatorError) as error:
+        run(client_for(handler).sync_products(20, 0))
+    assert (error.value.status, error.value.code) == (503, "PRINTFUL_STORE_NOT_CONFIGURED")
 
 
 class Store:
