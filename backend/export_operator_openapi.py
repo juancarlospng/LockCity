@@ -53,12 +53,52 @@ def contract():
         "Audit": {"type": "object", "properties": {
             "operations": {"type": "array", "items": audit_record},
             "page": {"type": "integer"}, "per_page": {"type": "integer"}}},
+        "PrintfulStatus": {"type": "object", "required": [
+            "ok", "productTemplatesRead", "syncProductsRead"], "properties": {
+                "ok": {"type": "boolean"}, "productTemplatesRead": {"type": "boolean"},
+                "syncProductsRead": {"type": "boolean"},
+                "errors": {"type": "object", "additionalProperties": {"type": "string"}}}},
+        "PrintfulTemplate": {"type": "object", "required": [
+            "id", "title", "catalogProductId", "externalProductId", "availableVariantIds",
+            "colors", "sizes", "mockupUrl", "placements", "createdAt", "updatedAt"],
+            "properties": {
+                "id": {"type": "integer"}, "title": {"type": "string"},
+                "catalogProductId": {"type": ["integer", "null"]},
+                "externalProductId": {"type": ["string", "null"]},
+                "availableVariantIds": {"type": "array", "items": {"type": "integer"}},
+                "colors": {"type": "array", "items": {"type": "object"}},
+                "sizes": {"type": "array", "items": {}},
+                "mockupUrl": {"type": ["string", "null"]},
+                "placements": {"type": "array", "items": {"type": "object"}},
+                "createdAt": {"type": ["string", "null"]},
+                "updatedAt": {"type": ["string", "null"]}}},
+        "PrintfulTemplateList": {"type": "object", "properties": {
+            "items": {"type": "array", "items": {"$ref": "#/components/schemas/PrintfulTemplate"}},
+            "limit": {"type": "integer"}, "offset": {"type": "integer"},
+            "total": {"type": ["integer", "null"]}}},
+        "PrintfulSyncProduct": {"type": "object", "required": [
+            "syncProductId", "externalId", "name", "variantCount", "syncedCount",
+            "thumbnailUrl", "ignored", "variants"], "properties": {
+                "syncProductId": {"type": "integer"}, "externalId": {"type": ["string", "null"]},
+                "name": {"type": "string"}, "variantCount": {"type": "integer"},
+                "syncedCount": {"type": ["integer", "null"]},
+                "thumbnailUrl": {"type": ["string", "null"]},
+                "ignored": {"type": ["boolean", "null"]},
+                "variants": {"type": "array", "items": {"type": "object"}}}},
+        "PrintfulSyncProductList": {"type": "object", "properties": {
+            "items": {"type": "array", "items": {"$ref": "#/components/schemas/PrintfulSyncProduct"}},
+            "limit": {"type": "integer"}, "offset": {"type": "integer"},
+            "total": {"type": ["integer", "null"]}}},
     }
     pagination = [{"name": name, "in": "query", "schema": {
         "type": "integer", "minimum": 1, "maximum": maximum, "default": default}}
         for name, maximum, default in [("page", 100000, 1), ("per_page", 100, 20)]]
     identifier = [{"name": "id", "in": "path", "required": True,
                    "schema": {"type": "integer", "minimum": 1, "maximum": 2147483647}}]
+    printful_pagination = [{"name": name, "in": "query", "schema": {
+        "type": "integer", "minimum": minimum, "maximum": maximum, "default": default}}
+        for name, minimum, maximum, default in [
+            ("limit", 1, 100, 20), ("offset", 0, 1000000, 0)]]
     paths: dict[str, dict[str, dict[str, Any]]] = {}
     for suffix, method, operation_id, response, parameters in [
         ("/status", "get", "getStatus", "Status", []),
@@ -66,6 +106,13 @@ def contract():
         ("/products/{id}", "get", "getProduct", "Product", identifier),
         ("/products/{id}", "patch", "updateProduct", "PatchResult", identifier),
         ("/audit", "get", "getAudit", "Audit", pagination),
+        ("/printful/status", "get", "getPrintfulStatus", "PrintfulStatus", []),
+        ("/printful/templates", "get", "getPrintfulTemplates", "PrintfulTemplateList", printful_pagination),
+        ("/printful/templates/{id}", "get", "getPrintfulTemplate", "PrintfulTemplate", identifier),
+        ("/printful/sync-products", "get", "getPrintfulSyncProducts",
+         "PrintfulSyncProductList", printful_pagination),
+        ("/printful/sync-products/{id}", "get", "getPrintfulSyncProduct",
+         "PrintfulSyncProduct", identifier),
     ]:
         operation: dict[str, Any] = {
             "operationId": operation_id, "security": [{"OperatorBearer": []}],

@@ -282,9 +282,12 @@ class OperatorService:
                 await self.store.unlock(product_id, op)
 
 
-def create_router(store, woo=None):
+def create_router(store, woo=None, printful=None):
+    from printful_api import PrintfulClient
+
     router = APIRouter(prefix="/api/operator/v1")
     service = OperatorService(store, woo or WooClient())
+    printful_client = printful or PrintfulClient()
 
     async def dispatch(request, action):
         try:
@@ -315,6 +318,16 @@ def create_router(store, woo=None):
         if not value.isascii() or not value.isdecimal() or not 1 <= int(value) <= 2147483647:
             raise OperatorError(400, "INVALID_PRODUCT_ID")
         return int(value)
+
+    def printful_pagination(request):
+        try:
+            limit = int(request.query_params.get("limit", "20"))
+            offset = int(request.query_params.get("offset", "0"))
+            if not 1 <= limit <= 100 or not 0 <= offset <= 1000000:
+                raise ValueError()
+            return limit, offset
+        except ValueError:
+            raise OperatorError(400, "INVALID_PAGINATION") from None
 
     @router.get("/status")
     async def status(request: Request):
@@ -367,6 +380,52 @@ def create_router(store, woo=None):
         async def action():
             page, size = pagination(request)
             return 200, {"operations": await store.audit(page, size), "page": page, "per_page": size}
+        return await dispatch(request, action)
+
+    @router.get("/printful/status")
+    async def printful_status(request: Request):
+        async def action():
+            capabilities = {}
+            errors = {}
+            for name, call in (
+                    ("productTemplatesRead", lambda: printful_client.templates(1, 0)),
+                    ("syncProductsRead", lambda: printful_client.sync_products(1, 0))):
+                try:
+                    await call()
+                    capabilities[name] = True
+                except OperatorError as exc:
+                    if exc.code == "PRINTFUL_NOT_CONFIGURED":
+                        raise
+                    capabilities[name] = False
+                    errors[name] = exc.code
+            result = {"ok": all(capabilities.values()), **capabilities}
+            if errors:
+                result["errors"] = errors
+            return 200, result
+        return await dispatch(request, action)
+
+    @router.get("/printful/templates")
+    async def printful_templates(request: Request):
+        async def action():
+            return 200, await printful_client.templates(*printful_pagination(request))
+        return await dispatch(request, action)
+
+    @router.get("/printful/templates/{template_id}")
+    async def printful_template(template_id: str, request: Request):
+        async def action():
+            return 200, await printful_client.template(valid_id(template_id))
+        return await dispatch(request, action)
+
+    @router.get("/printful/sync-products")
+    async def printful_sync_products(request: Request):
+        async def action():
+            return 200, await printful_client.sync_products(*printful_pagination(request))
+        return await dispatch(request, action)
+
+    @router.get("/printful/sync-products/{sync_product_id}")
+    async def printful_sync_product(sync_product_id: str, request: Request):
+        async def action():
+            return 200, await printful_client.sync_product(valid_id(sync_product_id))
         return await dispatch(request, action)
 
     return router

@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from operator_api import PostgresStore, create_router
 
 
-def create_app(store=None, woo=None):
+def create_app(store=None, woo=None, printful=None):
     operator_store = store or PostgresStore(os.getenv("DATABASE_URL"))
 
     @asynccontextmanager
@@ -29,7 +29,7 @@ def create_app(store=None, woo=None):
     async def health():
         return {"status": "ok"}
 
-    application.include_router(create_router(operator_store, woo))
+    application.include_router(create_router(operator_store, woo, printful))
     return application
 
 

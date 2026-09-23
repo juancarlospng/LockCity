@@ -29,6 +29,8 @@ The database credential and all API credentials belong only in Render secrets.
 - `WC_REST_URL` — WooCommerce origin; configuration rather than a credential.
 - `WC_REST_CONSUMER_KEY` — secret.
 - `WC_REST_CONSUMER_SECRET` — secret.
+- `PRINTFUL_API_TOKEN` — secret server-side token with `product_templates/read` and
+  `sync_products/read`; it is never returned, logged, or stored by Operator API.
 - `OPERATOR_API_TOKEN` — secret Bearer token, at least 32 characters.
 - `OPERATOR_WRITES_ENABLED` — set to `false`; `start.py` also forces it to false.
 - `PORT` — provided by Render.
@@ -47,6 +49,16 @@ The database credential and all API credentials belong only in Render secrets.
 - `GET /api/operator/v1/products/{id}`
 - `PATCH /api/operator/v1/products/{id}`
 - `GET /api/operator/v1/audit?page=1&per_page=20`
+- `GET /api/operator/v1/printful/status`
+- `GET /api/operator/v1/printful/templates?limit=20&offset=0`
+- `GET /api/operator/v1/printful/templates/{id}`
+- `GET /api/operator/v1/printful/sync-products?limit=20&offset=0`
+- `GET /api/operator/v1/printful/sync-products/{id}`
+
+The Printful integration only implements upstream GET requests. It applies a
+15-second timeout, does not retry mutations (none exist), normalizes returned
+records, and converts upstream failures into error codes without returning raw
+Printful messages or request headers.
 
 PATCH accepts exactly `name`, `reason`, `expected_version`, and `idempotency_key`.
 It reads before writing, checks the complete product version, reserves a hashed

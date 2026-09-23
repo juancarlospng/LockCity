@@ -45,6 +45,11 @@ def test_independent_app_exposes_only_requested_routes():
         ("/api/operator/v1/products/{product_id}", "GET"),
         ("/api/operator/v1/products/{product_id}", "PATCH"),
         ("/api/operator/v1/audit", "GET"),
+        ("/api/operator/v1/printful/status", "GET"),
+        ("/api/operator/v1/printful/templates", "GET"),
+        ("/api/operator/v1/printful/templates/{template_id}", "GET"),
+        ("/api/operator/v1/printful/sync-products", "GET"),
+        ("/api/operator/v1/printful/sync-products/{sync_product_id}", "GET"),
     }
 
 
