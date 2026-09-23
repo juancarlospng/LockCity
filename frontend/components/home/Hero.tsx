@@ -1,91 +1,88 @@
 "use client";
 
-import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
-import dynamic from "next/dynamic";
+import Image from "next/image";
 import Link from "next/link";
-import { useRef } from "react";
-import { MaskText } from "@/components/Reveal";
-import { interact3D, viewHome } from "@/lib/analytics";
 import { useEffect } from "react";
+import { Media } from "@/components/Media";
+import { viewHome } from "@/lib/analytics";
+import { mainProductImage } from "@/lib/product-media";
+import type { Product } from "@/lib/types";
 
-const HeroScene = dynamic(
-  () => import("@/components/three/HeroScene").then((m) => m.HeroScene),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="absolute inset-0 h-full w-full bg-[radial-gradient(ellipse_at_50%_35%,#181818_0%,#050505_65%)]" />
-    ),
-  }
-);
-
-export function Hero() {
-  const ref = useRef<HTMLElement>(null);
-  const reduced = useReducedMotion();
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start start", "end start"],
-  });
-  const y = useTransform(scrollYProgress, [0, 1], ["0%", "22%"]);
-  const opacity = useTransform(scrollYProgress, [0, 0.75], [1, 0]);
+export function Hero({ product }: { product?: Product }) {
+  const image = product ? mainProductImage(product) : undefined;
 
   useEffect(() => viewHome(), []);
 
   return (
     <section
-      ref={ref}
       data-testid="hero-section"
-      aria-label="Enter the city"
-      className="relative h-[100svh] min-h-[620px] overflow-hidden"
-      onPointerDown={() => interact3D("hero-city", "pointer")}
+      aria-labelledby="hero-heading"
+      className="relative min-h-[100svh] overflow-hidden border-b border-graphite bg-bg px-4 pb-8 pt-24 sm:px-8 sm:pb-10 lg:flex lg:max-h-[1080px] lg:min-h-[760px] lg:items-stretch lg:px-12 lg:pb-12 lg:pt-28"
     >
-      <HeroScene progress={scrollYProgress} />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-[linear-gradient(to_top,#050505,transparent)]"
-      />
+      <div className="mx-auto grid w-full max-w-[1800px] gap-8 lg:grid-cols-12 lg:gap-8">
+        <div className="flex flex-col justify-between lg:col-span-5 lg:py-5 xl:col-span-4">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-steel lg:block">
+            <p>Lock City®</p>
+            <p className="lg:mt-3">01 — Core identity</p>
+          </div>
 
-      <motion.div
-        style={reduced ? undefined : { y, opacity }}
-        className="relative z-10 flex h-full flex-col justify-between px-4 pb-10 pt-24 sm:px-8 lg:px-12"
-      >
-        <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-steel">
-          <span data-testid="hero-status-badge" className="flex items-center gap-2">
-            <span aria-hidden className="h-1 w-1 animate-pulse-dot rounded-full bg-bone" />
-            The city is alive
-          </span>
-          <span>Scene 01</span>
+          <div className="mt-10 lg:mt-20">
+            <h1
+              id="hero-heading"
+              className="max-w-3xl font-display text-[17vw] uppercase leading-[0.82] tracking-[-0.025em] text-bone sm:text-[12vw] lg:text-[7vw] xl:text-[6.3vw] 2xl:text-[6rem]"
+            >
+              Built around the lock.
+            </h1>
+            <p className="mt-6 max-w-md text-sm leading-7 text-steel sm:text-base">
+              Core pieces. Limited expressions. One city.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-4 sm:mt-10">
+              <Link
+                href="/shop"
+                data-testid="hero-shop-link"
+                className="border border-bone bg-bone px-7 py-4 text-[10px] font-bold uppercase tracking-[0.28em] text-bg transition-colors hover:bg-transparent hover:text-bone"
+              >
+                Shop
+              </Link>
+              <Link
+                href="/collections/core"
+                data-testid="hero-core-link"
+                className="link-line px-2 py-4 text-[10px] font-bold uppercase tracking-[0.28em] text-bone"
+              >
+                Explore core
+              </Link>
+            </div>
+          </div>
+
+          <p className="mt-8 hidden max-w-xs text-[9px] uppercase leading-5 tracking-[0.22em] text-steel lg:block">
+            Permanent pieces / Current city uniform
+          </p>
         </div>
 
-        <div className="flex flex-col gap-8">
-          <h1 className="font-display text-[22vw] uppercase leading-[0.82] tracking-tight text-bone sm:text-[17vw] lg:text-[13.5vw]">
-            <MaskText
-              delay={0.35}
-              stagger={0.14}
-              lines={[
-                "Lock",
-                <>
-                  City<span className="align-top text-[0.25em] text-steel">®</span>
-                </>,
-              ]}
+        <div className="relative mt-2 min-h-[42svh] overflow-hidden border border-graphite bg-white lg:col-span-7 lg:mt-0 lg:min-h-0 xl:col-span-8">
+          {image ? (
+            <Image
+              src={image}
+              alt={`${product?.name ?? "Lock City Core product"} — front view`}
+              fill
+              priority
+              sizes="(max-width: 1023px) 100vw, 66vw"
+              className="object-contain p-5 sm:p-8 lg:p-12 xl:p-16"
             />
-          </h1>
-
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-            <p className="max-w-xs text-xs leading-relaxed text-steel">
-              A streetwear system rendered as a place. Collections are districts.
-              Products are objects.
-            </p>
-
-            <Link
-              href="/shop"
-              data-testid="hero-shop-link"
-              className="border border-bone bg-bone px-8 py-4 text-xs font-bold uppercase tracking-[0.3em] text-bg transition-colors duration-300 hover:bg-transparent hover:text-bone"
-            >
-              Shop →
-            </Link>
+          ) : (
+            <Media seed={3292} className="absolute inset-0 h-full w-full" />
+          )}
+          {product ? (
+            <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 border-t border-black/10 bg-white/90 px-4 py-3 text-black backdrop-blur-sm sm:px-5">
+              <p className="font-display text-lg uppercase leading-none sm:text-xl">{product.name}</p>
+              <p className="text-[9px] uppercase tracking-[0.22em] text-black/60">Core</p>
+            </div>
+          ) : null}
+          <div aria-hidden className="absolute right-4 top-4 text-[9px] uppercase tracking-[0.25em] text-black/50">
+            LC / 01
           </div>
         </div>
-      </motion.div>
+      </div>
     </section>
   );
 }

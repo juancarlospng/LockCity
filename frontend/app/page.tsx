@@ -1,12 +1,16 @@
-import { Loader } from "@/components/home/Loader";
 import { Hero } from "@/components/home/Hero";
+import { CityExperience } from "@/components/home/CityExperience";
 import { ProductShowcase } from "@/components/home/ProductShowcase";
 import { BrandEditorial } from "@/components/home/BrandEditorial";
 import { Newsletter } from "@/components/Newsletter";
-import { Marquee } from "@/components/Marquee";
 import { CatalogError } from "@/components/CatalogError";
 import { commerce } from "@/lib/commerce";
-import { coreProducts, selectedShopProducts } from "@/lib/merchandising";
+import {
+  homeCoreProducts,
+  homeEditorialProducts,
+  homeHeroProduct,
+  homeSelectedProducts,
+} from "@/lib/home-merchandising";
 import { pageMetadata, serializeJsonLd, SITE_DESCRIPTION } from "@/lib/seo";
 import { onlineStoreStructuredData } from "@/lib/structured-data";
 import type { Product } from "@/lib/types";
@@ -25,8 +29,10 @@ export default async function HomePage() {
   let catalogError: unknown;
   try { products = await commerce.getProducts(); }
   catch (error) { catalogError = error; products = []; }
-  const core = coreProducts(products);
-  const selected = selectedShopProducts(products);
+  const hero = homeHeroProduct(products);
+  const core = homeCoreProducts(products);
+  const selected = homeSelectedProducts(products);
+  const editorial = homeEditorialProducts(products);
 
   return (
     <>
@@ -34,38 +40,32 @@ export default async function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(onlineStoreStructuredData()) }}
       />
-      <Loader />
-      <Hero />
-      <Marquee
-        items={[
-          "Lock City®",
-          "The city is alive",
-          "Locked in",
-          "Core",
-        ]}
-      />
+      <CityExperience />
+      <Hero product={hero} />
       {catalogError ? <CatalogError error={catalogError} /> : (
         <>
           <ProductShowcase
             id="core"
-            scene="02 — Permanent collection"
+            scene="02 — Permanent pieces"
             title="Core"
             copy="Permanent Lock City pieces built around the lock — the symbol at the center of the city."
-            products={core.slice(0, 4)}
+            products={core}
             ctaHref="/collections/core"
             ctaLabel="Explore core"
+            layout="editorial"
           />
           <ProductShowcase
             id="selected-shop"
-            scene="03 — Selected shop"
-            title="Selected"
+            scene="03 — Shop selection"
+            title="Selected from the city"
             products={selected}
             ctaHref="/shop"
-            ctaLabel="Shop"
+            ctaLabel="View shop"
+            layout="grid"
           />
         </>
       )}
-      <BrandEditorial />
+      <BrandEditorial products={editorial} />
       <Newsletter />
     </>
   );
