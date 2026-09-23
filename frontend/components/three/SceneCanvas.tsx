@@ -97,7 +97,7 @@ export function SceneCanvas({
       ) : (
         <Canvas
           frameloop={visible && !pageHidden ? "always" : "never"}
-          dpr={quality === "high" ? [1, 2] : [1, 1.5]}
+          dpr={[1, 1.5]}
           camera={camera}
           gl={{
             antialias: quality === "high",

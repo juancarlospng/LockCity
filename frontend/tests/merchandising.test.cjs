@@ -83,22 +83,42 @@ test('public navigation and home contain only launch sections', () => {
   assert.doesNotMatch(home, /coming soon/i);
 });
 
-test('home restores the original lazy Three.js city before the editorial Hero', () => {
+test('home keeps the approved Hero before the native-scroll Three.js city and Core reveal', () => {
   const home = read('app/page.tsx');
   const city = read('components/home/CityExperience.tsx');
   const scene = read('components/three/HeroScene.tsx');
   const canvas = read('components/three/SceneCanvas.tsx');
-  assert.match(home, /<CityExperience \/>\s*<Hero product=\{hero\} \/>/);
+  const layout = read('app/layout.tsx');
+  assert.match(home, /<Hero product=\{hero\} \/>\s*<CityExperience \/>/);
+  assert.match(home, /data-testid="core-reveal"/);
+  assert.match(home, /-mt-\[16svh\]/);
+  assert.match(home, /scene="03 — Permanent pieces"/);
   assert.match(city, /dynamic\(/);
   assert.match(city, /components\/three\/HeroScene/);
   assert.match(city, /<HeroScene progress=\{scrollYProgress\}/);
+  assert.match(city, /sticky top-0 h-\[100svh\]/);
+  assert.match(city, /h-\[190svh\]/);
+  assert.match(city, /md:h-\[260svh\]/);
+  assert.match(city, /motion-reduce:h-\[110svh\]/);
+  assert.match(city, /offset: \["start start", "end end"\]/);
+  assert.doesNotMatch(city, /preventDefault|wheel|touchmove|scrollTo/);
+  assert.doesNotMatch(layout, /SmoothScroll/);
+  assert.match(layout, /overflow-x-clip/);
+  assert.doesNotMatch(layout, /overflow-x-hidden/);
   assert.match(city, /interact3D\("hero-city", "pointer"\)/);
   assert.match(scene, /function Buildings/);
   assert.match(scene, /function Monoliths/);
   assert.match(scene, /function Dust/);
   assert.match(scene, /function CameraRig/);
+  assert.match(scene, /CITY_CAMERA_START/);
+  assert.match(scene, /CITY_CAMERA_MID/);
+  assert.match(scene, /CITY_CAMERA_END/);
+  assert.match(scene, /progress <= 0\.12/);
+  assert.match(scene, /progress <= 0\.72/);
+  assert.match(scene, /progress <= 0\.82/);
   assert.match(canvas, /IntersectionObserver/);
   assert.match(canvas, /frameloop=\{visible && !pageHidden \? "always" : "never"\}/);
+  assert.match(canvas, /dpr=\{\[1, 1\.5\]\}/);
 });
 
 test('home merchandising is centralized, public and visually non-repetitive', () => {

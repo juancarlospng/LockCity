@@ -40,23 +40,28 @@ export default async function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializeJsonLd(onlineStoreStructuredData()) }}
       />
-      <CityExperience />
       <Hero product={hero} />
+      <CityExperience />
       {catalogError ? <CatalogError error={catalogError} /> : (
         <>
-          <ProductShowcase
-            id="core"
-            scene="02 — Permanent pieces"
-            title="Core"
-            copy="Permanent Lock City pieces built around the lock — the symbol at the center of the city."
-            products={core}
-            ctaHref="/collections/core"
-            ctaLabel="Explore core"
-            layout="editorial"
-          />
+          <div
+            data-testid="core-reveal"
+            className="relative z-20 -mt-[16svh] bg-bg md:-mt-[29svh] motion-reduce:-mt-[8svh]"
+          >
+            <ProductShowcase
+              id="core"
+              scene="03 — Permanent pieces"
+              title="Core"
+              copy="Permanent Lock City pieces built around the lock — the symbol at the center of the city."
+              products={core}
+              ctaHref="/collections/core"
+              ctaLabel="Explore core"
+              layout="editorial"
+            />
+          </div>
           <ProductShowcase
             id="selected-shop"
-            scene="03 — Shop selection"
+            scene="04 — Shop selection"
             title="Selected from the city"
             products={selected}
             ctaHref="/shop"

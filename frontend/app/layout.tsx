@@ -5,7 +5,6 @@ import Script from "next/script";
 import { GoogleTagManager } from "@next/third-parties/google";
 import { Toaster } from "sonner";
 import { CartProvider } from "@/lib/cart";
-import { SmoothScroll } from "@/components/SmoothScroll";
 import { Navigation } from "@/components/Navigation";
 import { Footer } from "@/components/Footer";
 import { CartDrawer } from "@/components/CartDrawer";
@@ -73,7 +72,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${display.variable} ${mono.variable} overflow-x-hidden`}>
+    <html lang="en" className={`${display.variable} ${mono.variable} overflow-x-clip`}>
       {gtmId ? (
         <>
           <Script id="lc-consent-defaults" strategy="beforeInteractive">
@@ -82,9 +81,8 @@ export default function RootLayout({
           <GoogleTagManager gtmId={gtmId} />
         </>
       ) : null}
-      <body className="grain overflow-x-hidden bg-bg text-bone antialiased">
+      <body className="grain overflow-x-clip bg-bg text-bone antialiased">
         <CartProvider>
-          <SmoothScroll />
           {gtmId ? (
             <Suspense fallback={null}>
               <AnalyticsRouteTracker />

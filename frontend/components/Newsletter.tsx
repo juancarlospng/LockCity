@@ -61,7 +61,7 @@ export function Newsletter() {
         <div>
           <Reveal>
             <p className="text-[10px] uppercase tracking-[0.3em] text-steel">
-              05 — Join the city
+              06 — Join the city
             </p>
           </Reveal>
           <h2

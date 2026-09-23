@@ -8,15 +8,46 @@ import type { MotionValue } from "framer-motion";
 import { seededRandom } from "@/lib/utils";
 import { SceneCanvas, useQuality, useReducedMotionPref } from "./SceneCanvas";
 
+export const CITY_CAMERA_START = [0, 1.7, 10] as const;
+export const CITY_CAMERA_MID = [0, 1.65, 8.45] as const;
+export const CITY_CAMERA_END = [0, 1.58, 7.05] as const;
+
+function smoothstep(value: number) {
+  const clamped = THREE.MathUtils.clamp(value, 0, 1);
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
+function cityTravel(progress: number) {
+  if (progress <= 0.12) return smoothstep(progress / 0.12) * 0.04;
+  if (progress <= 0.72) return 0.04 + smoothstep((progress - 0.12) / 0.6) * 0.86;
+  if (progress <= 0.82) return 0.9 + smoothstep((progress - 0.72) / 0.1) * 0.1;
+  return 1;
+}
+
 function CameraRig({ progress }: { progress?: MotionValue<number> }) {
   const { camera, pointer } = useThree();
   useFrame(() => {
     const p = progress?.get() ?? 0;
-    const targetX = pointer.x * 0.7;
-    const targetY = 1.7 + pointer.y * 0.35;
+    const travel = cityTravel(p);
+    const firstLeg = smoothstep(Math.min(travel / 0.62, 1));
+    const secondLeg = smoothstep(Math.max((travel - 0.62) / 0.38, 0));
+    const pathX = THREE.MathUtils.lerp(CITY_CAMERA_START[0], CITY_CAMERA_MID[0], firstLeg);
+    const pathY = THREE.MathUtils.lerp(
+      THREE.MathUtils.lerp(CITY_CAMERA_START[1], CITY_CAMERA_MID[1], firstLeg),
+      CITY_CAMERA_END[1],
+      secondLeg,
+    );
+    const pathZ = THREE.MathUtils.lerp(
+      THREE.MathUtils.lerp(CITY_CAMERA_START[2], CITY_CAMERA_MID[2], firstLeg),
+      CITY_CAMERA_END[2],
+      secondLeg,
+    );
+    const pointerStrength = 1 - travel * 0.45;
+    const targetX = pathX + pointer.x * 0.55 * pointerStrength;
+    const targetY = pathY + pointer.y * 0.24 * pointerStrength;
     camera.position.x += (targetX - camera.position.x) * 0.045;
     camera.position.y += (targetY - camera.position.y) * 0.045;
-    camera.position.z += (10 - p * 5 - camera.position.z) * 0.07;
+    camera.position.z += (pathZ - camera.position.z) * 0.07;
     camera.lookAt(0, 1.5, 0);
   });
   return null;
@@ -132,7 +163,7 @@ export function HeroScene({ progress }: { progress?: MotionValue<number> }) {
     <SceneCanvas
       label="Abstract architectural visualization of Lock City — brutalist monoliths in fog"
       className="absolute inset-0 h-full w-full"
-      camera={{ position: [0, 1.7, 10], fov: 42 }}
+      camera={{ position: [...CITY_CAMERA_START], fov: 42 }}
     >
       <fog attach="fog" args={["#050505", 8, 36]} />
       <ambientLight intensity={0.38} />

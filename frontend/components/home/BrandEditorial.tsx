@@ -18,7 +18,7 @@ export function BrandEditorial({ products }: { products: Product[] }) {
       <div className="mx-auto grid max-w-[1800px] gap-12 lg:grid-cols-12 lg:items-center lg:gap-8">
         <div className="lg:col-span-5 lg:pr-10">
           <Reveal>
-            <p className="text-[10px] uppercase tracking-[0.3em] text-steel">04 — The City</p>
+            <p className="text-[10px] uppercase tracking-[0.3em] text-steel">05 — The City</p>
           </Reveal>
           <h2
             id="brand-editorial-heading"
