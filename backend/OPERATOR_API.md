@@ -34,6 +34,9 @@ The database credential and all API credentials belong only in Render secrets.
 - `PRINTFUL_STORE_ID` — optional server-side Printful store identifier. It is only
   required when an account-level token can access more than one WooCommerce store;
   a single WooCommerce store is selected automatically through the read-only Stores API.
+- `PRINTFUL_MOCKUP_GENERATION_ENABLED` — set to `true` only on the Operator API when
+  generating review mockups. This permits only Printful mockup task creation;
+  `OPERATOR_WRITES_ENABLED` stays `false` and WooCommerce writes remain blocked.
 - `OPERATOR_API_TOKEN` — secret Bearer token, at least 32 characters.
 - `OPERATOR_WRITES_ENABLED` — set to `false`; `start.py` also forces it to false.
 - `PORT` — provided by Render.
@@ -55,13 +58,23 @@ The database credential and all API credentials belong only in Render secrets.
 - `GET /api/operator/v1/printful/status`
 - `GET /api/operator/v1/printful/templates?limit=20&offset=0`
 - `GET /api/operator/v1/printful/templates/{id}`
+- `GET /api/operator/v1/printful/templates/{id}/mockup-styles`
+- `POST /api/operator/v1/printful/templates/{id}/mockup-tasks`
+- `GET /api/operator/v1/printful/mockup-tasks/{id}`
 - `GET /api/operator/v1/printful/sync-products?limit=20&offset=0`
 - `GET /api/operator/v1/printful/sync-products/{id}`
 
-The Printful integration only implements upstream GET requests. It applies a
-15-second timeout, does not retry mutations (none exist), normalizes returned
-records, and converts upstream failures into error codes without returning raw
-Printful messages or request headers.
+The Printful integration uses GET for product and task data. Only the dedicated
+mockup task route sends a POST, generating temporary review images without
+creating or publishing a product. It requires an independently enabled flag,
+one template per request, 1–20 existing variant IDs and 1–10 available style IDs.
+Retrieve styles first, choose representative sizes per color, then POST
+`{"variantIds":[4016],"styleIds":[3]}` and poll the returned `taskIds` via
+GET. Save the resulting images externally before the temporary URLs expire.
+Do not put bearer tokens in browser URLs. The API does not persist tasks, so
+record returned IDs before moving to the next template. Printful rate limits
+task generation; allow at least 30 seconds between requests if the store is new.
+Failures are sanitized; no raw Printful messages or request headers are returned.
 Template detail responses include a deduplicated `mockups` array. Printful's
 documented `mockup_file_url` is preserved as `mockupUrl` and also becomes a
 gallery entry when no richer per-image metadata is supplied upstream.

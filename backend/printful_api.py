@@ -1,4 +1,4 @@
-"""Read-only Printful client and response normalization for Operator API."""
+"""Printful client for product reviews and isolated mockup generation."""
 import os
 from datetime import datetime, timezone
 
@@ -137,7 +137,7 @@ def normalize_sync_product(raw, variants=None):
 
 
 class PrintfulClient:
-    """A deliberately GET-only client. It has no mutation method."""
+    """Only mockup task creation may use POST; products and orders are read-only."""
 
     def __init__(self, transport=None):
         self.transport = transport
@@ -247,3 +247,107 @@ class PrintfulClient:
         if not isinstance(result, dict):
             raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
         return normalize_sync_product(result.get("sync_product"), result.get("sync_variants"))
+
+    async def mockup_styles(self, template_id):
+        template = await self.template(template_id)
+        product_id = template["catalogProductId"]
+        if not product_id:
+            raise OperatorError(422, "TEMPLATE_HAS_NO_CATALOG_PRODUCT")
+        styles = []
+        offset = 0
+        while True:
+            payload = await self.get(f"/v2/catalog-products/{product_id}/mockup-styles",
+                                     {"limit": 100, "offset": offset})
+            page = payload.get("data")
+            if not isinstance(page, list):
+                raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+            for placement in page:
+                if not isinstance(placement, dict):
+                    continue
+                for style in _list(placement.get("mockup_styles")):
+                    if not isinstance(style, dict) or not isinstance(style.get("id"), int):
+                        continue
+                    styles.append({"id": style["id"], "placement": placement.get("placement"),
+                                   "displayName": placement.get("display_name"),
+                                   "category": style.get("category_name"), "view": style.get("view_name"),
+                                   "variantIds": _variant_ids(style)})
+            paging = payload.get("paging")
+            total = paging.get("total") if isinstance(paging, dict) else None
+            offset += len(page)
+            if not page or not isinstance(total, int) or offset >= total:
+                break
+            if offset >= 1000:
+                raise OperatorError(502, "PRINTFUL_TOO_MANY_STYLES")
+        return {"templateId": template_id, "availableVariantIds": template["availableVariantIds"],
+                "colors": template["colors"], "placements": template["placements"], "styles": styles}
+
+    async def create_mockup_task(self, template_id, variant_ids, style_ids):
+        template = await self.template(template_id)
+        allowed = set(template["availableVariantIds"])
+        if not allowed or not set(variant_ids).issubset(allowed):
+            raise OperatorError(400, "INVALID_TEMPLATE_VARIANTS")
+        # Validate styles against this catalog product before scheduling work.
+        available = await self.mockup_styles(template_id)
+        selected = [style for style in available["styles"] if style["id"] in style_ids]
+        if set(style_ids) != {style["id"] for style in selected}:
+            raise OperatorError(400, "INVALID_MOCKUP_STYLES")
+        if any(style["variantIds"] and not set(variant_ids).issubset(style["variantIds"])
+               for style in selected):
+            raise OperatorError(400, "INCOMPATIBLE_MOCKUP_STYLES")
+        token = os.getenv("PRINTFUL_API_TOKEN", "")
+        if not token:
+            raise OperatorError(503, "PRINTFUL_NOT_CONFIGURED")
+        body = {"format": "jpg", "mockup_width_px": 1000, "products": [{
+            "source": "product_template", "product_template_id": template_id,
+            "catalog_variant_ids": variant_ids, "mockup_style_ids": style_ids}]}
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(25.0, connect=5.0),
+                                         follow_redirects=False, transport=self.transport) as client:
+                response = await client.post(PRINTFUL_BASE_URL + "/v2/mockup-tasks", json=body,
+                                             headers={"Authorization": "Bearer " + token,
+                                                      "Accept": "application/json",
+                                                      "X-PF-Store-Id": str(await self.store_id())})
+        except httpx.HTTPError:
+            raise OperatorError(502, "PRINTFUL_UNAVAILABLE") from None
+        errors = {
+            400: (502, "PRINTFUL_MOCKUP_REQUEST_REJECTED"),
+            401: (502, "PRINTFUL_UNAUTHORIZED"),
+            403: (502, "PRINTFUL_FORBIDDEN"),
+            404: (404, "PRINTFUL_NOT_FOUND"),
+            429: (503, "PRINTFUL_RATE_LIMITED"),
+        }
+        if response.status_code in errors:
+            status, code = errors[response.status_code]
+            raise OperatorError(status, code)
+        if response.status_code >= 500:
+            raise OperatorError(502, "PRINTFUL_UNAVAILABLE")
+        if not 200 <= response.status_code < 300:
+            raise OperatorError(502, "PRINTFUL_MOCKUP_GENERATION_FAILED")
+        try:
+            data = response.json().get("data")
+        except (ValueError, AttributeError):
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE") from None
+        if (not isinstance(data, list) or not data or not isinstance(data[0], dict)
+                or not isinstance(data[0].get("id"), int)):
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+        ids = [item["id"] for item in data if isinstance(item, dict)
+               and isinstance(item.get("id"), int)]
+        return {"templateId": template_id, "taskIds": ids}
+
+    async def mockup_task(self, task_id):
+        payload = await self.get("/v2/mockup-tasks", {"id": task_id})
+        data = payload.get("data")
+        if not isinstance(data, list) or not data or not isinstance(data[0], dict):
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+        task = data[0]
+        mockups = []
+        for variant in _list(task.get("catalog_variant_mockups")):
+            if not isinstance(variant, dict):
+                continue
+            for item in _list(variant.get("mockups")):
+                if isinstance(item, dict) and _text(item.get("mockup_url")):
+                    mockups.append({"url": item["mockup_url"], "variantId": variant.get("catalog_variant_id"),
+                                    "placement": item.get("placement"), "view": item.get("display_name"),
+                                    "technique": item.get("technique"), "styleId": item.get("style_id")})
+        return {"id": task.get("id"), "status": task.get("status"), "mockups": mockups,
+                "failed": bool(_list(task.get("failure_reasons")))}

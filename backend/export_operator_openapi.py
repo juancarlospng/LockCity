@@ -88,6 +88,22 @@ def contract():
             {"type": "object", "required": ["mockups"], "properties": {
                 "mockups": {"type": "array", "items": {
                     "$ref": "#/components/schemas/PrintfulMockup"}}}}]},
+        "MockupStyles": {"type": "object", "properties": {
+            "templateId": {"type": "integer"}, "availableVariantIds": {"type": "array", "items": {"type": "integer"}},
+            "colors": {"type": "array", "items": {"type": "object"}},
+            "placements": {"type": "array", "items": {"type": "object"}},
+            "styles": {"type": "array", "items": {"type": "object"}}}},
+        "MockupRequest": {"type": "object", "required": ["variantIds", "styleIds"],
+                          "additionalProperties": False, "properties": {
+                              "variantIds": {"type": "array", "minItems": 1, "maxItems": 20,
+                                             "items": {"type": "integer", "minimum": 1}},
+                              "styleIds": {"type": "array", "minItems": 1, "maxItems": 10,
+                                           "items": {"type": "integer", "minimum": 1}}}},
+        "MockupTaskCreated": {"type": "object", "properties": {
+            "templateId": {"type": "integer"}, "taskIds": {"type": "array", "items": {"type": "integer"}}}},
+        "MockupTask": {"type": "object", "properties": {
+            "id": {"type": "integer"}, "status": {"type": "string"},
+            "failed": {"type": "boolean"}, "mockups": {"type": "array", "items": {"type": "object"}}}},
         "PrintfulSyncProduct": {"type": "object", "required": [
             "syncProductId", "externalId", "name", "variantCount", "syncedCount",
             "thumbnailUrl", "ignored", "variants"], "properties": {
@@ -121,6 +137,9 @@ def contract():
         ("/printful/status", "get", "getPrintfulStatus", "PrintfulStatus", []),
         ("/printful/templates", "get", "getPrintfulTemplates", "PrintfulTemplateList", printful_pagination),
         ("/printful/templates/{id}", "get", "getPrintfulTemplate", "PrintfulTemplateDetail", identifier),
+        ("/printful/templates/{id}/mockup-styles", "get", "getPrintfulMockupStyles", "MockupStyles", identifier),
+        ("/printful/templates/{id}/mockup-tasks", "post", "createPrintfulMockupTask", "MockupTaskCreated", identifier),
+        ("/printful/mockup-tasks/{id}", "get", "getPrintfulMockupTask", "MockupTask", identifier),
         ("/printful/sync-products", "get", "getPrintfulSyncProducts",
          "PrintfulSyncProductList", printful_pagination),
         ("/printful/sync-products/{id}", "get", "getPrintfulSyncProduct",
@@ -148,6 +167,11 @@ def contract():
                 "External WordPress edits are not protected by an atomic compare-and-swap.")
             operation["requestBody"] = {"required": True, "content": {"application/json": {
                 "schema": {"$ref": "#/components/schemas/Rename"}}}}
+        if operation_id == "createPrintfulMockupTask":
+            operation["description"] = ("Generate images for one existing Printful template. Requires the separate "
+                                        "PRINTFUL_MOCKUP_GENERATION_ENABLED flag; does not publish products.")
+            operation["requestBody"] = {"required": True, "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/MockupRequest"}}}}
         paths.setdefault("/api/operator/v1" + suffix, {})[method] = operation
     return {
         "openapi": "3.1.0", "info": {

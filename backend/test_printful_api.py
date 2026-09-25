@@ -196,6 +196,15 @@ class Printful:
     async def sync_product(self, product_id):
         return {"syncProductId": product_id}
 
+    async def mockup_styles(self, template_id):
+        return {"templateId": template_id, "styles": []}
+
+    async def create_mockup_task(self, template_id, variant_ids, style_ids):
+        return {"templateId": template_id, "taskIds": [101]}
+
+    async def mockup_task(self, task_id):
+        return {"id": task_id, "status": "completed", "mockups": []}
+
 
 @pytest.mark.parametrize("path", [
     "/api/operator/v1/printful/status",
@@ -203,6 +212,8 @@ class Printful:
     "/api/operator/v1/printful/templates/12",
     "/api/operator/v1/printful/sync-products",
     "/api/operator/v1/printful/sync-products/99",
+    "/api/operator/v1/printful/templates/12/mockup-styles",
+    "/api/operator/v1/printful/mockup-tasks/101",
 ])
 def test_operator_routes_require_auth(monkeypatch, path):
     monkeypatch.setenv("OPERATOR_API_TOKEN", "o" * 32)
@@ -238,6 +249,90 @@ def test_operator_routes_are_get_only_and_writes_stay_disabled(monkeypatch):
     assert run(request("PUT", "/api/operator/v1/printful/sync-products/1")).status_code == 405
     assert run(request("DELETE", "/api/operator/v1/printful/templates/1")).status_code == 405
     assert os.getenv("OPERATOR_WRITES_ENABLED") == "false"
+
+
+def test_mockup_generation_is_separately_gated(monkeypatch):
+    monkeypatch.setenv("OPERATOR_API_TOKEN", "o" * 32)
+    monkeypatch.setenv("OPERATOR_WRITES_ENABLED", "false")
+    monkeypatch.delenv("PRINTFUL_MOCKUP_GENERATION_ENABLED", raising=False)
+    app = FastAPI()
+    app.include_router(create_router(Store(), printful=Printful()))
+
+    async def request(body, authenticated=True):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://test") as client:
+            return await client.post("/api/operator/v1/printful/templates/12/mockup-tasks", json=body,
+                                     headers={"Authorization": "Bearer " + "o" * 32} if authenticated else {})
+
+    body = {"variantIds": [4016], "styleIds": [12]}
+    assert run(request(body, False)).status_code == 401
+    assert run(request(body)).json() == {"error": "MOCKUP_GENERATION_DISABLED"}
+    monkeypatch.setenv("PRINTFUL_MOCKUP_GENERATION_ENABLED", "true")
+    assert run(request({"variantIds": [], "styleIds": [12]})).status_code == 400
+    assert run(request({"variantIds": [True], "styleIds": [12]})).status_code == 400
+    assert run(request(body)).json() == {"templateId": 12, "taskIds": [101]}
+    assert os.getenv("OPERATOR_WRITES_ENABLED") == "false"
+
+
+def test_printful_task_generation_and_result(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("PRINTFUL_STORE_ID", "321")
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if request.url.path == "/product-templates/12":
+            return httpx.Response(200, json={"code": 200, "result": template_payload()})
+        if request.url.path.endswith("/mockup-styles"):
+            return httpx.Response(200, json={
+                "data": [{"placement": "front", "display_name": "Front", "mockup_styles": [
+                    {"id": 3, "category_name": "Flat", "view_name": "Front",
+                     "restricted_to_variants": [4016]}]}], "paging": {"total": 1}})
+        if request.method == "POST":
+            assert request.headers["X-PF-Store-Id"] == "321"
+            assert request.content and b'"source": "product_template"' in request.content
+            return httpx.Response(200, json={"data": [{"id": 987, "status": "pending"}]})
+        return httpx.Response(200, json={"data": [{
+            "id": 987, "status": "completed", "catalog_variant_mockups": [{
+                "catalog_variant_id": 4016, "mockups": [{
+                    "mockup_url": "https://example.invalid/generated.jpg", "placement": "front",
+                    "display_name": "Front", "style_id": 3, "technique": "dtg"}]}]}]})
+
+    client = client_for(handler)
+    assert run(client.create_mockup_task(12, [4016], [3])) == {"templateId": 12, "taskIds": [987]}
+    result = run(client.mockup_task(987))
+    assert result["mockups"][0]["variantId"] == 4016
+    assert result["mockups"][0]["placement"] == "front"
+    assert result["mockups"][0]["view"] == "Front"
+    assert [request.method for request in requests] == ["GET", "GET", "GET", "POST", "GET"]
+
+
+@pytest.mark.parametrize("upstream,status,code", [
+    (400, 502, "PRINTFUL_MOCKUP_REQUEST_REJECTED"),
+    (401, 502, "PRINTFUL_UNAUTHORIZED"),
+    (403, 502, "PRINTFUL_FORBIDDEN"),
+    (404, 404, "PRINTFUL_NOT_FOUND"),
+    (429, 503, "PRINTFUL_RATE_LIMITED"),
+    (500, 502, "PRINTFUL_UNAVAILABLE"),
+])
+def test_mockup_generation_errors_are_sanitized(monkeypatch, upstream, status, code):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("PRINTFUL_STORE_ID", "321")
+
+    def handler(request):
+        if request.url.path == "/product-templates/12":
+            return httpx.Response(200, json={"code": 200, "result": template_payload()})
+        if request.url.path.endswith("/mockup-styles"):
+            return httpx.Response(200, json={
+                "data": [{"placement": "front", "mockup_styles": [
+                    {"id": 3, "restricted_to_variants": [4016]}]}],
+                "paging": {"total": 1}})
+        return httpx.Response(upstream, json={"error": {"message": TOKEN}})
+
+    with pytest.raises(OperatorError) as error:
+        run(client_for(handler).create_mockup_task(12, [4016], [3]))
+    assert (error.value.status, error.value.code) == (status, code)
+    assert TOKEN not in error.value.code
 
 
 def test_secret_never_appears_in_operator_response(monkeypatch):

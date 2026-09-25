@@ -13,6 +13,7 @@ def test_export_matches_routes_and_has_only_operator_endpoints():
     app.include_router(create_router(None))
     actual = {(route.path.replace("{product_id}", "{id}")
                .replace("{template_id}", "{id}")
+               .replace("{task_id}", "{id}")
                .replace("{sync_product_id}", "{id}"), method.lower())
               for route in app.routes if route.path.startswith("/api/operator/v1/")
               for method in route.methods}
@@ -21,7 +22,8 @@ def test_export_matches_routes_and_has_only_operator_endpoints():
     assert {op["operationId"] for ops in document["paths"].values() for op in ops.values()} == {
         "getStatus", "getProducts", "getProduct", "updateProduct", "getAudit",
         "getPrintfulStatus", "getPrintfulTemplates", "getPrintfulTemplate",
-        "getPrintfulSyncProducts", "getPrintfulSyncProduct"}
+        "getPrintfulSyncProducts", "getPrintfulSyncProduct", "getPrintfulMockupStyles",
+        "createPrintfulMockupTask", "getPrintfulMockupTask"}
     assert document["components"]["securitySchemes"]["OperatorBearer"] == {"type": "http", "scheme": "bearer"}
     assert document["servers"] == [{"url": "https://lock-city-operator-api.onrender.com"}]
     assert all(op["security"] == [{"OperatorBearer": []}]

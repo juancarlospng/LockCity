@@ -416,6 +416,41 @@ def create_router(store, woo=None, printful=None):
             return 200, await printful_client.template(valid_id(template_id))
         return await dispatch(request, action)
 
+    @router.get("/printful/templates/{template_id}/mockup-styles")
+    async def printful_mockup_styles(template_id: str, request: Request):
+        async def action():
+            return 200, await printful_client.mockup_styles(valid_id(template_id))
+        return await dispatch(request, action)
+
+    @router.post("/printful/templates/{template_id}/mockup-tasks")
+    async def create_printful_mockup_task(template_id: str, request: Request):
+        async def action():
+            if os.getenv("PRINTFUL_MOCKUP_GENERATION_ENABLED") != "true":
+                raise OperatorError(403, "MOCKUP_GENERATION_DISABLED")
+            raw = await request.body()
+            if len(raw) > 2048:
+                raise OperatorError(413, "BODY_TOO_LARGE")
+            try:
+                body = json.loads(raw)
+                if not isinstance(body, dict) or set(body) != {"variantIds", "styleIds"}:
+                    raise ValueError()
+                variant_ids, style_ids = body["variantIds"], body["styleIds"]
+                for values, limit in ((variant_ids, 20), (style_ids, 10)):
+                    if (not isinstance(values, list) or not 1 <= len(values) <= limit
+                            or len(set(map(str, values))) != len(values)
+                            or any(type(value) is not int or value < 1 for value in values)):
+                        raise ValueError()
+            except (ValueError, TypeError):
+                raise OperatorError(400, "INVALID_MOCKUP_REQUEST") from None
+            return 200, await printful_client.create_mockup_task(valid_id(template_id), variant_ids, style_ids)
+        return await dispatch(request, action)
+
+    @router.get("/printful/mockup-tasks/{task_id}")
+    async def printful_mockup_task(task_id: str, request: Request):
+        async def action():
+            return 200, await printful_client.mockup_task(valid_id(task_id))
+        return await dispatch(request, action)
+
     @router.get("/printful/sync-products")
     async def printful_sync_products(request: Request):
         async def action():
