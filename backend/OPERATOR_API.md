@@ -62,6 +62,9 @@ The Printful integration only implements upstream GET requests. It applies a
 15-second timeout, does not retry mutations (none exist), normalizes returned
 records, and converts upstream failures into error codes without returning raw
 Printful messages or request headers.
+Template detail responses include a deduplicated `mockups` array. Printful's
+documented `mockup_file_url` is preserved as `mockupUrl` and also becomes a
+gallery entry when no richer per-image metadata is supplied upstream.
 
 PATCH accepts exactly `name`, `reason`, `expected_version`, and `idempotency_key`.
 It reads before writing, checks the complete product version, reserves a hashed

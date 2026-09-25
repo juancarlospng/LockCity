@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 
 from operator_api import OperatorError, create_router
-from printful_api import PrintfulClient
+from printful_api import PrintfulClient, normalize_template_detail
 
 
 TOKEN = "printful-test-token-that-must-never-leak"
@@ -87,7 +87,40 @@ def test_single_template_normalization(monkeypatch):
         assert request.url.path == "/product-templates/12"
         return httpx.Response(200, json={"code": 200, "result": template_payload()})
 
-    assert run(client_for(handler).template(12))["catalogProductId"] == 71
+    result = run(client_for(handler).template(12))
+    assert result["catalogProductId"] == 71
+    assert result["mockups"] == [{
+        "url": "https://example.invalid/mockup.jpg", "placement": None,
+        "position": None, "color": None, "variantIds": [], "type": None,
+    }]
+
+
+def test_template_multiple_mockups_are_normalized_and_deduplicated():
+    raw = template_payload()
+    raw["mockups"] = [
+        {"mockup_url": "https://example.invalid/front.jpg", "placement": "front",
+         "position": "front", "color": "Black", "variant_ids": [4016], "type": "flat"},
+        {"image_url": "https://example.invalid/back.jpg", "placement": "back",
+         "view_name": "back", "color_name": "Black", "restricted_to_variants": [4017]},
+        {"url": "https://example.invalid/front.jpg", "placement": "duplicate"},
+    ]
+    result = normalize_template_detail(raw)
+    assert [item["url"] for item in result["mockups"]] == [
+        "https://example.invalid/front.jpg",
+        "https://example.invalid/back.jpg",
+        "https://example.invalid/mockup.jpg",
+    ]
+    assert result["mockups"][0] == {
+        "url": "https://example.invalid/front.jpg", "placement": "front",
+        "position": "front", "color": "Black", "variantIds": [4016], "type": "flat",
+    }
+    assert result["mockups"][1]["variantIds"] == [4017]
+
+
+def test_template_without_mockups_returns_empty_gallery():
+    raw = template_payload()
+    raw.pop("mockup_file_url")
+    assert normalize_template_detail(raw)["mockups"] == []
 
 
 def test_sync_product_normalization(monkeypatch):

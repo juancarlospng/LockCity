@@ -76,6 +76,18 @@ def contract():
             "items": {"type": "array", "items": {"$ref": "#/components/schemas/PrintfulTemplate"}},
             "limit": {"type": "integer"}, "offset": {"type": "integer"},
             "total": {"type": ["integer", "null"]}}},
+        "PrintfulMockup": {"type": "object", "required": [
+            "url", "placement", "position", "color", "variantIds", "type"],
+            "properties": {
+                "url": {"type": "string"}, "placement": {"type": ["string", "null"]},
+                "position": {"type": ["string", "null"]}, "color": {"type": ["string", "null"]},
+                "variantIds": {"type": "array", "items": {"type": "integer"}},
+                "type": {"type": ["string", "null"]}}},
+        "PrintfulTemplateDetail": {"allOf": [
+            {"$ref": "#/components/schemas/PrintfulTemplate"},
+            {"type": "object", "required": ["mockups"], "properties": {
+                "mockups": {"type": "array", "items": {
+                    "$ref": "#/components/schemas/PrintfulMockup"}}}}]},
         "PrintfulSyncProduct": {"type": "object", "required": [
             "syncProductId", "externalId", "name", "variantCount", "syncedCount",
             "thumbnailUrl", "ignored", "variants"], "properties": {
@@ -108,7 +120,7 @@ def contract():
         ("/audit", "get", "getAudit", "Audit", pagination),
         ("/printful/status", "get", "getPrintfulStatus", "PrintfulStatus", []),
         ("/printful/templates", "get", "getPrintfulTemplates", "PrintfulTemplateList", printful_pagination),
-        ("/printful/templates/{id}", "get", "getPrintfulTemplate", "PrintfulTemplate", identifier),
+        ("/printful/templates/{id}", "get", "getPrintfulTemplate", "PrintfulTemplateDetail", identifier),
         ("/printful/sync-products", "get", "getPrintfulSyncProducts",
          "PrintfulSyncProductList", printful_pagination),
         ("/printful/sync-products/{id}", "get", "getPrintfulSyncProduct",

@@ -857,7 +857,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PrintfulTemplate"
+                  "$ref": "#/components/schemas/PrintfulTemplateDetail"
                 }
               }
             }
@@ -1558,6 +1558,73 @@
             ]
           }
         }
+      },
+      "PrintfulMockup": {
+        "type": "object",
+        "required": [
+          "url",
+          "placement",
+          "position",
+          "color",
+          "variantIds",
+          "type"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "placement": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "variantIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PrintfulTemplateDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PrintfulTemplate"
+          },
+          {
+            "type": "object",
+            "required": [
+              "mockups"
+            ],
+            "properties": {
+              "mockups": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PrintfulMockup"
+                }
+              }
+            }
+          }
+        ]
       },
       "PrintfulSyncProduct": {
         "type": "object",

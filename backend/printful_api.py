@@ -45,6 +45,63 @@ def normalize_template(raw):
     }
 
 
+def _text(value):
+    return value if isinstance(value, str) and value else None
+
+
+def _variant_ids(raw):
+    for key in ("variant_ids", "catalog_variant_ids", "restricted_to_variants"):
+        value = raw.get(key)
+        if isinstance(value, list):
+            return [item for item in value
+                    if isinstance(item, int) and not isinstance(item, bool)]
+    return []
+
+
+def normalize_mockups(raw):
+    """Normalize documented and optional template image fields without inventing metadata."""
+    candidates = []
+    for key in ("mockups", "mockup_files", "images"):
+        value = raw.get(key)
+        if isinstance(value, list):
+            candidates.extend(value)
+    primary = raw.get("mockup_file_url")
+    if isinstance(primary, str) and primary:
+        candidates.append({"url": primary})
+
+    result = []
+    seen = set()
+    for item in candidates:
+        if isinstance(item, str):
+            item = {"url": item}
+        if not isinstance(item, dict):
+            continue
+        url = next((_text(item.get(key)) for key in (
+            "url", "mockup_url", "image_url", "file_url", "preview_url")
+                    if _text(item.get(key))), None)
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        result.append({
+            "url": url,
+            "placement": _text(item.get("placement")) or _text(item.get("placement_id")),
+            "position": (_text(item.get("position")) or _text(item.get("view_name"))
+                         or _text(item.get("position_name"))),
+            "color": (_text(item.get("color")) or _text(item.get("color_name"))
+                      or _text(item.get("background_color"))),
+            "variantIds": _variant_ids(item),
+            "type": (_text(item.get("type")) or _text(item.get("mockup_type"))
+                     or _text(item.get("style"))),
+        })
+    return result
+
+
+def normalize_template_detail(raw):
+    template = normalize_template(raw)
+    template["mockups"] = normalize_mockups(raw)
+    return template
+
+
 def normalize_sync_variant(raw):
     if not isinstance(raw, dict) or not isinstance(raw.get("id"), int):
         raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
@@ -165,7 +222,10 @@ class PrintfulClient:
 
     async def template(self, template_id):
         payload = await self.get(f"/product-templates/{template_id}")
-        return normalize_template(payload.get("result"))
+        result = payload.get("result")
+        if not isinstance(result, dict):
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+        return normalize_template_detail(result)
 
     async def sync_products(self, limit, offset):
         payload = await self.get("/sync/products", {"limit": limit, "offset": offset},
