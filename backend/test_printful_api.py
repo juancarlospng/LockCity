@@ -588,6 +588,7 @@ def test_printful_task_generation_and_result(monkeypatch):
             assert request.headers["X-PF-Store-Id"] == "321"
             assert request.content and b'"source": "product_template"' in request.content
             return httpx.Response(200, json={"data": [{"id": 987, "status": "pending"}]})
+        assert request.headers["X-PF-Store-Id"] == "321"
         return httpx.Response(200, json={"data": [{
             "id": 987, "status": "completed", "catalog_variant_mockups": [{
                 "catalog_variant_id": 4016, "mockups": [{

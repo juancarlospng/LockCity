@@ -604,7 +604,8 @@ class PrintfulClient:
         return {"templateId": template_id, "taskIds": ids}
 
     async def mockup_task(self, task_id):
-        payload = await self.get("/v2/mockup-tasks", {"id": task_id})
+        payload = await self.get("/v2/mockup-tasks", {"id": task_id},
+                                 await self.store_headers())
         data = payload.get("data")
         if not isinstance(data, list) or not data or not isinstance(data[0], dict):
             raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
