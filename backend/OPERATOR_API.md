@@ -17,6 +17,7 @@ Apply migrations in order:
 ```text
 psql $DATABASE_URL -f backend/supabase/migrations/001_initial_schema.sql
 psql $DATABASE_URL -f backend/supabase/migrations/002_operator_api.sql
+psql $DATABASE_URL -f backend/supabase/migrations/003_operator_mockup_audit.sql
 ```
 
 Migration 002 creates `operator_audit` and `operator_locks`. Both tables have RLS
@@ -34,6 +35,9 @@ The database credential and all API credentials belong only in Render secrets.
 - `PRINTFUL_STORE_ID` — optional server-side Printful store identifier. It is only
   required when an account-level token can access more than one WooCommerce store;
   a single WooCommerce store is selected automatically through the read-only Stores API.
+- `PRINTFUL_MOCKUP_GENERATION_ENABLED` — set to `true` only on the Operator API when
+  generating review mockups. This permits only Printful mockup task creation;
+  `OPERATOR_WRITES_ENABLED` stays `false` and WooCommerce writes remain blocked.
 - `OPERATOR_API_TOKEN` — secret Bearer token, at least 32 characters.
 - `OPERATOR_WRITES_ENABLED` — set to `false`; `start.py` also forces it to false.
 - `PORT` — provided by Render.
@@ -55,13 +59,47 @@ The database credential and all API credentials belong only in Render secrets.
 - `GET /api/operator/v1/printful/status`
 - `GET /api/operator/v1/printful/templates?limit=20&offset=0`
 - `GET /api/operator/v1/printful/templates/{id}`
+- `GET /api/operator/v1/printful/templates/{id}/mockup-styles`
+- `POST /api/operator/v1/printful/templates/{id}/mockup-tasks/dry-run`
+- `POST /api/operator/v1/printful/templates/{id}/mockup-tasks`
+- `GET /api/operator/v1/printful/mockup-tasks/{id}`
 - `GET /api/operator/v1/printful/sync-products?limit=20&offset=0`
 - `GET /api/operator/v1/printful/sync-products/{id}`
 
-The Printful integration only implements upstream GET requests. It applies a
-15-second timeout, does not retry mutations (none exist), normalizes returned
-records, and converts upstream failures into error codes without returning raw
-Printful messages or request headers.
+The Printful integration uses GET for product and task data. Only the dedicated
+mockup task route sends a POST upstream, generating temporary review images
+without creating or publishing a product. Generation is restricted to the 17
+IDs in `AW26_TEMPLATE_IDS` and requires an independently enabled flag. The
+dry-run endpoint works while generation is disabled. It reads the template,
+catalog variants and supported styles; selects one representative variant per
+color (M, then S, then the first available size); uses the Product Template's
+placements as the source of truth; and records a single-use plan. Its response
+groups every supported style by placement, orders compatible editorial
+candidates without hiding the complete style list, and reports planned tasks
+separately from estimated generated files. Styles with different compatible
+variant sets are grouped into separate tasks; multiple placements/styles can
+share one task when their variant set matches.
+It never sends a POST to Printful. Generation accepts only the `planId` returned
+by that dry run: `{"planId":"<uuid>"}`. There is no generate-all endpoint.
+For a controlled pilot, the dry-run may receive an exact selection body such as
+`{"variantIds":[23054],"styleIds":[27318,27316]}`. Both unique, non-empty lists
+are checked against the template and its live capabilities before the plan is saved.
+Poll each returned `taskKeys` value explicitly via GET. Do not poll rapidly.
+The generated URLs are temporary editorial-review files and are never uploaded
+to WooCommerce or stored as permanent product assets by this API.
+Completed task results require every requested style to be present. Printful may
+return additional compatible files; they are accepted only when their style is
+supported by the same catalog product and their variant matches the stored plan.
+Such results use `PASS_WITH_EXTRA_OUTPUT`, list the IDs in `extraStyleIds`, and
+mark each extra file with `extraUpstreamOutput: true`. `designPlacement` remains
+separate from the photographed `mockupStyleName` and `mockupViewName`. Editorial
+recommendations contain style IDs only; temporary output URLs are not persisted.
+Do not put bearer tokens in browser URLs. The API does not persist tasks, so
+record returned IDs before moving to the next template. Printful rate limits
+task generation; allow at least 30 seconds between requests if the store is new.
+Mockup plans and status checks are audited in server-only Postgres tables with
+template ID, action, task key, status and timestamp. Failures are sanitized; no
+raw Printful messages, credentials or request headers are stored or returned.
 Template detail responses include a deduplicated `mockups` array. Printful's
 documented `mockup_file_url` is preserved as `mockupUrl` and also becomes a
 gallery entry when no richer per-image metadata is supplied upstream.

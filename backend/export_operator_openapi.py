@@ -88,6 +88,74 @@ def contract():
             {"type": "object", "required": ["mockups"], "properties": {
                 "mockups": {"type": "array", "items": {
                     "$ref": "#/components/schemas/PrintfulMockup"}}}}]},
+        "MockupStyleCandidate": {"type": "object", "required": [
+            "id", "category", "view", "restrictedVariantIds"], "properties": {
+                "id": {"type": "integer"}, "category": {"type": ["string", "null"]},
+                "view": {"type": ["string", "null"]},
+                "restrictedVariantIds": {"type": "array", "items": {"type": "integer"}}}},
+        "MockupStyles": {"type": "object", "properties": {
+            "templateId": {"type": "integer"}, "availableVariantIds": {"type": "array", "items": {"type": "integer"}},
+            "colors": {"type": "array", "items": {"type": "object"}},
+            "placements": {"type": "array", "items": {"type": "object"}},
+            "templatePlacements": {"type": "array", "items": {"type": "string"}},
+            "stylesByPlacement": {"type": "object", "additionalProperties": {
+                "type": "array", "items": {"$ref": "#/components/schemas/MockupStyleCandidate"}}},
+            "styles": {"type": "array", "items": {"type": "object"}}}},
+        "MockupPlan": {"type": "object", "properties": {
+            "planId": {"type": "string", "format": "uuid"},
+            "templateId": {"type": "integer"}, "product": {"type": "object"},
+            "selectedRepresentativeVariants": {"type": "array", "items": {"type": "object"}},
+            "colors": {"type": "array", "items": {"type": ["string", "null"]}},
+            "templatePlacements": {"type": "array", "items": {"type": "string"}},
+            "supportedStylesByPlacement": {"type": "object", "additionalProperties": {
+                "type": "array", "items": {"$ref": "#/components/schemas/MockupStyleCandidate"}}},
+            "recommendedCandidateStylesByPlacement": {"type": "object", "additionalProperties": {
+                "type": "array", "items": {"$ref": "#/components/schemas/MockupStyleCandidate"}}},
+            "plannedMockupStyleIds": {"type": "array", "items": {"type": "integer"}},
+            "estimatedGeneratedFiles": {"type": "integer"},
+            "plannedTaskCount": {"type": "integer"},
+            "placements": {"type": "array", "items": {"type": "string"}},
+            "requestedStyles": {"type": "array", "items": {"type": "object"}},
+            "estimatedTaskCount": {"type": "integer"}}},
+        "MockupPlanSelection": {"type": "object", "required": ["variantIds", "styleIds"],
+                                "additionalProperties": False, "properties": {
+                                    "variantIds": {"type": "array", "minItems": 1,
+                                                   "maxItems": 20, "uniqueItems": True,
+                                                   "items": {"type": "integer", "minimum": 1}},
+                                    "styleIds": {"type": "array", "minItems": 1,
+                                                 "maxItems": 50, "uniqueItems": True,
+                                                 "items": {"type": "integer", "minimum": 1}}}},
+        "MockupRequest": {"type": "object", "required": ["planId"],
+                          "additionalProperties": False, "properties": {
+                              "planId": {"type": "string", "format": "uuid"}}},
+        "MockupTaskCreated": {"type": "object", "properties": {
+            "templateId": {"type": "integer"}, "planId": {"type": "string", "format": "uuid"},
+            "taskKeys": {"type": "array", "items": {"type": "integer"}},
+            "status": {"type": "string"},
+            "requestedVariants": {"type": "array", "items": {"type": "object"}},
+            "requestedStyles": {"type": "array", "items": {"type": "object"}}}},
+        "MockupTaskOutput": {"type": "object", "properties": {
+            "url": {"type": "string", "format": "uri"},
+            "variantId": {"type": "integer"},
+            "designPlacement": {"type": ["string", "null"]},
+            "mockupStyleId": {"type": "integer"},
+            "mockupStyleName": {"type": ["string", "null"]},
+            "mockupViewName": {"type": ["string", "null"]},
+            "technique": {"type": ["string", "null"]},
+            "dimensions": {"type": ["object", "null"]},
+            "extraUpstreamOutput": {"type": "boolean"}}},
+        "MockupTask": {"type": "object", "properties": {
+            "id": {"type": "integer"}, "status": {"type": "string"},
+            "failed": {"type": "boolean"},
+            "resultStatus": {"type": ["string", "null"], "enum": [
+                "PASS", "PASS_WITH_EXTRA_OUTPUT", "FAIL", None]},
+            "requestedStylesPresent": {"type": "boolean"},
+            "missingStyleIds": {"type": "array", "items": {"type": "integer"}},
+            "extraStyleIds": {"type": "array", "items": {"type": "integer"}},
+            "validationErrors": {"type": "array", "items": {"type": "string"}},
+            "mockups": {"type": "array", "items": {
+                "$ref": "#/components/schemas/MockupTaskOutput"}},
+            "editorialRecommendation": {"type": ["object", "null"]}}},
         "PrintfulSyncProduct": {"type": "object", "required": [
             "syncProductId", "externalId", "name", "variantCount", "syncedCount",
             "thumbnailUrl", "ignored", "variants"], "properties": {
@@ -121,6 +189,10 @@ def contract():
         ("/printful/status", "get", "getPrintfulStatus", "PrintfulStatus", []),
         ("/printful/templates", "get", "getPrintfulTemplates", "PrintfulTemplateList", printful_pagination),
         ("/printful/templates/{id}", "get", "getPrintfulTemplate", "PrintfulTemplateDetail", identifier),
+        ("/printful/templates/{id}/mockup-styles", "get", "getPrintfulMockupStyles", "MockupStyles", identifier),
+        ("/printful/templates/{id}/mockup-tasks/dry-run", "post", "createPrintfulMockupPlan", "MockupPlan", identifier),
+        ("/printful/templates/{id}/mockup-tasks", "post", "createPrintfulMockupTask", "MockupTaskCreated", identifier),
+        ("/printful/mockup-tasks/{id}", "get", "getPrintfulMockupTask", "MockupTask", identifier),
         ("/printful/sync-products", "get", "getPrintfulSyncProducts",
          "PrintfulSyncProductList", printful_pagination),
         ("/printful/sync-products/{id}", "get", "getPrintfulSyncProduct",
@@ -148,6 +220,18 @@ def contract():
                 "External WordPress edits are not protected by an atomic compare-and-swap.")
             operation["requestBody"] = {"required": True, "content": {"application/json": {
                 "schema": {"$ref": "#/components/schemas/Rename"}}}}
+        if operation_id == "createPrintfulMockupPlan":
+            operation["description"] = ("Build and audit an AW26 representative-color mockup plan using only "
+                                        "Printful GET requests. An optional exact variant/style selection is "
+                                        "validated against the template. It never creates a Printful task.")
+            operation["requestBody"] = {"required": False, "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/MockupPlanSelection"}}}}
+        if operation_id == "createPrintfulMockupTask":
+            operation["description"] = ("Generate images for one existing Printful template. Requires the separate "
+                                        "PRINTFUL_MOCKUP_GENERATION_ENABLED flag and a prior dry-run plan; "
+                                        "does not publish products.")
+            operation["requestBody"] = {"required": True, "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/MockupRequest"}}}}
         paths.setdefault("/api/operator/v1" + suffix, {})[method] = operation
     return {
         "openapi": "3.1.0", "info": {
