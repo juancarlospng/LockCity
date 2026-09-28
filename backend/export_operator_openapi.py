@@ -134,9 +134,28 @@ def contract():
             "status": {"type": "string"},
             "requestedVariants": {"type": "array", "items": {"type": "object"}},
             "requestedStyles": {"type": "array", "items": {"type": "object"}}}},
+        "MockupTaskOutput": {"type": "object", "properties": {
+            "url": {"type": "string", "format": "uri"},
+            "variantId": {"type": "integer"},
+            "designPlacement": {"type": ["string", "null"]},
+            "mockupStyleId": {"type": "integer"},
+            "mockupStyleName": {"type": ["string", "null"]},
+            "mockupViewName": {"type": ["string", "null"]},
+            "technique": {"type": ["string", "null"]},
+            "dimensions": {"type": ["object", "null"]},
+            "extraUpstreamOutput": {"type": "boolean"}}},
         "MockupTask": {"type": "object", "properties": {
             "id": {"type": "integer"}, "status": {"type": "string"},
-            "failed": {"type": "boolean"}, "mockups": {"type": "array", "items": {"type": "object"}}}},
+            "failed": {"type": "boolean"},
+            "resultStatus": {"type": ["string", "null"], "enum": [
+                "PASS", "PASS_WITH_EXTRA_OUTPUT", "FAIL", None]},
+            "requestedStylesPresent": {"type": "boolean"},
+            "missingStyleIds": {"type": "array", "items": {"type": "integer"}},
+            "extraStyleIds": {"type": "array", "items": {"type": "integer"}},
+            "validationErrors": {"type": "array", "items": {"type": "string"}},
+            "mockups": {"type": "array", "items": {
+                "$ref": "#/components/schemas/MockupTaskOutput"}},
+            "editorialRecommendation": {"type": ["object", "null"]}}},
         "PrintfulSyncProduct": {"type": "object", "required": [
             "syncProductId", "externalId", "name", "variantCount", "syncedCount",
             "thumbnailUrl", "ignored", "variants"], "properties": {

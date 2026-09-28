@@ -87,6 +87,13 @@ are checked against the template and its live capabilities before the plan is sa
 Poll each returned `taskKeys` value explicitly via GET. Do not poll rapidly.
 The generated URLs are temporary editorial-review files and are never uploaded
 to WooCommerce or stored as permanent product assets by this API.
+Completed task results require every requested style to be present. Printful may
+return additional compatible files; they are accepted only when their style is
+supported by the same catalog product and their variant matches the stored plan.
+Such results use `PASS_WITH_EXTRA_OUTPUT`, list the IDs in `extraStyleIds`, and
+mark each extra file with `extraUpstreamOutput: true`. `designPlacement` remains
+separate from the photographed `mockupStyleName` and `mockupViewName`. Editorial
+recommendations contain style IDs only; temporary output URLs are not persisted.
 Do not put bearer tokens in browser URLs. The API does not persist tasks, so
 record returned IDs before moving to the next template. Printful rate limits
 task generation; allow at least 30 seconds between requests if the store is new.

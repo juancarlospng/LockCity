@@ -28,6 +28,14 @@ AW26_TEMPLATE_IDS = frozenset({
     107660910,
 })
 
+AW26_EDITORIAL_RECOMMENDATIONS = {
+    105623495: {
+        "primaryStyleId": 27318,
+        "galleryStyleIds": [27316, 26784, 27317, 26780],
+        "optionalExtraStyleIds": [26783],
+    },
+}
+
 
 def _list(value):
     return value if isinstance(value, list) else []
@@ -151,6 +159,82 @@ def plan_mockup_batches(representative_variants, styles):
             style_ids.append(style["id"])
     return [{"variantIds": list(variants), "styleIds": style_ids}
             for variants, style_ids in batches.items()]
+
+
+def normalize_mockup_task_result(raw, task_id, context, supported_styles):
+    """Validate completed upstream output against its stored, authorized plan."""
+    requested_ids = {style["id"] for style in _list(context.get("styles"))
+                     if isinstance(style, dict) and isinstance(style.get("id"), int)}
+    authorized_variants = {variant["id"] for variant in _list(context.get("variants"))
+                           if isinstance(variant, dict)
+                           and isinstance(variant.get("id"), int)}
+    metadata = {}
+    for style in _list(supported_styles):
+        if isinstance(style, dict) and isinstance(style.get("id"), int):
+            metadata.setdefault(style["id"], style)
+
+    errors = []
+    if raw.get("id") != task_id:
+        errors.append("WRONG_TASK")
+    upstream_template = raw.get("templateId")
+    if (upstream_template is not None
+            and upstream_template != context.get("template_id")):
+        errors.append("WRONG_TEMPLATE")
+
+    normalized = []
+    returned_ids = set()
+    for item in _list(raw.get("mockups")):
+        if not isinstance(item, dict):
+            errors.append("INVALID_OUTPUT")
+            continue
+        style_id = item.get("styleId")
+        variant_id = item.get("variantId")
+        returned_ids.add(style_id)
+        style = metadata.get(style_id)
+        if style is None:
+            errors.append("UNSUPPORTED_EXTRA_STYLE" if style_id not in requested_ids
+                          else "UNSUPPORTED_REQUESTED_STYLE")
+        if variant_id not in authorized_variants:
+            errors.append("WRONG_VARIANT")
+        normalized.append({
+            "url": item.get("url"),
+            "variantId": variant_id,
+            "designPlacement": item.get("placement"),
+            "mockupStyleId": style_id,
+            "mockupStyleName": style.get("category") if style else None,
+            "mockupViewName": style.get("view") if style else None,
+            "technique": item.get("technique"),
+            "dimensions": item.get("dimensions"),
+            "extraUpstreamOutput": style_id not in requested_ids,
+        })
+
+    missing = sorted(requested_ids - returned_ids)
+    extras = sorted(style_id for style_id in returned_ids - requested_ids
+                    if isinstance(style_id, int))
+    if missing:
+        errors.append("MISSING_REQUESTED_STYLE")
+    if raw.get("failed"):
+        errors.append("UPSTREAM_TASK_FAILED")
+
+    completed = raw.get("status") == "completed"
+    result_status = None
+    if completed:
+        if errors:
+            result_status = "FAIL"
+        elif extras:
+            result_status = "PASS_WITH_EXTRA_OUTPUT"
+        else:
+            result_status = "PASS"
+
+    return {
+        **raw,
+        "mockups": normalized,
+        "resultStatus": result_status,
+        "requestedStylesPresent": not missing,
+        "missingStyleIds": missing,
+        "extraStyleIds": extras,
+        "validationErrors": list(dict.fromkeys(errors)),
+    }
 
 
 def normalize_mockups(raw):

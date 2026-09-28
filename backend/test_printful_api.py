@@ -7,7 +7,8 @@ from fastapi import FastAPI
 
 from operator_api import OperatorError, create_router
 from printful_api import (AW26_TEMPLATE_IDS, PrintfulClient, group_styles_by_placement,
-                          normalize_template_detail, plan_mockup_batches,
+                          normalize_mockup_task_result, normalize_template_detail,
+                          plan_mockup_batches,
                           recommend_styles_by_placement, select_representative_variants)
 
 
@@ -240,7 +241,9 @@ class Printful:
         return {"syncProductId": product_id}
 
     async def mockup_styles(self, template_id):
-        return {"templateId": template_id, "styles": []}
+        return {"templateId": template_id, "styles": [
+            {"id": 3, "placement": "front", "category": "Ghost",
+             "view": "Front", "variantIds": []}]}
 
     async def mockup_plan(self, template_id, variant_ids=None, style_ids=None):
         self.last_plan_selection = (variant_ids, style_ids)
@@ -264,7 +267,11 @@ class Printful:
         return {"templateId": template_id, "taskIds": [101]}
 
     async def mockup_task(self, task_id):
-        return {"id": task_id, "status": "completed", "mockups": []}
+        return {"id": task_id, "status": "completed", "failed": False,
+                "mockups": [{"url": "https://example.invalid/front.jpg",
+                             "variantId": 4016, "placement": "front",
+                             "view": "Front", "styleId": 3,
+                             "technique": "dtg", "dimensions": None}]}
 
 
 @pytest.mark.parametrize("path", [
@@ -602,6 +609,111 @@ def test_printful_task_generation_and_result(monkeypatch):
     assert result["mockups"][0]["placement"] == "front"
     assert result["mockups"][0]["view"] == "Front"
     assert [request.method for request in requests] == ["GET", "GET", "GET", "POST", "GET"]
+
+
+def pilot_context():
+    return {
+        "template_id": 105623495,
+        "variants": [{"id": 23054, "color": "Black", "size": "M"}],
+        "styles": [{"id": style_id} for style_id in [26780, 26784, 27316, 27317, 27318]],
+    }
+
+
+def pilot_supported_styles():
+    return [
+        {"id": 26780, "placement": "front", "category": "Ghost", "view": "Front"},
+        {"id": 26783, "placement": "back", "category": "Ghost", "view": "Back"},
+        {"id": 26784, "placement": "front", "category": "Ghost", "view": "Left"},
+        {"id": 27316, "placement": "front", "category": "Men's", "view": "Front"},
+        {"id": 27317, "placement": "back", "category": "Men's", "view": "Back"},
+        {"id": 27318, "placement": "front", "category": "Men's", "view": "Left Front"},
+    ]
+
+
+def pilot_task(style_ids=None, variant_id=23054, template_id=None):
+    style_ids = style_ids or [26780, 26784, 27316, 27317, 27318]
+    result = {
+        "id": 975313568,
+        "status": "completed",
+        "failed": False,
+        "mockups": [{
+            "url": f"https://example.invalid/{style_id}.jpg",
+            "variantId": variant_id,
+            # Printful reports the design placement here, not the photographed view.
+            "placement": "front",
+            "styleId": style_id,
+            "technique": "dtg",
+            "dimensions": None,
+        } for style_id in style_ids],
+    }
+    if template_id is not None:
+        result["templateId"] = template_id
+    return result
+
+
+def normalize_pilot(raw):
+    return normalize_mockup_task_result(
+        raw, 975313568, pilot_context(), pilot_supported_styles())
+
+
+def test_mockup_result_exact_requested_styles_passes():
+    result = normalize_pilot(pilot_task())
+    assert result["resultStatus"] == "PASS"
+    assert result["requestedStylesPresent"] is True
+    assert result["extraStyleIds"] == []
+
+
+def test_mockup_result_valid_upstream_extra_passes_with_extra_output():
+    result = normalize_pilot(pilot_task(
+        [26780, 26783, 26784, 27316, 27317, 27318]))
+    assert result["resultStatus"] == "PASS_WITH_EXTRA_OUTPUT"
+    assert result["requestedStylesPresent"] is True
+    assert result["extraStyleIds"] == [26783]
+    extra = next(item for item in result["mockups"]
+                 if item["mockupStyleId"] == 26783)
+    assert extra["extraUpstreamOutput"] is True
+
+
+def test_mockup_result_missing_requested_style_fails():
+    result = normalize_pilot(pilot_task([26780, 26784, 27316, 27317]))
+    assert result["resultStatus"] == "FAIL"
+    assert result["requestedStylesPresent"] is False
+    assert result["missingStyleIds"] == [27318]
+
+
+def test_mockup_result_unsupported_extra_style_fails():
+    result = normalize_pilot(pilot_task(
+        [26780, 26784, 27316, 27317, 27318, 99999]))
+    assert result["resultStatus"] == "FAIL"
+    assert "UNSUPPORTED_EXTRA_STYLE" in result["validationErrors"]
+
+
+def test_mockup_result_wrong_variant_fails():
+    result = normalize_pilot(pilot_task(variant_id=99999))
+    assert result["resultStatus"] == "FAIL"
+    assert "WRONG_VARIANT" in result["validationErrors"]
+
+
+def test_mockup_result_wrong_template_fails():
+    result = normalize_pilot(pilot_task(template_id=99999))
+    assert result["resultStatus"] == "FAIL"
+    assert "WRONG_TEMPLATE" in result["validationErrors"]
+
+
+def test_mockup_result_resolves_view_metadata_separately_from_design_placement():
+    result = normalize_pilot(pilot_task(
+        [26780, 26783, 26784, 27316, 27317, 27318]))
+    expected = {
+        26783: ("Ghost", "Back"),
+        26784: ("Ghost", "Left"),
+        27317: ("Men's", "Back"),
+        27318: ("Men's", "Left Front"),
+    }
+    for item in result["mockups"]:
+        if item["mockupStyleId"] in expected:
+            assert (item["mockupStyleName"], item["mockupViewName"]) == expected[
+                item["mockupStyleId"]]
+            assert item["designPlacement"] == "front"
 
 
 @pytest.mark.parametrize("upstream,status,code", [

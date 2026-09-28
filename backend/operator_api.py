@@ -402,7 +402,9 @@ class OperatorService:
 
 
 def create_router(store, woo=None, printful=None):
-    from printful_api import AW26_TEMPLATE_IDS, PrintfulClient, plan_mockup_batches
+    from printful_api import (AW26_EDITORIAL_RECOMMENDATIONS, AW26_TEMPLATE_IDS,
+                              PrintfulClient, normalize_mockup_task_result,
+                              plan_mockup_batches)
 
     router = APIRouter(prefix="/api/operator/v1")
     service = OperatorService(store, woo or WooClient())
@@ -633,7 +635,10 @@ def create_router(store, woo=None, printful=None):
             context = await store.mockup_task_context(task_id_int)
             if context is None:
                 raise OperatorError(404, "MOCKUP_TASK_NOT_FOUND")
-            result = await printful_client.mockup_task(task_id_int)
+            raw_result = await printful_client.mockup_task(task_id_int)
+            capabilities = await printful_client.mockup_styles(context["template_id"])
+            result = normalize_mockup_task_result(
+                raw_result, task_id_int, context, capabilities["styles"])
             await store.record_mockup_task_status(context, task_id_int, result["status"])
             return 200, {
                 **result,
@@ -642,6 +647,8 @@ def create_router(store, woo=None, printful=None):
                 "product": context["product"],
                 "requestedVariants": context["variants"],
                 "requestedStyles": context["styles"],
+                "editorialRecommendation": AW26_EDITORIAL_RECOMMENDATIONS.get(
+                    context["template_id"]),
             }
         return await dispatch(request, action)
 

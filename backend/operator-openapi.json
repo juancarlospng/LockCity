@@ -2340,6 +2340,54 @@
           }
         }
       },
+      "MockupTaskOutput": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "variantId": {
+            "type": "integer"
+          },
+          "designPlacement": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mockupStyleId": {
+            "type": "integer"
+          },
+          "mockupStyleName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mockupViewName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "technique": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dimensions": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "extraUpstreamOutput": {
+            "type": "boolean"
+          }
+        }
+      },
       "MockupTask": {
         "type": "object",
         "properties": {
@@ -2352,11 +2400,50 @@
           "failed": {
             "type": "boolean"
           },
+          "resultStatus": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "PASS",
+              "PASS_WITH_EXTRA_OUTPUT",
+              "FAIL",
+              null
+            ]
+          },
+          "requestedStylesPresent": {
+            "type": "boolean"
+          },
+          "missingStyleIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "extraStyleIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "validationErrors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "mockups": {
             "type": "array",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/MockupTaskOutput"
             }
+          },
+          "editorialRecommendation": {
+            "type": [
+              "object",
+              "null"
+            ]
           }
         }
       },
