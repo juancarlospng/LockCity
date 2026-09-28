@@ -1171,7 +1171,17 @@
             }
           }
         },
-        "description": "Build and audit an AW26 representative-color mockup plan using only Printful GET requests. It never creates a Printful task."
+        "description": "Build and audit an AW26 representative-color mockup plan using only Printful GET requests. An optional exact variant/style selection is validated against the template. It never creates a Printful task.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MockupPlanSelection"
+              }
+            }
+          }
+        }
       }
     },
     "/api/operator/v1/printful/templates/{id}/mockup-tasks": {
@@ -2251,6 +2261,36 @@
           },
           "estimatedTaskCount": {
             "type": "integer"
+          }
+        }
+      },
+      "MockupPlanSelection": {
+        "type": "object",
+        "required": [
+          "variantIds",
+          "styleIds"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "variantIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "styleIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         }
       },

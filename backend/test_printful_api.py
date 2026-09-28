@@ -225,6 +225,7 @@ class Store:
 class Printful:
     def __init__(self):
         self.created = 0
+        self.last_plan_selection = None
 
     async def templates(self, _limit, _offset):
         return {"items": [], "limit": 1, "offset": 0, "total": 0}
@@ -241,7 +242,8 @@ class Printful:
     async def mockup_styles(self, template_id):
         return {"templateId": template_id, "styles": []}
 
-    async def mockup_plan(self, template_id):
+    async def mockup_plan(self, template_id, variant_ids=None, style_ids=None):
+        self.last_plan_selection = (variant_ids, style_ids)
         return {"templateId": template_id, "product": {"id": 71, "name": "AW26 Tee"},
                 "selectedRepresentativeVariants": [{"id": 4016, "color": "Black", "size": "M"}],
                 "colors": ["Black"], "templatePlacements": ["front"],
@@ -399,6 +401,14 @@ def test_mockup_plan_uses_only_get_and_supported_capabilities(monkeypatch):
     assert [request.url.params["placements"] for request in style_requests] == [
         "front", "back", "sleeve_left"]
 
+    selected = run(client_for(handler).mockup_plan(12, [4016], [4, 5]))
+    assert selected["selectedRepresentativeVariants"] == [
+        {"id": 4016, "color": "Black", "size": "M"}]
+    assert selected["plannedMockupStyleIds"] == [4, 5]
+    assert [style["id"] for style in selected["requestedStyles"]] == [4, 5]
+    assert selected["estimatedGeneratedFiles"] == 2
+    assert selected["plannedTaskCount"] == 1
+
 
 def test_shared_style_ids_remain_grouped_but_are_planned_once(monkeypatch):
     monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
@@ -480,13 +490,14 @@ def test_dry_run_is_authenticated_allowlisted_and_never_generates(monkeypatch):
     app = FastAPI()
     app.include_router(create_router(store, printful=printful))
 
-    async def post(template_id, authenticated=True):
+    async def post(template_id, authenticated=True, body=None):
         headers = {"Authorization": "Bearer " + "o" * 32} if authenticated else {}
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url="http://test") as client:
+            kwargs = {"json": body} if body is not None else {}
             return await client.post(
                 f"/api/operator/v1/printful/templates/{template_id}/mockup-tasks/dry-run",
-                headers=headers)
+                headers=headers, **kwargs)
 
     assert run(post(TEST_TEMPLATE_ID, False)).status_code == 401
     denied = run(post(12))
@@ -500,6 +511,13 @@ def test_dry_run_is_authenticated_allowlisted_and_never_generates(monkeypatch):
     assert response.json()["estimatedGeneratedFiles"] == 1
     assert response.json()["plannedTaskCount"] == 1
     assert response.json()["estimatedTaskCount"] == 1
+    selected = run(post(TEST_TEMPLATE_ID, body={
+        "variantIds": [4016], "styleIds": [3]}))
+    assert selected.status_code == 200
+    assert printful.last_plan_selection == ([4016], [3])
+    invalid = run(post(TEST_TEMPLATE_ID, body={"variantIds": [4016], "styleIds": [3, 3]}))
+    assert invalid.status_code == 400
+    assert invalid.json() == {"error": "INVALID_MOCKUP_SELECTION"}
     assert printful.created == 0
     assert os.getenv("OPERATOR_WRITES_ENABLED") == "false"
 

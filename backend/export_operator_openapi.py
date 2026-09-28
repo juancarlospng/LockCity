@@ -117,6 +117,14 @@ def contract():
             "placements": {"type": "array", "items": {"type": "string"}},
             "requestedStyles": {"type": "array", "items": {"type": "object"}},
             "estimatedTaskCount": {"type": "integer"}}},
+        "MockupPlanSelection": {"type": "object", "required": ["variantIds", "styleIds"],
+                                "additionalProperties": False, "properties": {
+                                    "variantIds": {"type": "array", "minItems": 1,
+                                                   "maxItems": 20, "uniqueItems": True,
+                                                   "items": {"type": "integer", "minimum": 1}},
+                                    "styleIds": {"type": "array", "minItems": 1,
+                                                 "maxItems": 50, "uniqueItems": True,
+                                                 "items": {"type": "integer", "minimum": 1}}}},
         "MockupRequest": {"type": "object", "required": ["planId"],
                           "additionalProperties": False, "properties": {
                               "planId": {"type": "string", "format": "uuid"}}},
@@ -195,7 +203,10 @@ def contract():
                 "schema": {"$ref": "#/components/schemas/Rename"}}}}
         if operation_id == "createPrintfulMockupPlan":
             operation["description"] = ("Build and audit an AW26 representative-color mockup plan using only "
-                                        "Printful GET requests. It never creates a Printful task.")
+                                        "Printful GET requests. An optional exact variant/style selection is "
+                                        "validated against the template. It never creates a Printful task.")
+            operation["requestBody"] = {"required": False, "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/MockupPlanSelection"}}}}
         if operation_id == "createPrintfulMockupTask":
             operation["description"] = ("Generate images for one existing Printful template. Requires the separate "
                                         "PRINTFUL_MOCKUP_GENERATION_ENABLED flag and a prior dry-run plan; "

@@ -476,20 +476,38 @@ class PrintfulClient:
                 raise OperatorError(502, "PRINTFUL_TOO_MANY_VARIANTS")
         return variants
 
-    async def mockup_plan(self, template_id):
+    async def mockup_plan(self, template_id, requested_variant_ids=None, requested_style_ids=None):
         template = await self.template(template_id)
         product_id = template["catalogProductId"]
         if not product_id:
             raise OperatorError(422, "TEMPLATE_HAS_NO_CATALOG_PRODUCT")
-        variants = select_representative_variants(
-            template["availableVariantIds"],
-            await self.catalog_variants(product_id),
-        )
+        catalog_variants = await self.catalog_variants(product_id)
+        if requested_variant_ids is None:
+            variants = select_representative_variants(
+                template["availableVariantIds"], catalog_variants)
+        else:
+            available = set(template["availableVariantIds"])
+            normalized = {item["id"]: normalize_catalog_variant(item)
+                          for item in catalog_variants if isinstance(item, dict)
+                          and isinstance(item.get("id"), int)}
+            if (not requested_variant_ids or not set(requested_variant_ids).issubset(available)
+                    or any(variant_id not in normalized for variant_id in requested_variant_ids)):
+                raise OperatorError(400, "INVALID_TEMPLATE_VARIANTS")
+            variants = [normalized[variant_id] for variant_id in requested_variant_ids]
         capabilities = await self.mockup_styles(template_id, template)
         grouped = capabilities["stylesByPlacement"]
         recommended = recommend_styles_by_placement(grouped, variants)
         planned_styles = [style for placement in capabilities["templatePlacements"]
                           for style in recommended[placement]]
+        if requested_style_ids is not None:
+            available_style_ids = {style["id"] for style in planned_styles}
+            if (not requested_style_ids
+                    or not set(requested_style_ids).issubset(available_style_ids)):
+                raise OperatorError(400, "INVALID_MOCKUP_STYLES")
+            requested_order = {style_id: index for index, style_id in enumerate(requested_style_ids)}
+            planned_styles = [style for style in planned_styles
+                              if style["id"] in requested_order]
+            planned_styles.sort(key=lambda style: requested_order[style["id"]])
         if not planned_styles:
             raise OperatorError(422, "NO_COMPATIBLE_MOCKUP_STYLES")
         batches = plan_mockup_batches(variants, planned_styles)
@@ -500,7 +518,8 @@ class PrintfulClient:
                 or variant_id in style["restrictedVariantIds"])
             for style in planned_styles
         )
-        planned_style_ids = list(dict.fromkeys(style["id"] for style in planned_styles))
+        planned_style_ids = (list(requested_style_ids) if requested_style_ids is not None
+                             else list(dict.fromkeys(style["id"] for style in planned_styles)))
         requested_styles = []
         for style_id in planned_style_ids:
             matches = [(placement, style) for placement, candidates in recommended.items()
@@ -596,8 +615,12 @@ class PrintfulClient:
                 continue
             for item in _list(variant.get("mockups")):
                 if isinstance(item, dict) and _text(item.get("mockup_url")):
+                    dimensions = {key: item[key] for key in (
+                        "width", "height", "width_px", "height_px")
+                        if isinstance(item.get(key), (int, float))}
                     mockups.append({"url": item["mockup_url"], "variantId": variant.get("catalog_variant_id"),
                                     "placement": item.get("placement"), "view": item.get("display_name"),
-                                    "technique": item.get("technique"), "styleId": item.get("style_id")})
+                                    "technique": item.get("technique"), "styleId": item.get("style_id"),
+                                    "dimensions": dimensions or None})
         return {"id": task.get("id"), "status": task.get("status"), "mockups": mockups,
                 "failed": bool(_list(task.get("failure_reasons")))}

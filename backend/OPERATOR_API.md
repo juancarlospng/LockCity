@@ -81,6 +81,9 @@ variant sets are grouped into separate tasks; multiple placements/styles can
 share one task when their variant set matches.
 It never sends a POST to Printful. Generation accepts only the `planId` returned
 by that dry run: `{"planId":"<uuid>"}`. There is no generate-all endpoint.
+For a controlled pilot, the dry-run may receive an exact selection body such as
+`{"variantIds":[23054],"styleIds":[27318,27316]}`. Both unique, non-empty lists
+are checked against the template and its live capabilities before the plan is saved.
 Poll each returned `taskKeys` value explicitly via GET. Do not poll rapidly.
 The generated URLs are temporary editorial-review files and are never uploaded
 to WooCommerce or stored as permanent product assets by this API.

@@ -559,7 +559,27 @@ def create_router(store, woo=None, printful=None):
     @router.post("/printful/templates/{template_id}/mockup-tasks/dry-run")
     async def dry_run_printful_mockup_task(template_id: str, request: Request):
         async def action():
-            plan = await printful_client.mockup_plan(valid_aw26_template(template_id))
+            raw = await request.body()
+            if len(raw) > 2048:
+                raise OperatorError(413, "BODY_TOO_LARGE")
+            variant_ids = style_ids = None
+            if raw:
+                try:
+                    body = json.loads(raw)
+                    if not isinstance(body, dict) or set(body) != {"variantIds", "styleIds"}:
+                        raise ValueError()
+                    variant_ids, style_ids = body["variantIds"], body["styleIds"]
+                    if (not isinstance(variant_ids, list) or not isinstance(style_ids, list)
+                            or not 1 <= len(variant_ids) <= 20 or not 1 <= len(style_ids) <= 50
+                            or any(not isinstance(item, int) or isinstance(item, bool) or item < 1
+                                   for item in variant_ids + style_ids)
+                            or len(set(variant_ids)) != len(variant_ids)
+                            or len(set(style_ids)) != len(style_ids)):
+                        raise ValueError()
+                except (ValueError, TypeError, json.JSONDecodeError):
+                    raise OperatorError(400, "INVALID_MOCKUP_SELECTION") from None
+            plan = await printful_client.mockup_plan(
+                valid_aw26_template(template_id), variant_ids, style_ids)
             plan["planId"] = await store.create_mockup_plan(plan)
             return 200, plan
         return await dispatch(request, action)
