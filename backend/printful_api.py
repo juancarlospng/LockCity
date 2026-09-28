@@ -76,6 +76,57 @@ def _text(value):
     return value if isinstance(value, str) and value else None
 
 
+def _safe_validation_text(value):
+    if not isinstance(value, str):
+        return None
+    text = value[:300]
+    secrets = [os.getenv(name, "") for name in (
+        "PRINTFUL_API_TOKEN", "OPERATOR_API_TOKEN", "DATABASE_URL")]
+    if any(secret and secret in text for secret in secrets):
+        return "[REDACTED]"
+    if "authorization" in text.casefold() or "bearer" in text.casefold():
+        return "[REDACTED]"
+    return text
+
+
+def sanitize_printful_validation(response):
+    """Return a small allowlisted view of Printful validation errors."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    root = payload.get("error", payload) if isinstance(payload, dict) else None
+    if not isinstance(root, dict):
+        return None
+    raw_issues = root.get("errors")
+    issues = raw_issues if isinstance(raw_issues, list) else [root]
+    sanitized = []
+    for issue in issues[:10]:
+        if not isinstance(issue, dict):
+            continue
+        item = {}
+        for key in ("type", "title", "detail"):
+            value = _safe_validation_text(issue.get(key))
+            if value:
+                item[key] = value
+        source = issue.get("source")
+        if isinstance(source, dict):
+            clean_source = {}
+            for key in ("pointer", "parameter", "header"):
+                value = _safe_validation_text(source.get(key))
+                if value:
+                    clean_source[key] = value
+            if clean_source:
+                item["source"] = clean_source
+        valid_values = issue.get("valid_values")
+        if isinstance(valid_values, list):
+            item["valid_values"] = [value for value in valid_values[:20]
+                                    if isinstance(value, (str, int, float, bool))]
+        if item:
+            sanitized.append(item)
+    return sanitized or None
+
+
 def _variant_ids(raw):
     for key in ("variant_ids", "catalog_variant_ids", "restricted_to_variants"):
         value = raw.get(key)
@@ -420,7 +471,8 @@ class PrintfulClient:
         }
         if response.status_code in errors:
             status, code = errors[response.status_code]
-            raise OperatorError(status, code)
+            details = sanitize_printful_validation(response) if response.status_code == 400 else None
+            raise OperatorError(status, code, details)
         if response.status_code >= 500:
             raise OperatorError(502, "PRINTFUL_UNAVAILABLE")
         if not 200 <= response.status_code < 300:

@@ -9,7 +9,8 @@ from operator_api import OperatorError, create_router
 from printful_api import (AW26_TEMPLATE_IDS, PrintfulClient, group_styles_by_placement,
                           normalize_mockup_task_result, normalize_template_detail,
                           plan_mockup_batches,
-                          recommend_styles_by_placement, select_representative_variants)
+                          recommend_styles_by_placement, sanitize_printful_validation,
+                          select_representative_variants)
 
 
 TOKEN = "printful-test-token-that-must-never-leak"
@@ -742,6 +743,27 @@ def test_mockup_generation_errors_are_sanitized(monkeypatch, upstream, status, c
         run(client_for(handler).create_mockup_task(12, [4016], [3]))
     assert (error.value.status, error.value.code) == (status, code)
     assert TOKEN not in error.value.code
+
+
+def test_printful_validation_details_are_allowlisted_and_secrets_redacted(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    response = httpx.Response(400, json={"error": {"errors": [{
+        "type": "validation_error",
+        "title": "Invalid request",
+        "detail": "Unsupported style",
+        "source": {"pointer": "/products/0/mockup_style_ids", "secret": TOKEN},
+        "valid_values": [1, 2],
+        "debug": TOKEN,
+    }, {
+        "detail": "Bearer " + TOKEN,
+    }]}})
+    assert sanitize_printful_validation(response) == [{
+        "type": "validation_error",
+        "title": "Invalid request",
+        "detail": "Unsupported style",
+        "source": {"pointer": "/products/0/mockup_style_ids"},
+        "valid_values": [1, 2],
+    }, {"detail": "[REDACTED]"}]
 
 
 def test_secret_never_appears_in_operator_response(monkeypatch):

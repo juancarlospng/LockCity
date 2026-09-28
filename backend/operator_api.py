@@ -16,8 +16,8 @@ from starlette.responses import JSONResponse
 
 
 class OperatorError(Exception):
-    def __init__(self, status, code):
-        self.status, self.code = status, code
+    def __init__(self, status, code, details=None):
+        self.status, self.code, self.details = status, code, details
 
 
 class Rename(BaseModel):
@@ -421,6 +421,8 @@ def create_router(store, woo=None, printful=None):
             status, result = await action()
         except OperatorError as exc:
             status, result = exc.status, {"error": exc.code}
+            if exc.details is not None:
+                result["details"] = exc.details
         except Exception:
             status, result = 503, {"error": "OPERATOR_UNAVAILABLE"}
         return JSONResponse(result, status_code=status, headers={"Cache-Control": "no-store"})
