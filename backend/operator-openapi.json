@@ -2094,6 +2094,38 @@
           }
         ]
       },
+      "MockupStyleCandidate": {
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "view",
+          "restrictedVariantIds"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "view": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "restrictedVariantIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          }
+        }
+      },
       "MockupStyles": {
         "type": "object",
         "properties": {
@@ -2116,6 +2148,21 @@
             "type": "array",
             "items": {
               "type": "object"
+            }
+          },
+          "templatePlacements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stylesByPlacement": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/MockupStyleCandidate"
+              }
             }
           },
           "styles": {
@@ -2153,6 +2200,42 @@
                 "null"
               ]
             }
+          },
+          "templatePlacements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "supportedStylesByPlacement": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/MockupStyleCandidate"
+              }
+            }
+          },
+          "recommendedCandidateStylesByPlacement": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/MockupStyleCandidate"
+              }
+            }
+          },
+          "plannedMockupStyleIds": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "estimatedGeneratedFiles": {
+            "type": "integer"
+          },
+          "plannedTaskCount": {
+            "type": "integer"
           },
           "placements": {
             "type": "array",

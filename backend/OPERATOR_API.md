@@ -72,7 +72,13 @@ without creating or publishing a product. Generation is restricted to the 17
 IDs in `AW26_TEMPLATE_IDS` and requires an independently enabled flag. The
 dry-run endpoint works while generation is disabled. It reads the template,
 catalog variants and supported styles; selects one representative variant per
-color (M, then S, then the first available size); and records a single-use plan.
+color (M, then S, then the first available size); uses the Product Template's
+placements as the source of truth; and records a single-use plan. Its response
+groups every supported style by placement, orders compatible editorial
+candidates without hiding the complete style list, and reports planned tasks
+separately from estimated generated files. Styles with different compatible
+variant sets are grouped into separate tasks; multiple placements/styles can
+share one task when their variant set matches.
 It never sends a POST to Printful. Generation accepts only the `planId` returned
 by that dry run: `{"planId":"<uuid>"}`. There is no generate-all endpoint.
 Poll each returned `taskKeys` value explicitly via GET. Do not poll rapidly.

@@ -402,7 +402,7 @@ class OperatorService:
 
 
 def create_router(store, woo=None, printful=None):
-    from printful_api import AW26_TEMPLATE_IDS, PrintfulClient
+    from printful_api import AW26_TEMPLATE_IDS, PrintfulClient, plan_mockup_batches
 
     router = APIRouter(prefix="/api/operator/v1")
     service = OperatorService(store, woo or WooClient())
@@ -583,19 +583,23 @@ def create_router(store, woo=None, printful=None):
             plan = await store.claim_mockup_plan(plan_id, template_id_int)
             if plan is None:
                 raise OperatorError(409, "MOCKUP_PLAN_NOT_AVAILABLE")
-            variant_ids = [variant["id"] for variant in plan["variants"]]
-            style_ids = [style["id"] for style in plan["styles"]]
+            batches = plan_mockup_batches(plan["variants"], plan["styles"])
+            if not batches:
+                raise OperatorError(409, "MOCKUP_PLAN_NOT_AVAILABLE")
             try:
-                result = await printful_client.create_mockup_task(
-                    template_id_int, variant_ids, style_ids)
-                await store.complete_mockup_plan(plan_id, template_id_int, result["taskIds"])
+                task_ids = []
+                for batch in batches:
+                    result = await printful_client.create_mockup_task(
+                        template_id_int, batch["variantIds"], batch["styleIds"])
+                    task_ids.extend(result["taskIds"])
+                await store.complete_mockup_plan(plan_id, template_id_int, task_ids)
             except Exception:
                 await store.fail_mockup_plan(plan_id, template_id_int)
                 raise
             return 200, {
                 "templateId": template_id_int,
                 "planId": plan_id,
-                "taskKeys": result["taskIds"],
+                "taskKeys": task_ids,
                 "status": "pending",
                 "requestedVariants": plan["variants"],
                 "requestedStyles": plan["styles"],

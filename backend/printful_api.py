@@ -77,6 +77,80 @@ def _variant_ids(raw):
     return []
 
 
+def template_placement_ids(raw_placements):
+    """Return the template placement identifiers in source order."""
+    result = []
+    for item in _list(raw_placements):
+        value = item if isinstance(item, str) else item.get("placement") if isinstance(item, dict) else None
+        if isinstance(value, str) and value and value not in result:
+            result.append(value)
+    return result
+
+
+def _public_style(style):
+    return {
+        "id": style["id"],
+        "category": style.get("category"),
+        "view": style.get("view"),
+        "restrictedVariantIds": list(style.get("variantIds") or []),
+    }
+
+
+def group_styles_by_placement(styles, placements):
+    """Group only real template placements without manufacturing missing styles."""
+    grouped = {placement: [] for placement in placements}
+    for style in styles:
+        placement = style.get("placement") if isinstance(style, dict) else None
+        if placement in grouped:
+            grouped[placement].append(_public_style(style))
+    return grouped
+
+
+def _style_priority(placement, style):
+    text = " ".join(str(style.get(key) or "").casefold()
+                    for key in ("category", "view"))
+    if placement == "front":
+        priorities = ("model", "3d", "ghost", "front")
+    elif placement == "back":
+        priorities = ("model", "ghost", "back")
+    elif "sleeve" in placement:
+        priorities = ("model", "ghost", "sleeve", "detail")
+    else:
+        priorities = ("model", "3d", "ghost", placement, "detail")
+    first_match = next((index for index, keyword in enumerate(priorities)
+                        if keyword in text), len(priorities))
+    return (1 if "flat" in text else 0, first_match, style["id"])
+
+
+def recommend_styles_by_placement(grouped, representative_variants):
+    """Keep every compatible candidate, ordered for editorial review."""
+    selected_ids = {variant["id"] for variant in representative_variants}
+    result = {}
+    for placement, styles in grouped.items():
+        compatible = []
+        for style in styles:
+            restrictions = set(style.get("restrictedVariantIds") or [])
+            if not restrictions or selected_ids.intersection(restrictions):
+                compatible.append(style)
+        result[placement] = sorted(compatible, key=lambda style: _style_priority(placement, style))
+    return result
+
+
+def plan_mockup_batches(representative_variants, styles):
+    """Group styles that can share one Printful task by compatible variant set."""
+    variant_ids = [variant["id"] for variant in representative_variants]
+    batches = {}
+    for style in styles:
+        restrictions = set(style.get("restrictedVariantIds") or style.get("variantIds") or [])
+        compatible = tuple(variant_id for variant_id in variant_ids
+                           if not restrictions or variant_id in restrictions)
+        if not compatible:
+            continue
+        batches.setdefault(compatible, []).append(style["id"])
+    return [{"variantIds": list(variants), "styleIds": style_ids}
+            for variants, style_ids in batches.items()]
+
+
 def normalize_mockups(raw):
     """Normalize documented and optional template image fields without inventing metadata."""
     candidates = []
@@ -337,16 +411,18 @@ class PrintfulClient:
             raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
         return normalize_sync_product(result.get("sync_product"), result.get("sync_variants"))
 
-    async def mockup_styles(self, template_id):
-        template = await self.template(template_id)
+    async def mockup_styles(self, template_id, template=None):
+        template = template or await self.template(template_id)
         product_id = template["catalogProductId"]
         if not product_id:
             raise OperatorError(422, "TEMPLATE_HAS_NO_CATALOG_PRODUCT")
+        placements = template_placement_ids(template["placements"])
         styles = []
         offset = 0
         while True:
             payload = await self.get(f"/v2/catalog-products/{product_id}/mockup-styles",
-                                     {"limit": 100, "offset": offset})
+                                     {"placements": ",".join(placements),
+                                      "limit": 100, "offset": offset})
             page = payload.get("data")
             if not isinstance(page, list):
                 raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
@@ -367,8 +443,10 @@ class PrintfulClient:
                 break
             if offset >= 1000:
                 raise OperatorError(502, "PRINTFUL_TOO_MANY_STYLES")
+        grouped = group_styles_by_placement(styles, placements)
         return {"templateId": template_id, "availableVariantIds": template["availableVariantIds"],
-                "colors": template["colors"], "placements": template["placements"], "styles": styles}
+                "colors": template["colors"], "placements": template["placements"],
+                "templatePlacements": placements, "stylesByPlacement": grouped, "styles": styles}
 
     async def catalog_variants(self, catalog_product_id):
         variants = []
@@ -400,29 +478,38 @@ class PrintfulClient:
             template["availableVariantIds"],
             await self.catalog_variants(product_id),
         )
-        capabilities = await self.mockup_styles(template_id)
-        styles = select_review_styles(
-            capabilities["styles"],
-            [variant["id"] for variant in variants],
-        )
-        placements = []
-        for style in styles:
-            placement = style.get("placement")
-            if placement and placement not in placements:
-                placements.append(placement)
+        capabilities = await self.mockup_styles(template_id, template)
+        grouped = capabilities["stylesByPlacement"]
+        recommended = recommend_styles_by_placement(grouped, variants)
+        planned_styles = [style for placement in capabilities["templatePlacements"]
+                          for style in recommended[placement]]
+        if not planned_styles:
+            raise OperatorError(422, "NO_COMPATIBLE_MOCKUP_STYLES")
+        batches = plan_mockup_batches(variants, planned_styles)
+        estimated_files = sum(len(batch["variantIds"]) * len(batch["styleIds"])
+                              for batch in batches)
         return {
             "templateId": template_id,
             "product": {"id": product_id, "name": template["title"]},
             "selectedRepresentativeVariants": variants,
             "colors": [variant["color"] for variant in variants],
-            "placements": placements,
+            "templatePlacements": capabilities["templatePlacements"],
+            "supportedStylesByPlacement": grouped,
+            "recommendedCandidateStylesByPlacement": recommended,
+            "plannedMockupStyleIds": [style["id"] for style in planned_styles],
+            "estimatedGeneratedFiles": estimated_files,
+            "plannedTaskCount": len(batches),
+            # Compatibility fields retained for stored plans and existing clients.
+            "placements": capabilities["templatePlacements"],
             "requestedStyles": [{
                 "id": style["id"],
-                "placement": style.get("placement"),
+                "placement": next((placement for placement, candidates in recommended.items()
+                                   if style in candidates), None),
                 "view": style.get("view"),
                 "category": style.get("category"),
-            } for style in styles],
-            "estimatedTaskCount": 1,
+                "restrictedVariantIds": style.get("restrictedVariantIds") or [],
+            } for style in planned_styles],
+            "estimatedTaskCount": len(batches),
         }
 
     async def create_mockup_task(self, template_id, variant_ids, style_ids):

@@ -6,8 +6,9 @@ import pytest
 from fastapi import FastAPI
 
 from operator_api import OperatorError, create_router
-from printful_api import (AW26_TEMPLATE_IDS, PrintfulClient, normalize_template_detail,
-                          select_representative_variants)
+from printful_api import (AW26_TEMPLATE_IDS, PrintfulClient, group_styles_by_placement,
+                          normalize_template_detail, plan_mockup_batches,
+                          recommend_styles_by_placement, select_representative_variants)
 
 
 TOKEN = "printful-test-token-that-must-never-leak"
@@ -243,8 +244,17 @@ class Printful:
     async def mockup_plan(self, template_id):
         return {"templateId": template_id, "product": {"id": 71, "name": "AW26 Tee"},
                 "selectedRepresentativeVariants": [{"id": 4016, "color": "Black", "size": "M"}],
-                "colors": ["Black"], "placements": ["front"],
-                "requestedStyles": [{"id": 3, "placement": "front", "view": "Front"}],
+                "colors": ["Black"], "templatePlacements": ["front"],
+                "supportedStylesByPlacement": {"front": [
+                    {"id": 3, "category": "Ghost", "view": "Front",
+                     "restrictedVariantIds": []}]},
+                "recommendedCandidateStylesByPlacement": {"front": [
+                    {"id": 3, "category": "Ghost", "view": "Front",
+                     "restrictedVariantIds": []}]},
+                "plannedMockupStyleIds": [3], "estimatedGeneratedFiles": 1,
+                "plannedTaskCount": 1, "placements": ["front"],
+                "requestedStyles": [{"id": 3, "placement": "front", "view": "Front",
+                                     "category": "Ghost", "restrictedVariantIds": []}],
                 "estimatedTaskCount": 1}
 
     async def create_mockup_task(self, template_id, variant_ids, style_ids):
@@ -338,21 +348,32 @@ def test_mockup_plan_uses_only_get_and_supported_capabilities(monkeypatch):
     def handler(request):
         requests.append(request)
         if request.url.path == "/product-templates/12":
-            return httpx.Response(200, json={"code": 200, "result": template_payload()})
+            template = template_payload()
+            template["placements"] = [
+                {"placement": "front"}, {"placement": "back"},
+                {"placement": "sleeve_left"},
+            ]
+            return httpx.Response(200, json={"code": 200, "result": template})
         if request.url.path.endswith("/catalog-variants"):
             return httpx.Response(200, json={"data": [
                 {"id": 4016, "color": "Black", "size": "M"},
                 {"id": 4017, "color": "White", "size": "S"},
             ], "paging": {"total": 2}})
         if request.url.path.endswith("/mockup-styles"):
+            assert request.url.params["placements"] == "front,back,sleeve_left"
             return httpx.Response(200, json={"data": [
                 {"placement": "front", "display_name": "Front print", "mockup_styles": [
-                    {"id": 3, "category_name": "Lifestyle", "view_name": "Front",
+                    {"id": 2, "category_name": "Flat", "view_name": "Front",
+                     "restricted_to_variants": None},
+                    {"id": 3, "category_name": "Model", "view_name": "Front",
                      "restricted_to_variants": None}]},
                 {"placement": "back", "display_name": "Back print", "mockup_styles": [
                     {"id": 4, "category_name": "Model", "view_name": "Back",
                      "restricted_to_variants": [4016, 4017]}]},
-            ], "paging": {"total": 2}})
+                {"placement": "sleeve_left", "display_name": "Left sleeve", "mockup_styles": [
+                    {"id": 5, "category_name": "Ghost", "view_name": "Sleeve detail",
+                     "restricted_to_variants": [4016]}]},
+            ], "paging": {"total": 3}})
         raise AssertionError(f"unexpected request: {request.url}")
 
     plan = run(client_for(handler).mockup_plan(12))
@@ -360,10 +381,52 @@ def test_mockup_plan_uses_only_get_and_supported_capabilities(monkeypatch):
         {"id": 4016, "color": "Black", "size": "M"},
         {"id": 4017, "color": "White", "size": "S"},
     ]
-    assert plan["placements"] == ["front", "back"]
-    assert [style["id"] for style in plan["requestedStyles"]] == [3, 4]
-    assert plan["estimatedTaskCount"] == 1
+    assert plan["templatePlacements"] == ["front", "back", "sleeve_left"]
+    assert list(plan["supportedStylesByPlacement"]) == ["front", "back", "sleeve_left"]
+    assert [style["id"] for style in plan["supportedStylesByPlacement"]["front"]] == [2, 3]
+    assert [style["id"] for style in plan["recommendedCandidateStylesByPlacement"]["front"]] == [3, 2]
+    assert plan["plannedMockupStyleIds"] == [3, 2, 4, 5]
+    assert plan["estimatedGeneratedFiles"] == 7
+    assert plan["plannedTaskCount"] == 2
+    assert plan["estimatedTaskCount"] == 2
     assert all(request.method == "GET" for request in requests)
+
+
+def test_front_only_template_does_not_expose_unconfigured_placements():
+    styles = [
+        {"id": 1, "placement": "front", "category": "Ghost", "view": "Front",
+         "variantIds": []},
+        {"id": 2, "placement": "back", "category": "Ghost", "view": "Back",
+         "variantIds": []},
+    ]
+    grouped = group_styles_by_placement(styles, ["front"])
+    assert list(grouped) == ["front"]
+    assert [style["id"] for style in grouped["front"]] == [1]
+
+
+def test_embroidery_placement_is_preserved_without_inventing_styles():
+    styles = [{"id": 9, "placement": "embroidery_front", "category": "Model",
+               "view": "Embroidery detail", "variantIds": [80]}]
+    grouped = group_styles_by_placement(styles, ["embroidery_front", "embroidery_back"])
+    assert grouped["embroidery_front"][0]["restrictedVariantIds"] == [80]
+    assert grouped["embroidery_back"] == []
+
+
+def test_restricted_styles_are_reported_and_batched_by_compatible_variants():
+    grouped = {"front": [
+        {"id": 1, "category": "Model", "view": "Front", "restrictedVariantIds": []},
+        {"id": 2, "category": "Ghost", "view": "Front", "restrictedVariantIds": [10]},
+        {"id": 3, "category": "Flat", "view": "Front", "restrictedVariantIds": [99]},
+    ]}
+    variants = [{"id": 10, "color": "Black", "size": "M"},
+                {"id": 11, "color": "White", "size": "M"}]
+    recommended = recommend_styles_by_placement(grouped, variants)
+    assert [style["id"] for style in recommended["front"]] == [1, 2]
+    assert recommended["front"][1]["restrictedVariantIds"] == [10]
+    assert plan_mockup_batches(variants, recommended["front"]) == [
+        {"variantIds": [10, 11], "styleIds": [1]},
+        {"variantIds": [10], "styleIds": [2]},
+    ]
 
 
 def test_dry_run_is_authenticated_allowlisted_and_never_generates(monkeypatch):
@@ -389,6 +452,10 @@ def test_dry_run_is_authenticated_allowlisted_and_never_generates(monkeypatch):
     response = run(post(TEST_TEMPLATE_ID))
     assert response.status_code == 200
     assert response.json()["planId"] == PLAN_ID
+    assert response.json()["templatePlacements"] == ["front"]
+    assert response.json()["plannedMockupStyleIds"] == [3]
+    assert response.json()["estimatedGeneratedFiles"] == 1
+    assert response.json()["plannedTaskCount"] == 1
     assert response.json()["estimatedTaskCount"] == 1
     assert printful.created == 0
     assert os.getenv("OPERATOR_WRITES_ENABLED") == "false"

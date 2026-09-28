@@ -88,16 +88,32 @@ def contract():
             {"type": "object", "required": ["mockups"], "properties": {
                 "mockups": {"type": "array", "items": {
                     "$ref": "#/components/schemas/PrintfulMockup"}}}}]},
+        "MockupStyleCandidate": {"type": "object", "required": [
+            "id", "category", "view", "restrictedVariantIds"], "properties": {
+                "id": {"type": "integer"}, "category": {"type": ["string", "null"]},
+                "view": {"type": ["string", "null"]},
+                "restrictedVariantIds": {"type": "array", "items": {"type": "integer"}}}},
         "MockupStyles": {"type": "object", "properties": {
             "templateId": {"type": "integer"}, "availableVariantIds": {"type": "array", "items": {"type": "integer"}},
             "colors": {"type": "array", "items": {"type": "object"}},
             "placements": {"type": "array", "items": {"type": "object"}},
+            "templatePlacements": {"type": "array", "items": {"type": "string"}},
+            "stylesByPlacement": {"type": "object", "additionalProperties": {
+                "type": "array", "items": {"$ref": "#/components/schemas/MockupStyleCandidate"}}},
             "styles": {"type": "array", "items": {"type": "object"}}}},
         "MockupPlan": {"type": "object", "properties": {
             "planId": {"type": "string", "format": "uuid"},
             "templateId": {"type": "integer"}, "product": {"type": "object"},
             "selectedRepresentativeVariants": {"type": "array", "items": {"type": "object"}},
             "colors": {"type": "array", "items": {"type": ["string", "null"]}},
+            "templatePlacements": {"type": "array", "items": {"type": "string"}},
+            "supportedStylesByPlacement": {"type": "object", "additionalProperties": {
+                "type": "array", "items": {"$ref": "#/components/schemas/MockupStyleCandidate"}}},
+            "recommendedCandidateStylesByPlacement": {"type": "object", "additionalProperties": {
+                "type": "array", "items": {"$ref": "#/components/schemas/MockupStyleCandidate"}}},
+            "plannedMockupStyleIds": {"type": "array", "items": {"type": "integer"}},
+            "estimatedGeneratedFiles": {"type": "integer"},
+            "plannedTaskCount": {"type": "integer"},
             "placements": {"type": "array", "items": {"type": "string"}},
             "requestedStyles": {"type": "array", "items": {"type": "object"}},
             "estimatedTaskCount": {"type": "integer"}}},
