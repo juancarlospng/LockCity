@@ -1059,6 +1059,121 @@
         }
       }
     },
+    "/api/operator/v1/printful/templates/{id}/mockup-tasks/dry-run": {
+      "post": {
+        "operationId": "createPrintfulMockupPlan",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MockupPlan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Product not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version conflict, idempotency conflict or operation busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "WooCommerce or verification error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured, unavailable or uncertain outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Build and audit an AW26 representative-color mockup plan using only Printful GET requests. It never creates a Printful task."
+      }
+    },
     "/api/operator/v1/printful/templates/{id}/mockup-tasks": {
       "post": {
         "operationId": "createPrintfulMockupTask",
@@ -1171,7 +1286,7 @@
             }
           }
         },
-        "description": "Generate images for one existing Printful template. Requires the separate PRINTFUL_MOCKUP_GENERATION_ENABLED flag; does not publish products.",
+        "description": "Generate images for one existing Printful template. Requires the separate PRINTFUL_MOCKUP_GENERATION_ENABLED flag and a prior dry-run plan; does not publish products.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2011,31 +2126,61 @@
           }
         }
       },
+      "MockupPlan": {
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "templateId": {
+            "type": "integer"
+          },
+          "product": {
+            "type": "object"
+          },
+          "selectedRepresentativeVariants": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "colors": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "placements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requestedStyles": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "estimatedTaskCount": {
+            "type": "integer"
+          }
+        }
+      },
       "MockupRequest": {
         "type": "object",
         "required": [
-          "variantIds",
-          "styleIds"
+          "planId"
         ],
         "additionalProperties": false,
         "properties": {
-          "variantIds": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 20,
-            "items": {
-              "type": "integer",
-              "minimum": 1
-            }
-          },
-          "styleIds": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 10,
-            "items": {
-              "type": "integer",
-              "minimum": 1
-            }
+          "planId": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -2045,10 +2190,29 @@
           "templateId": {
             "type": "integer"
           },
-          "taskIds": {
+          "planId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "taskKeys": {
             "type": "array",
             "items": {
               "type": "integer"
+            }
+          },
+          "status": {
+            "type": "string"
+          },
+          "requestedVariants": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "requestedStyles": {
+            "type": "array",
+            "items": {
+              "type": "object"
             }
           }
         }

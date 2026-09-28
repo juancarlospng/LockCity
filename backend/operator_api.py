@@ -214,6 +214,125 @@ class PostgresStore:
         )
         return [self._record(row) for row in rows]
 
+    async def create_mockup_plan(self, plan):
+        plan_id = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+        pool = await self._get_pool()
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                await connection.execute(
+                    """INSERT INTO public.operator_mockup_plans
+                           (plan_id, template_id, product_payload, requested_variants,
+                            requested_styles, status, created_at, updated_at)
+                       VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb,
+                               'planned', $6, $6)""",
+                    plan_id,
+                    plan["templateId"],
+                    json.dumps(plan["product"]),
+                    json.dumps(plan["selectedRepresentativeVariants"]),
+                    json.dumps(plan["requestedStyles"]),
+                    now,
+                )
+                await connection.execute(
+                    """INSERT INTO public.operator_mockup_audit
+                           (plan_id, template_id, action, status, created_at)
+                       VALUES ($1, $2, 'dry_run', 'planned', $3)""",
+                    plan_id, plan["templateId"], now,
+                )
+        return str(plan_id)
+
+    async def claim_mockup_plan(self, plan_id, template_id):
+        pool = await self._get_pool()
+        now = datetime.now(timezone.utc)
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                row = await connection.fetchrow(
+                    """UPDATE public.operator_mockup_plans
+                       SET status = 'scheduling', updated_at = $3
+                       WHERE plan_id = $1 AND template_id = $2 AND status = 'planned'
+                       RETURNING product_payload AS product,
+                                 requested_variants AS variants,
+                                 requested_styles AS styles""",
+                    uuid.UUID(plan_id), template_id, now,
+                )
+                if row is None:
+                    return None
+                await connection.execute(
+                    """INSERT INTO public.operator_mockup_audit
+                           (plan_id, template_id, action, status, created_at)
+                       VALUES ($1, $2, 'generation', 'scheduling', $3)""",
+                    uuid.UUID(plan_id), template_id, now,
+                )
+        result = dict(row)
+        for key in ("product", "variants", "styles"):
+            if isinstance(result.get(key), str):
+                result[key] = json.loads(result[key])
+        return result
+
+    async def complete_mockup_plan(self, plan_id, template_id, task_keys):
+        pool = await self._get_pool()
+        now = datetime.now(timezone.utc)
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                await connection.execute(
+                    """UPDATE public.operator_mockup_plans
+                       SET status = 'pending', task_keys = $2::jsonb, updated_at = $3
+                       WHERE plan_id = $1 AND status = 'scheduling'""",
+                    uuid.UUID(plan_id), json.dumps(task_keys), now,
+                )
+                for task_key in task_keys:
+                    await connection.execute(
+                        """INSERT INTO public.operator_mockup_audit
+                               (plan_id, template_id, action, task_key, status, created_at)
+                           VALUES ($1, $2, 'generation', $3, 'pending', $4)""",
+                        uuid.UUID(plan_id), template_id, task_key, now,
+                    )
+
+    async def fail_mockup_plan(self, plan_id, template_id):
+        pool = await self._get_pool()
+        now = datetime.now(timezone.utc)
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                await connection.execute(
+                    """UPDATE public.operator_mockup_plans
+                       SET status = 'failed', updated_at = $2 WHERE plan_id = $1""",
+                    uuid.UUID(plan_id), now,
+                )
+                await connection.execute(
+                    """INSERT INTO public.operator_mockup_audit
+                           (plan_id, template_id, action, status, created_at)
+                       VALUES ($1, $2, 'generation', 'failed', $3)""",
+                    uuid.UUID(plan_id), template_id, now,
+                )
+
+    async def mockup_task_context(self, task_key):
+        pool = await self._get_pool()
+        row = await pool.fetchrow(
+            """SELECT plan_id, template_id, product_payload AS product,
+                      requested_variants AS variants, requested_styles AS styles
+               FROM public.operator_mockup_plans
+               WHERE task_keys @> $1::jsonb""",
+            json.dumps([task_key]),
+        )
+        if row is None:
+            return None
+        result = dict(row)
+        result["plan_id"] = str(result["plan_id"])
+        for key in ("product", "variants", "styles"):
+            if isinstance(result.get(key), str):
+                result[key] = json.loads(result[key])
+        return result
+
+    async def record_mockup_task_status(self, context, task_key, status):
+        pool = await self._get_pool()
+        await pool.execute(
+            """INSERT INTO public.operator_mockup_audit
+                   (plan_id, template_id, action, task_key, status, created_at)
+               VALUES ($1, $2, 'status_check', $3, $4, $5)""",
+            uuid.UUID(context["plan_id"]), context["template_id"], task_key,
+            status, datetime.now(timezone.utc),
+        )
+
     async def ping(self):
         pool = await self._get_pool()
         await pool.fetchval("SELECT 1")
@@ -283,7 +402,7 @@ class OperatorService:
 
 
 def create_router(store, woo=None, printful=None):
-    from printful_api import PrintfulClient
+    from printful_api import AW26_TEMPLATE_IDS, PrintfulClient
 
     router = APIRouter(prefix="/api/operator/v1")
     service = OperatorService(store, woo or WooClient())
@@ -318,6 +437,21 @@ def create_router(store, woo=None, printful=None):
         if not value.isascii() or not value.isdecimal() or not 1 <= int(value) <= 2147483647:
             raise OperatorError(400, "INVALID_PRODUCT_ID")
         return int(value)
+
+    def valid_aw26_template(value):
+        template_id = valid_id(value)
+        if template_id not in AW26_TEMPLATE_IDS:
+            raise OperatorError(403, "TEMPLATE_NOT_ALLOWED")
+        return template_id
+
+    def valid_plan_id(value):
+        try:
+            parsed = uuid.UUID(value)
+        except (ValueError, TypeError, AttributeError):
+            raise OperatorError(400, "INVALID_MOCKUP_PLAN") from None
+        if str(parsed) != value.lower():
+            raise OperatorError(400, "INVALID_MOCKUP_PLAN")
+        return str(parsed)
 
     def printful_pagination(request):
         try:
@@ -422,33 +556,69 @@ def create_router(store, woo=None, printful=None):
             return 200, await printful_client.mockup_styles(valid_id(template_id))
         return await dispatch(request, action)
 
+    @router.post("/printful/templates/{template_id}/mockup-tasks/dry-run")
+    async def dry_run_printful_mockup_task(template_id: str, request: Request):
+        async def action():
+            plan = await printful_client.mockup_plan(valid_aw26_template(template_id))
+            plan["planId"] = await store.create_mockup_plan(plan)
+            return 200, plan
+        return await dispatch(request, action)
+
     @router.post("/printful/templates/{template_id}/mockup-tasks")
     async def create_printful_mockup_task(template_id: str, request: Request):
         async def action():
             if os.getenv("PRINTFUL_MOCKUP_GENERATION_ENABLED") != "true":
                 raise OperatorError(403, "MOCKUP_GENERATION_DISABLED")
+            template_id_int = valid_aw26_template(template_id)
             raw = await request.body()
             if len(raw) > 2048:
                 raise OperatorError(413, "BODY_TOO_LARGE")
             try:
                 body = json.loads(raw)
-                if not isinstance(body, dict) or set(body) != {"variantIds", "styleIds"}:
+                if not isinstance(body, dict) or set(body) != {"planId"}:
                     raise ValueError()
-                variant_ids, style_ids = body["variantIds"], body["styleIds"]
-                for values, limit in ((variant_ids, 20), (style_ids, 10)):
-                    if (not isinstance(values, list) or not 1 <= len(values) <= limit
-                            or len(set(map(str, values))) != len(values)
-                            or any(type(value) is not int or value < 1 for value in values)):
-                        raise ValueError()
+                plan_id = valid_plan_id(body["planId"])
             except (ValueError, TypeError):
                 raise OperatorError(400, "INVALID_MOCKUP_REQUEST") from None
-            return 200, await printful_client.create_mockup_task(valid_id(template_id), variant_ids, style_ids)
+            plan = await store.claim_mockup_plan(plan_id, template_id_int)
+            if plan is None:
+                raise OperatorError(409, "MOCKUP_PLAN_NOT_AVAILABLE")
+            variant_ids = [variant["id"] for variant in plan["variants"]]
+            style_ids = [style["id"] for style in plan["styles"]]
+            try:
+                result = await printful_client.create_mockup_task(
+                    template_id_int, variant_ids, style_ids)
+                await store.complete_mockup_plan(plan_id, template_id_int, result["taskIds"])
+            except Exception:
+                await store.fail_mockup_plan(plan_id, template_id_int)
+                raise
+            return 200, {
+                "templateId": template_id_int,
+                "planId": plan_id,
+                "taskKeys": result["taskIds"],
+                "status": "pending",
+                "requestedVariants": plan["variants"],
+                "requestedStyles": plan["styles"],
+            }
         return await dispatch(request, action)
 
     @router.get("/printful/mockup-tasks/{task_id}")
     async def printful_mockup_task(task_id: str, request: Request):
         async def action():
-            return 200, await printful_client.mockup_task(valid_id(task_id))
+            task_id_int = valid_id(task_id)
+            context = await store.mockup_task_context(task_id_int)
+            if context is None:
+                raise OperatorError(404, "MOCKUP_TASK_NOT_FOUND")
+            result = await printful_client.mockup_task(task_id_int)
+            await store.record_mockup_task_status(context, task_id_int, result["status"])
+            return 200, {
+                **result,
+                "planId": context["plan_id"],
+                "templateId": context["template_id"],
+                "product": context["product"],
+                "requestedVariants": context["variants"],
+                "requestedStyles": context["styles"],
+            }
         return await dispatch(request, action)
 
     @router.get("/printful/sync-products")

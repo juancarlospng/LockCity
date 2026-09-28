@@ -93,14 +93,23 @@ def contract():
             "colors": {"type": "array", "items": {"type": "object"}},
             "placements": {"type": "array", "items": {"type": "object"}},
             "styles": {"type": "array", "items": {"type": "object"}}}},
-        "MockupRequest": {"type": "object", "required": ["variantIds", "styleIds"],
+        "MockupPlan": {"type": "object", "properties": {
+            "planId": {"type": "string", "format": "uuid"},
+            "templateId": {"type": "integer"}, "product": {"type": "object"},
+            "selectedRepresentativeVariants": {"type": "array", "items": {"type": "object"}},
+            "colors": {"type": "array", "items": {"type": ["string", "null"]}},
+            "placements": {"type": "array", "items": {"type": "string"}},
+            "requestedStyles": {"type": "array", "items": {"type": "object"}},
+            "estimatedTaskCount": {"type": "integer"}}},
+        "MockupRequest": {"type": "object", "required": ["planId"],
                           "additionalProperties": False, "properties": {
-                              "variantIds": {"type": "array", "minItems": 1, "maxItems": 20,
-                                             "items": {"type": "integer", "minimum": 1}},
-                              "styleIds": {"type": "array", "minItems": 1, "maxItems": 10,
-                                           "items": {"type": "integer", "minimum": 1}}}},
+                              "planId": {"type": "string", "format": "uuid"}}},
         "MockupTaskCreated": {"type": "object", "properties": {
-            "templateId": {"type": "integer"}, "taskIds": {"type": "array", "items": {"type": "integer"}}}},
+            "templateId": {"type": "integer"}, "planId": {"type": "string", "format": "uuid"},
+            "taskKeys": {"type": "array", "items": {"type": "integer"}},
+            "status": {"type": "string"},
+            "requestedVariants": {"type": "array", "items": {"type": "object"}},
+            "requestedStyles": {"type": "array", "items": {"type": "object"}}}},
         "MockupTask": {"type": "object", "properties": {
             "id": {"type": "integer"}, "status": {"type": "string"},
             "failed": {"type": "boolean"}, "mockups": {"type": "array", "items": {"type": "object"}}}},
@@ -138,6 +147,7 @@ def contract():
         ("/printful/templates", "get", "getPrintfulTemplates", "PrintfulTemplateList", printful_pagination),
         ("/printful/templates/{id}", "get", "getPrintfulTemplate", "PrintfulTemplateDetail", identifier),
         ("/printful/templates/{id}/mockup-styles", "get", "getPrintfulMockupStyles", "MockupStyles", identifier),
+        ("/printful/templates/{id}/mockup-tasks/dry-run", "post", "createPrintfulMockupPlan", "MockupPlan", identifier),
         ("/printful/templates/{id}/mockup-tasks", "post", "createPrintfulMockupTask", "MockupTaskCreated", identifier),
         ("/printful/mockup-tasks/{id}", "get", "getPrintfulMockupTask", "MockupTask", identifier),
         ("/printful/sync-products", "get", "getPrintfulSyncProducts",
@@ -167,9 +177,13 @@ def contract():
                 "External WordPress edits are not protected by an atomic compare-and-swap.")
             operation["requestBody"] = {"required": True, "content": {"application/json": {
                 "schema": {"$ref": "#/components/schemas/Rename"}}}}
+        if operation_id == "createPrintfulMockupPlan":
+            operation["description"] = ("Build and audit an AW26 representative-color mockup plan using only "
+                                        "Printful GET requests. It never creates a Printful task.")
         if operation_id == "createPrintfulMockupTask":
             operation["description"] = ("Generate images for one existing Printful template. Requires the separate "
-                                        "PRINTFUL_MOCKUP_GENERATION_ENABLED flag; does not publish products.")
+                                        "PRINTFUL_MOCKUP_GENERATION_ENABLED flag and a prior dry-run plan; "
+                                        "does not publish products.")
             operation["requestBody"] = {"required": True, "content": {"application/json": {
                 "schema": {"$ref": "#/components/schemas/MockupRequest"}}}}
         paths.setdefault("/api/operator/v1" + suffix, {})[method] = operation

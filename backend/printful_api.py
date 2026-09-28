@@ -8,6 +8,25 @@ from operator_api import OperatorError
 
 
 PRINTFUL_BASE_URL = "https://api.printful.com"
+AW26_TEMPLATE_IDS = frozenset({
+    105623495,
+    105624073,
+    106094567,
+    106357278,
+    106357334,
+    106766446,
+    106767107,
+    107221423,
+    107365805,
+    107366128,
+    107530836,
+    107563422,
+    107563824,
+    107564276,
+    107658409,
+    107660830,
+    107660910,
+})
 
 
 def _list(value):
@@ -134,6 +153,76 @@ def normalize_sync_product(raw, variants=None):
         "ignored": raw.get("is_ignored") if isinstance(raw.get("is_ignored"), bool) else None,
         "variants": normalized_variants,
     }
+
+
+def normalize_catalog_variant(raw):
+    if not isinstance(raw, dict) or not isinstance(raw.get("id"), int):
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    return {
+        "id": raw["id"],
+        "color": _text(raw.get("color")),
+        "size": _text(raw.get("size")),
+    }
+
+
+def select_representative_variants(available_variant_ids, catalog_variants):
+    """Choose M, then S, then the first available size for each color."""
+    allowed = set(available_variant_ids)
+    groups = {}
+    for index, raw in enumerate(catalog_variants):
+        variant = normalize_catalog_variant(raw)
+        if variant["id"] not in allowed:
+            continue
+        key = variant["color"].strip().casefold() if variant["color"] else "__unspecified__"
+        groups.setdefault(key, []).append((index, variant))
+    if not groups:
+        raise OperatorError(422, "TEMPLATE_HAS_NO_SELECTABLE_VARIANTS")
+
+    def rank(item):
+        index, variant = item
+        size = variant["size"].strip().upper() if variant["size"] else ""
+        return ({"M": 0, "S": 1}.get(size, 2), index)
+
+    return [min(variants, key=rank)[1] for variants in groups.values()]
+
+
+def select_review_styles(styles, representative_variant_ids, limit=10):
+    """Cover supported placements and useful editorial views without inventing styles."""
+    variants = set(representative_variant_ids)
+    unique = {}
+    for style in styles:
+        if not isinstance(style, dict) or not isinstance(style.get("id"), int):
+            continue
+        restrictions = set(style.get("variantIds") or [])
+        if restrictions and not variants.issubset(restrictions):
+            continue
+        unique.setdefault(style["id"], style)
+    eligible = list(unique.values())
+    if not eligible:
+        raise OperatorError(422, "NO_COMPATIBLE_MOCKUP_STYLES")
+
+    keywords = ("lifestyle", "model", "3/4", "three-quarter", "side",
+                "left", "right", "sleeve", "embroidery")
+
+    def editorial_score(style):
+        text = " ".join(str(style.get(key) or "").casefold()
+                        for key in ("category", "view", "placement"))
+        return sum(1 for keyword in keywords if keyword in text)
+
+    selected = []
+    placements = []
+    for style in eligible:
+        placement = style.get("placement") or "unspecified"
+        if placement not in placements:
+            placements.append(placement)
+    for placement in placements:
+        candidates = [style for style in eligible
+                      if (style.get("placement") or "unspecified") == placement]
+        selected.append(max(candidates, key=editorial_score))
+    for style in sorted(eligible, key=editorial_score, reverse=True):
+        if editorial_score(style) and style not in selected:
+            selected.append(style)
+    return selected[:limit]
 
 
 class PrintfulClient:
@@ -280,6 +369,61 @@ class PrintfulClient:
                 raise OperatorError(502, "PRINTFUL_TOO_MANY_STYLES")
         return {"templateId": template_id, "availableVariantIds": template["availableVariantIds"],
                 "colors": template["colors"], "placements": template["placements"], "styles": styles}
+
+    async def catalog_variants(self, catalog_product_id):
+        variants = []
+        offset = 0
+        while True:
+            payload = await self.get(
+                f"/v2/catalog-products/{catalog_product_id}/catalog-variants",
+                {"limit": 100, "offset": offset},
+            )
+            page = payload.get("data")
+            if not isinstance(page, list):
+                raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+            variants.extend(page)
+            paging = payload.get("paging")
+            total = paging.get("total") if isinstance(paging, dict) else None
+            offset += len(page)
+            if not page or not isinstance(total, int) or offset >= total:
+                break
+            if offset >= 1000:
+                raise OperatorError(502, "PRINTFUL_TOO_MANY_VARIANTS")
+        return variants
+
+    async def mockup_plan(self, template_id):
+        template = await self.template(template_id)
+        product_id = template["catalogProductId"]
+        if not product_id:
+            raise OperatorError(422, "TEMPLATE_HAS_NO_CATALOG_PRODUCT")
+        variants = select_representative_variants(
+            template["availableVariantIds"],
+            await self.catalog_variants(product_id),
+        )
+        capabilities = await self.mockup_styles(template_id)
+        styles = select_review_styles(
+            capabilities["styles"],
+            [variant["id"] for variant in variants],
+        )
+        placements = []
+        for style in styles:
+            placement = style.get("placement")
+            if placement and placement not in placements:
+                placements.append(placement)
+        return {
+            "templateId": template_id,
+            "product": {"id": product_id, "name": template["title"]},
+            "selectedRepresentativeVariants": variants,
+            "colors": [variant["color"] for variant in variants],
+            "placements": placements,
+            "requestedStyles": [{
+                "id": style["id"],
+                "placement": style.get("placement"),
+                "view": style.get("view"),
+                "category": style.get("category"),
+            } for style in styles],
+            "estimatedTaskCount": 1,
+        }
 
     async def create_mockup_task(self, template_id, variant_ids, style_ids):
         template = await self.template(template_id)

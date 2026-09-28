@@ -23,7 +23,7 @@ def test_export_matches_routes_and_has_only_operator_endpoints():
         "getStatus", "getProducts", "getProduct", "updateProduct", "getAudit",
         "getPrintfulStatus", "getPrintfulTemplates", "getPrintfulTemplate",
         "getPrintfulSyncProducts", "getPrintfulSyncProduct", "getPrintfulMockupStyles",
-        "createPrintfulMockupTask", "getPrintfulMockupTask"}
+        "createPrintfulMockupPlan", "createPrintfulMockupTask", "getPrintfulMockupTask"}
     assert document["components"]["securitySchemes"]["OperatorBearer"] == {"type": "http", "scheme": "bearer"}
     assert document["servers"] == [{"url": "https://lock-city-operator-api.onrender.com"}]
     assert all(op["security"] == [{"OperatorBearer": []}]

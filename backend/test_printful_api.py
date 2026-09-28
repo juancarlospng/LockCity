@@ -6,10 +6,13 @@ import pytest
 from fastapi import FastAPI
 
 from operator_api import OperatorError, create_router
-from printful_api import PrintfulClient, normalize_template_detail
+from printful_api import (AW26_TEMPLATE_IDS, PrintfulClient, normalize_template_detail,
+                          select_representative_variants)
 
 
 TOKEN = "printful-test-token-that-must-never-leak"
+TEST_TEMPLATE_ID = min(AW26_TEMPLATE_IDS)
+PLAN_ID = "11111111-1111-4111-8111-111111111111"
 
 
 def client_for(handler):
@@ -176,14 +179,52 @@ def test_multiple_stores_require_explicit_store_id(monkeypatch):
 
 
 class Store:
+    def __init__(self):
+        self.plan = None
+
     async def ping(self):
         return None
 
     async def audit(self, _page, _size):
         return []
 
+    async def create_mockup_plan(self, plan):
+        self.plan = {"plan_id": PLAN_ID, "template_id": plan["templateId"],
+                     "product": plan["product"],
+                     "variants": plan["selectedRepresentativeVariants"],
+                     "styles": plan["requestedStyles"], "status": "planned"}
+        return PLAN_ID
+
+    async def claim_mockup_plan(self, plan_id, template_id):
+        if (not self.plan or self.plan["plan_id"] != plan_id
+                or self.plan["template_id"] != template_id
+                or self.plan["status"] != "planned"):
+            return None
+        self.plan["status"] = "scheduling"
+        return self.plan
+
+    async def complete_mockup_plan(self, plan_id, _template_id, task_keys):
+        assert self.plan["plan_id"] == plan_id
+        self.plan["task_keys"] = task_keys
+        self.plan["status"] = "pending"
+
+    async def fail_mockup_plan(self, plan_id, _template_id):
+        assert self.plan["plan_id"] == plan_id
+        self.plan["status"] = "failed"
+
+    async def mockup_task_context(self, task_key):
+        if not self.plan or task_key not in self.plan.get("task_keys", []):
+            return None
+        return self.plan
+
+    async def record_mockup_task_status(self, _context, _task_key, status):
+        self.plan["last_status"] = status
+
 
 class Printful:
+    def __init__(self):
+        self.created = 0
+
     async def templates(self, _limit, _offset):
         return {"items": [], "limit": 1, "offset": 0, "total": 0}
 
@@ -199,7 +240,15 @@ class Printful:
     async def mockup_styles(self, template_id):
         return {"templateId": template_id, "styles": []}
 
+    async def mockup_plan(self, template_id):
+        return {"templateId": template_id, "product": {"id": 71, "name": "AW26 Tee"},
+                "selectedRepresentativeVariants": [{"id": 4016, "color": "Black", "size": "M"}],
+                "colors": ["Black"], "placements": ["front"],
+                "requestedStyles": [{"id": 3, "placement": "front", "view": "Front"}],
+                "estimatedTaskCount": 1}
+
     async def create_mockup_task(self, template_id, variant_ids, style_ids):
+        self.created += 1
         return {"templateId": template_id, "taskIds": [101]}
 
     async def mockup_task(self, task_id):
@@ -228,7 +277,7 @@ def test_operator_routes_require_auth(monkeypatch, path):
 
     assert run(request("GET", path)).status_code == 401
     headers = {"Authorization": "Bearer " + "o" * 32}
-    assert run(request("GET", path, headers)).status_code == 200
+    assert run(request("GET", path, headers)).status_code in (200, 404)
 
 
 def test_operator_routes_are_get_only_and_writes_stay_disabled(monkeypatch):
@@ -251,26 +300,145 @@ def test_operator_routes_are_get_only_and_writes_stay_disabled(monkeypatch):
     assert os.getenv("OPERATOR_WRITES_ENABLED") == "false"
 
 
+def test_aw26_allowlist_has_exactly_seventeen_templates():
+    assert len(AW26_TEMPLATE_IDS) == 17
+    assert 105623495 in AW26_TEMPLATE_IDS
+    assert 106766446 in AW26_TEMPLATE_IDS
+    assert 107531332 not in AW26_TEMPLATE_IDS
+    assert 107691146 not in AW26_TEMPLATE_IDS
+    assert all(type(template_id) is int and template_id > 0
+               for template_id in AW26_TEMPLATE_IDS)
+
+
+def test_representative_variant_selection_prefers_m_then_s_per_color():
+    variants = [
+        {"id": 1, "color": "Black", "size": "S"},
+        {"id": 2, "color": "Black", "size": "M"},
+        {"id": 3, "color": "Black", "size": "L"},
+        {"id": 4, "color": "White", "size": "S"},
+        {"id": 5, "color": "White", "size": "L"},
+        {"id": 6, "color": "Navy", "size": "XL"},
+        {"id": 7, "color": "Navy", "size": "2XL"},
+    ]
+    selected = select_representative_variants(range(1, 8), variants)
+    assert [(item["color"], item["size"], item["id"]) for item in selected] == [
+        ("Black", "M", 2), ("White", "S", 4), ("Navy", "XL", 6)]
+
+
+def test_representative_variant_selection_supports_one_size():
+    selected = select_representative_variants(
+        [80], [{"id": 80, "color": "Black", "size": "One Size"}])
+    assert selected == [{"id": 80, "color": "Black", "size": "One Size"}]
+
+
+def test_mockup_plan_uses_only_get_and_supported_capabilities(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if request.url.path == "/product-templates/12":
+            return httpx.Response(200, json={"code": 200, "result": template_payload()})
+        if request.url.path.endswith("/catalog-variants"):
+            return httpx.Response(200, json={"data": [
+                {"id": 4016, "color": "Black", "size": "M"},
+                {"id": 4017, "color": "White", "size": "S"},
+            ], "paging": {"total": 2}})
+        if request.url.path.endswith("/mockup-styles"):
+            return httpx.Response(200, json={"data": [
+                {"placement": "front", "display_name": "Front print", "mockup_styles": [
+                    {"id": 3, "category_name": "Lifestyle", "view_name": "Front",
+                     "restricted_to_variants": None}]},
+                {"placement": "back", "display_name": "Back print", "mockup_styles": [
+                    {"id": 4, "category_name": "Model", "view_name": "Back",
+                     "restricted_to_variants": [4016, 4017]}]},
+            ], "paging": {"total": 2}})
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    plan = run(client_for(handler).mockup_plan(12))
+    assert plan["selectedRepresentativeVariants"] == [
+        {"id": 4016, "color": "Black", "size": "M"},
+        {"id": 4017, "color": "White", "size": "S"},
+    ]
+    assert plan["placements"] == ["front", "back"]
+    assert [style["id"] for style in plan["requestedStyles"]] == [3, 4]
+    assert plan["estimatedTaskCount"] == 1
+    assert all(request.method == "GET" for request in requests)
+
+
+def test_dry_run_is_authenticated_allowlisted_and_never_generates(monkeypatch):
+    monkeypatch.setenv("OPERATOR_API_TOKEN", "o" * 32)
+    monkeypatch.setenv("OPERATOR_WRITES_ENABLED", "false")
+    monkeypatch.delenv("PRINTFUL_MOCKUP_GENERATION_ENABLED", raising=False)
+    store, printful = Store(), Printful()
+    app = FastAPI()
+    app.include_router(create_router(store, printful=printful))
+
+    async def post(template_id, authenticated=True):
+        headers = {"Authorization": "Bearer " + "o" * 32} if authenticated else {}
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://test") as client:
+            return await client.post(
+                f"/api/operator/v1/printful/templates/{template_id}/mockup-tasks/dry-run",
+                headers=headers)
+
+    assert run(post(TEST_TEMPLATE_ID, False)).status_code == 401
+    denied = run(post(12))
+    assert denied.status_code == 403
+    assert denied.json() == {"error": "TEMPLATE_NOT_ALLOWED"}
+    response = run(post(TEST_TEMPLATE_ID))
+    assert response.status_code == 200
+    assert response.json()["planId"] == PLAN_ID
+    assert response.json()["estimatedTaskCount"] == 1
+    assert printful.created == 0
+    assert os.getenv("OPERATOR_WRITES_ENABLED") == "false"
+
+
 def test_mockup_generation_is_separately_gated(monkeypatch):
     monkeypatch.setenv("OPERATOR_API_TOKEN", "o" * 32)
     monkeypatch.setenv("OPERATOR_WRITES_ENABLED", "false")
     monkeypatch.delenv("PRINTFUL_MOCKUP_GENERATION_ENABLED", raising=False)
+    store, printful = Store(), Printful()
     app = FastAPI()
-    app.include_router(create_router(Store(), printful=Printful()))
+    app.include_router(create_router(store, printful=printful))
 
     async def request(body, authenticated=True):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url="http://test") as client:
-            return await client.post("/api/operator/v1/printful/templates/12/mockup-tasks", json=body,
-                                     headers={"Authorization": "Bearer " + "o" * 32} if authenticated else {})
+            return await client.post(
+                f"/api/operator/v1/printful/templates/{TEST_TEMPLATE_ID}/mockup-tasks",
+                json=body,
+                headers={"Authorization": "Bearer " + "o" * 32} if authenticated else {})
 
-    body = {"variantIds": [4016], "styleIds": [12]}
+    async def get_task():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://test") as client:
+            return await client.get(
+                "/api/operator/v1/printful/mockup-tasks/101",
+                headers={"Authorization": "Bearer " + "o" * 32})
+
+    body = {"planId": PLAN_ID}
     assert run(request(body, False)).status_code == 401
     assert run(request(body)).json() == {"error": "MOCKUP_GENERATION_DISABLED"}
+    assert printful.created == 0
     monkeypatch.setenv("PRINTFUL_MOCKUP_GENERATION_ENABLED", "true")
-    assert run(request({"variantIds": [], "styleIds": [12]})).status_code == 400
-    assert run(request({"variantIds": [True], "styleIds": [12]})).status_code == 400
-    assert run(request(body)).json() == {"templateId": 12, "taskIds": [101]}
+    assert run(request({"variantIds": [4016], "styleIds": [12]})).status_code == 400
+    store.plan = {"plan_id": PLAN_ID, "template_id": TEST_TEMPLATE_ID,
+                  "product": {"id": 71, "name": "AW26 Tee"},
+                  "variants": [{"id": 4016, "color": "Black", "size": "M"}],
+                  "styles": [{"id": 3, "placement": "front", "view": "Front"}],
+                  "status": "planned"}
+    result = run(request(body)).json()
+    assert result["templateId"] == TEST_TEMPLATE_ID
+    assert result["taskKeys"] == [101]
+    assert result["requestedVariants"] == store.plan["variants"]
+    assert printful.created == 1
+    assert run(request(body)).status_code == 409
+    task = run(get_task())
+    assert task.status_code == 200
+    assert task.json()["templateId"] == TEST_TEMPLATE_ID
+    assert task.json()["status"] == "completed"
+    assert printful.created == 1
     assert os.getenv("OPERATOR_WRITES_ENABLED") == "false"
 
 

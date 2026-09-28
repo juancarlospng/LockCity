@@ -49,6 +49,7 @@ def test_independent_app_exposes_only_requested_routes():
         ("/api/operator/v1/printful/templates", "GET"),
         ("/api/operator/v1/printful/templates/{template_id}", "GET"),
         ("/api/operator/v1/printful/templates/{template_id}/mockup-styles", "GET"),
+        ("/api/operator/v1/printful/templates/{template_id}/mockup-tasks/dry-run", "POST"),
         ("/api/operator/v1/printful/templates/{template_id}/mockup-tasks", "POST"),
         ("/api/operator/v1/printful/mockup-tasks/{task_id}", "GET"),
         ("/api/operator/v1/printful/sync-products", "GET"),

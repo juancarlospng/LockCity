@@ -134,11 +134,24 @@ def test_operator_migration_is_private_and_defines_both_tables():
     assert "revoke all on table public.operator_audit from anon, authenticated" in migration.lower()
 
 
+def test_mockup_audit_migration_is_private_and_records_required_fields():
+    migration = (Path(__file__).parent / "supabase" / "migrations" /
+                 "003_operator_mockup_audit.sql").read_text(encoding="utf-8").lower()
+    assert "create table if not exists public.operator_mockup_plans" in migration
+    assert "create table if not exists public.operator_mockup_audit" in migration
+    for field in ("template_id", "action", "task_key", "status", "created_at"):
+        assert field in migration
+    assert migration.count("enable row level security") == 2
+    assert "revoke all on table public.operator_mockup_plans from anon, authenticated" in migration
+    assert "revoke all on table public.operator_mockup_audit from anon, authenticated" in migration
+
+
 def test_operator_environment_example_excludes_legacy_mongodb():
     backend = Path(__file__).parent
     operator_names = (backend / ".env.example").read_text(encoding="utf-8")
     legacy_names = (backend / "legacy.env.example").read_text(encoding="utf-8")
     assert "DATABASE_URL=" in operator_names
+    assert "PRINTFUL_MOCKUP_GENERATION_ENABLED=false" in operator_names
     assert "MONGO_URL=" not in operator_names
     assert "DB_NAME=" not in operator_names
     assert "MONGO_URL=" in legacy_names
