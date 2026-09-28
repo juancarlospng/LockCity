@@ -146,7 +146,9 @@ def plan_mockup_batches(representative_variants, styles):
                            if not restrictions or variant_id in restrictions)
         if not compatible:
             continue
-        batches.setdefault(compatible, []).append(style["id"])
+        style_ids = batches.setdefault(compatible, [])
+        if style["id"] not in style_ids:
+            style_ids.append(style["id"])
     return [{"variantIds": list(variants), "styleIds": style_ids}
             for variants, style_ids in batches.items()]
 
@@ -418,31 +420,36 @@ class PrintfulClient:
             raise OperatorError(422, "TEMPLATE_HAS_NO_CATALOG_PRODUCT")
         placements = template_placement_ids(template["placements"])
         styles = []
-        offset = 0
-        while True:
-            payload = await self.get(f"/v2/catalog-products/{product_id}/mockup-styles",
-                                     {"placements": ",".join(placements),
-                                      "limit": 100, "offset": offset})
-            page = payload.get("data")
-            if not isinstance(page, list):
-                raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
-            for placement in page:
-                if not isinstance(placement, dict):
-                    continue
-                for style in _list(placement.get("mockup_styles")):
-                    if not isinstance(style, dict) or not isinstance(style.get("id"), int):
+        # Query placements independently. Printful may return identical style IDs for
+        # several placements; the request filter is therefore the reliable source of
+        # provenance and must not be collapsed into one mixed response.
+        for requested_placement in placements:
+            offset = 0
+            while True:
+                payload = await self.get(f"/v2/catalog-products/{product_id}/mockup-styles",
+                                         {"placements": requested_placement,
+                                          "limit": 100, "offset": offset})
+                page = payload.get("data")
+                if not isinstance(page, list):
+                    raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+                for placement_group in page:
+                    if not isinstance(placement_group, dict):
                         continue
-                    styles.append({"id": style["id"], "placement": placement.get("placement"),
-                                   "displayName": placement.get("display_name"),
-                                   "category": style.get("category_name"), "view": style.get("view_name"),
-                                   "variantIds": _variant_ids(style)})
-            paging = payload.get("paging")
-            total = paging.get("total") if isinstance(paging, dict) else None
-            offset += len(page)
-            if not page or not isinstance(total, int) or offset >= total:
-                break
-            if offset >= 1000:
-                raise OperatorError(502, "PRINTFUL_TOO_MANY_STYLES")
+                    for style in _list(placement_group.get("mockup_styles")):
+                        if not isinstance(style, dict) or not isinstance(style.get("id"), int):
+                            continue
+                        styles.append({"id": style["id"], "placement": requested_placement,
+                                       "displayName": placement_group.get("display_name"),
+                                       "category": style.get("category_name"),
+                                       "view": style.get("view_name"),
+                                       "variantIds": _variant_ids(style)})
+                paging = payload.get("paging")
+                total = paging.get("total") if isinstance(paging, dict) else None
+                offset += len(page)
+                if not page or not isinstance(total, int) or offset >= total:
+                    break
+                if offset >= 1000:
+                    raise OperatorError(502, "PRINTFUL_TOO_MANY_STYLES")
         grouped = group_styles_by_placement(styles, placements)
         return {"templateId": template_id, "availableVariantIds": template["availableVariantIds"],
                 "colors": template["colors"], "placements": template["placements"],
@@ -486,8 +493,27 @@ class PrintfulClient:
         if not planned_styles:
             raise OperatorError(422, "NO_COMPATIBLE_MOCKUP_STYLES")
         batches = plan_mockup_batches(variants, planned_styles)
-        estimated_files = sum(len(batch["variantIds"]) * len(batch["styleIds"])
-                              for batch in batches)
+        representative_ids = [variant["id"] for variant in variants]
+        estimated_files = sum(
+            sum(1 for variant_id in representative_ids
+                if not style.get("restrictedVariantIds")
+                or variant_id in style["restrictedVariantIds"])
+            for style in planned_styles
+        )
+        planned_style_ids = list(dict.fromkeys(style["id"] for style in planned_styles))
+        requested_styles = []
+        for style_id in planned_style_ids:
+            matches = [(placement, style) for placement, candidates in recommended.items()
+                       for style in candidates if style["id"] == style_id]
+            sample = matches[0][1]
+            requested_styles.append({
+                "id": style_id,
+                "placement": matches[0][0],
+                "placements": [placement for placement, _ in matches],
+                "view": sample.get("view"),
+                "category": sample.get("category"),
+                "restrictedVariantIds": sample.get("restrictedVariantIds") or [],
+            })
         return {
             "templateId": template_id,
             "product": {"id": product_id, "name": template["title"]},
@@ -496,19 +522,12 @@ class PrintfulClient:
             "templatePlacements": capabilities["templatePlacements"],
             "supportedStylesByPlacement": grouped,
             "recommendedCandidateStylesByPlacement": recommended,
-            "plannedMockupStyleIds": [style["id"] for style in planned_styles],
+            "plannedMockupStyleIds": planned_style_ids,
             "estimatedGeneratedFiles": estimated_files,
             "plannedTaskCount": len(batches),
             # Compatibility fields retained for stored plans and existing clients.
             "placements": capabilities["templatePlacements"],
-            "requestedStyles": [{
-                "id": style["id"],
-                "placement": next((placement for placement, candidates in recommended.items()
-                                   if style in candidates), None),
-                "view": style.get("view"),
-                "category": style.get("category"),
-                "restrictedVariantIds": style.get("restrictedVariantIds") or [],
-            } for style in planned_styles],
+            "requestedStyles": requested_styles,
             "estimatedTaskCount": len(batches),
         }
 

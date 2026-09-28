@@ -360,20 +360,24 @@ def test_mockup_plan_uses_only_get_and_supported_capabilities(monkeypatch):
                 {"id": 4017, "color": "White", "size": "S"},
             ], "paging": {"total": 2}})
         if request.url.path.endswith("/mockup-styles"):
-            assert request.url.params["placements"] == "front,back,sleeve_left"
-            return httpx.Response(200, json={"data": [
-                {"placement": "front", "display_name": "Front print", "mockup_styles": [
+            placement = request.url.params["placements"]
+            groups = {
+                "front": {"placement": "front", "display_name": "Front print", "mockup_styles": [
                     {"id": 2, "category_name": "Flat", "view_name": "Front",
                      "restricted_to_variants": None},
                     {"id": 3, "category_name": "Model", "view_name": "Front",
                      "restricted_to_variants": None}]},
-                {"placement": "back", "display_name": "Back print", "mockup_styles": [
+                "back": {"placement": "back", "display_name": "Back print", "mockup_styles": [
                     {"id": 4, "category_name": "Model", "view_name": "Back",
                      "restricted_to_variants": [4016, 4017]}]},
-                {"placement": "sleeve_left", "display_name": "Left sleeve", "mockup_styles": [
-                    {"id": 5, "category_name": "Ghost", "view_name": "Sleeve detail",
-                     "restricted_to_variants": [4016]}]},
-            ], "paging": {"total": 3}})
+                "sleeve_left": {"placement": "sleeve_left", "display_name": "Left sleeve",
+                                "mockup_styles": [
+                                    {"id": 5, "category_name": "Ghost", "view_name": "Sleeve detail",
+                                     "restricted_to_variants": [4016]}]},
+            }
+            assert placement in groups
+            return httpx.Response(200, json={
+                "data": [groups[placement]], "paging": {"total": 1}})
         raise AssertionError(f"unexpected request: {request.url}")
 
     plan = run(client_for(handler).mockup_plan(12))
@@ -390,6 +394,45 @@ def test_mockup_plan_uses_only_get_and_supported_capabilities(monkeypatch):
     assert plan["plannedTaskCount"] == 2
     assert plan["estimatedTaskCount"] == 2
     assert all(request.method == "GET" for request in requests)
+    style_requests = [request for request in requests
+                      if request.url.path.endswith("/mockup-styles")]
+    assert [request.url.params["placements"] for request in style_requests] == [
+        "front", "back", "sleeve_left"]
+
+
+def test_shared_style_ids_remain_grouped_but_are_planned_once(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+
+    def handler(request):
+        if request.url.path == "/product-templates/12":
+            template = template_payload()
+            template["placements"] = [{"placement": "front"}, {"placement": "back"}]
+            template["available_variant_ids"] = [4016]
+            return httpx.Response(200, json={"code": 200, "result": template})
+        if request.url.path.endswith("/catalog-variants"):
+            return httpx.Response(200, json={"data": [
+                {"id": 4016, "color": "Black", "size": "M"}],
+                "paging": {"total": 1}})
+        if request.url.path.endswith("/mockup-styles"):
+            placement = request.url.params["placements"]
+            return httpx.Response(200, json={"data": [{
+                "placement": placement,
+                "mockup_styles": [{
+                    "id": 9,
+                    "category_name": "Model",
+                    "view_name": "Editorial",
+                    "restricted_to_variants": None,
+                }],
+            }], "paging": {"total": 1}})
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    plan = run(client_for(handler).mockup_plan(12))
+    assert [style["id"] for style in plan["supportedStylesByPlacement"]["front"]] == [9]
+    assert [style["id"] for style in plan["supportedStylesByPlacement"]["back"]] == [9]
+    assert plan["plannedMockupStyleIds"] == [9]
+    assert plan["requestedStyles"][0]["placements"] == ["front", "back"]
+    assert plan["estimatedGeneratedFiles"] == 2
+    assert plan["plannedTaskCount"] == 1
 
 
 def test_front_only_template_does_not_expose_unconfigured_placements():
