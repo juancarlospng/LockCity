@@ -9,6 +9,8 @@ from operator_api import OperatorError
 
 PRINTFUL_BASE_URL = "https://api.printful.com"
 AW26_TEMPLATE_IDS = frozenset({
+    79403270,
+    100892117,
     105623495,
     105624073,
     106094567,
@@ -17,8 +19,6 @@ AW26_TEMPLATE_IDS = frozenset({
     106766446,
     106767107,
     107221423,
-    107365805,
-    107366128,
     107530836,
     107563422,
     107563824,

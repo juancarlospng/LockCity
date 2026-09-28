@@ -320,11 +320,11 @@ def test_operator_routes_are_get_only_and_writes_stay_disabled(monkeypatch):
 
 
 def test_aw26_allowlist_has_exactly_seventeen_templates():
-    assert len(AW26_TEMPLATE_IDS) == 17
-    assert 105623495 in AW26_TEMPLATE_IDS
-    assert 106766446 in AW26_TEMPLATE_IDS
-    assert 107531332 not in AW26_TEMPLATE_IDS
-    assert 107691146 not in AW26_TEMPLATE_IDS
+    assert AW26_TEMPLATE_IDS == frozenset({
+        79403270, 100892117, 105623495, 105624073, 106094567, 106357278,
+        106357334, 106766446, 106767107, 107221423, 107530836, 107563422,
+        107563824, 107564276, 107658409, 107660830, 107660910,
+    })
     assert all(type(template_id) is int and template_id > 0
                for template_id in AW26_TEMPLATE_IDS)
 
