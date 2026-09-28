@@ -766,6 +766,36 @@ def test_printful_validation_details_are_allowlisted_and_secrets_redacted(monkey
     }, {"detail": "[REDACTED]"}]
 
 
+def test_mockup_generation_validation_details_are_sanitized(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("PRINTFUL_STORE_ID", "321")
+
+    def handler(request):
+        if request.url.path == "/product-templates/12":
+            return httpx.Response(200, json={"code": 200, "result": template_payload()})
+        if request.url.path.endswith("/mockup-styles"):
+            return httpx.Response(200, json={
+                "data": [{"placement": "front", "mockup_styles": [
+                    {"id": 3, "restricted_to_variants": [4016]}]}],
+                "paging": {"total": 1}})
+        return httpx.Response(400, json={"error": {"errors": [{
+            "type": "validation_error",
+            "title": "Invalid request",
+            "detail": "The selected mockup style is not compatible",
+            "source": {"pointer": "/products/0/mockup_style_ids"},
+        }]}})
+
+    with pytest.raises(OperatorError) as error:
+        run(client_for(handler).create_mockup_task(12, [4016], [3]))
+
+    assert error.value.details == [{
+        "type": "validation_error",
+        "title": "Invalid request",
+        "detail": "The selected mockup style is not compatible",
+        "source": {"pointer": "/products/0/mockup_style_ids"},
+    }]
+
+
 def test_secret_never_appears_in_operator_response(monkeypatch):
     monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
     monkeypatch.setenv("OPERATOR_API_TOKEN", "o" * 32)

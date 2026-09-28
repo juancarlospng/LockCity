@@ -723,7 +723,8 @@ class PrintfulClient:
         }
         if response.status_code in errors:
             status, code = errors[response.status_code]
-            raise OperatorError(status, code)
+            details = sanitize_printful_validation(response) if response.status_code == 400 else None
+            raise OperatorError(status, code, details)
         if response.status_code >= 500:
             raise OperatorError(502, "PRINTFUL_UNAVAILABLE")
         if not 200 <= response.status_code < 300:
