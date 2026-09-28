@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 
 import httpx
@@ -6,7 +7,8 @@ import pytest
 from fastapi import FastAPI
 
 from operator_api import OperatorError, create_router
-from printful_api import (AW26_TEMPLATE_IDS, PrintfulClient, group_styles_by_placement,
+from printful_api import (AW26_TEMPLATE_IDS, PrintfulClient, build_mockup_request_body,
+                          group_styles_by_placement,
                           normalize_mockup_task_result, normalize_template_detail,
                           plan_mockup_batches,
                           recommend_styles_by_placement, sanitize_printful_validation,
@@ -594,7 +596,15 @@ def test_printful_task_generation_and_result(monkeypatch):
                      "restricted_to_variants": [4016]}]}], "paging": {"total": 1}})
         if request.method == "POST":
             assert request.headers["X-PF-Store-Id"] == "321"
-            assert request.content and b'"source": "product_template"' in request.content
+            assert json.loads(request.content) == {
+                "format": "jpg",
+                "products": [{
+                    "source": "product_template",
+                    "product_template_id": 12,
+                    "catalog_variant_ids": [4016],
+                    "mockup_style_ids": [3],
+                }],
+            }
             return httpx.Response(200, json={"data": [{"id": 987, "status": "pending"}]})
         assert request.headers["X-PF-Store-Id"] == "321"
         return httpx.Response(200, json={"data": [{
@@ -766,6 +776,18 @@ def test_printful_validation_details_are_allowlisted_and_secrets_redacted(monkey
     }, {"detail": "[REDACTED]"}]
 
 
+def test_exact_product_template_mockup_request_body():
+    assert build_mockup_request_body(106357278, [23054], [27318]) == {
+        "format": "jpg",
+        "products": [{
+            "source": "product_template",
+            "product_template_id": 106357278,
+            "catalog_variant_ids": [23054],
+            "mockup_style_ids": [27318],
+        }],
+    }
+
+
 def test_mockup_generation_validation_details_are_sanitized(monkeypatch):
     monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
     monkeypatch.setenv("PRINTFUL_STORE_ID", "321")
@@ -788,12 +810,24 @@ def test_mockup_generation_validation_details_are_sanitized(monkeypatch):
     with pytest.raises(OperatorError) as error:
         run(client_for(handler).create_mockup_task(12, [4016], [3]))
 
-    assert error.value.details == [{
-        "type": "validation_error",
-        "title": "Invalid request",
-        "detail": "The selected mockup style is not compatible",
-        "source": {"pointer": "/products/0/mockup_style_ids"},
-    }]
+    assert error.value.details == {
+        "status": 400,
+        "outboundBody": {
+            "format": "jpg",
+            "products": [{
+                "source": "product_template",
+                "product_template_id": 12,
+                "catalog_variant_ids": [4016],
+                "mockup_style_ids": [3],
+            }],
+        },
+        "issues": [{
+            "type": "validation_error",
+            "title": "Invalid request",
+            "detail": "The selected mockup style is not compatible",
+            "source": {"pointer": "/products/0/mockup_style_ids"},
+        }],
+    }
 
 
 def test_secret_never_appears_in_operator_response(monkeypatch):
