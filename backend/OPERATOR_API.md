@@ -117,8 +117,11 @@ before/after plus `operation_id` and `verified`. A stale version returns
 `409 VERSION_CONFLICT`. Write outcomes that cannot be verified remain locked for
 manual reconciliation and are never automatically replayed.
 
-The AW26 product route is independently allowlisted for the 17 verified AW26
-WooCommerce product IDs. Its GET response audits the draft/hidden parent,
+The AW26 product route is independently allowlisted for 19 verified AW26
+WooCommerce candidates. The active merchandising set contains 18 products;
+WooCommerce product `3854` remains readable and hard-hideable but is excluded
+from merchandising writes because of its confirmed template mapping conflict.
+Its GET response audits the draft/hidden parent,
 all paginated variations, parent and variation prices, stock status, SKU, attributes, images,
 categories and non-sensitive Printful metadata. PATCH accepts only `name`,
 `description`, `short_description`, category IDs, `menu_order`, `retail_price`,
@@ -144,8 +147,8 @@ future WooCommerce products remain untouched until their AW26 mapping is verifie
 The authenticated AW26 hard-hide endpoint accepts only concurrency, idempotency
 and audit fields. It hardcodes `status=draft` and `catalog_visibility=hidden`,
 then compares every other normalized parent and variation field after the write.
-The allowlist contains only the 17 verified AW26 WooCommerce IDs. Ordinary AW26
-merchandising updates remain restricted to the separately approved pilot IDs.
+The candidate allowlist contains only the 19 verified AW26 WooCommerce IDs.
+Ordinary AW26 merchandising updates are restricted to the 18-product active set.
 
 ## Run and verify
 
