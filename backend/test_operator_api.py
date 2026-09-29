@@ -5,7 +5,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from operator_api import (AW26_WOO_PRODUCT_IDS, OperatorError, WooClient,
+from operator_api import (AW26_CATEGORY_POLICY_BY_TEMPLATE_ID,
+                          AW26_WOO_PRODUCT_IDS, OperatorError, WooClient,
                           aw26_commercial_version, create_router, digest,
                           product_view)
 
@@ -258,6 +259,11 @@ def test_missing_operator_config(setup, monkeypatch):
 class Aw26Woo:
     def __init__(self):
         self.writes = []
+        self.category_writes = []
+        self.categories = [
+            {"id": 43, "name": "Tops", "slug": "top", "parent": 0},
+            {"id": 44, "name": "Bottoms", "slug": "bottom", "parent": 0},
+        ]
         self.product = {
             "id": 3823, "name": "Lane Seven LS14014 Premium 1/4 Zip Sweatshirt",
             "slug": "lane-seven-ls14014", "status": "private", "type": "variable",
@@ -309,8 +315,19 @@ class Aw26Woo:
                 variation["regular_price"] = retail_price
         self._version()
 
-    async def call(self, method, path, params=None):
-        return [self.product], {"X-WP-Total": "1", "X-WP-TotalPages": "1"}
+    async def call(self, method, path, params=None, payload=None):
+        if path == "products/categories":
+            if method == "GET":
+                return copy.deepcopy(self.categories), {"X-WP-TotalPages": "1"}
+            if method == "POST":
+                created = {"id": 100 + len(self.category_writes), **payload}
+                self.category_writes.append(copy.deepcopy(payload))
+                self.categories.append(created)
+                return copy.deepcopy(created), {}
+            raise AssertionError(method)
+        if method == "GET" and path == "products":
+            return [self.product], {"X-WP-Total": "1", "X-WP-TotalPages": "1"}
+        raise AssertionError((method, path))
 
 
 @pytest.fixture
@@ -336,12 +353,38 @@ def aw26_body(aw26_setup):
 
 def test_aw26_detailed_read_is_authenticated_and_allowlisted(aw26_setup):
     assert AW26_WOO_PRODUCT_IDS == frozenset({3823, 3854})
+    assert len(AW26_CATEGORY_POLICY_BY_TEMPLATE_ID) == 17
     assert request(aw26_setup, "GET", "/aw26/products/3823", headers={}).status_code == 401
     response = request(aw26_setup, "GET", "/aw26/products/3823")
     assert response.status_code == 200
     assert response.json()["variation_ids"] == [401, 402]
     assert response.json()["printful"][0]["key"] == "_printful_sync_product_id"
     assert request(aw26_setup, "GET", "/aw26/products/3704").status_code == 403
+
+
+def test_aw26_category_bootstrap_is_authenticated_flagged_and_idempotent(aw26_setup, monkeypatch):
+    assert request(aw26_setup, "GET", "/aw26/categories", headers={}).status_code == 401
+    assert request(aw26_setup, "POST", "/aw26/categories/bootstrap").status_code == 403
+    monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
+    first = request(aw26_setup, "POST", "/aw26/categories/bootstrap")
+    assert first.status_code == 200
+    assert aw26_setup[2].category_writes == [
+        {"name": "Accessories", "slug": "accessories", "parent": 0},
+        {"name": "AW26", "slug": "aw26", "parent": 0},
+    ]
+    second = request(aw26_setup, "POST", "/aw26/categories/bootstrap")
+    assert second.status_code == 200
+    assert len(aw26_setup[2].category_writes) == 2
+    assert all(item["created"] is False for item in second.json()["categories"])
+
+
+def test_aw26_category_bootstrap_rejects_unsafe_publish_flag(aw26_setup, monkeypatch):
+    monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
+    monkeypatch.setenv("AW26_PUBLISH_ENABLED", "true")
+    response = request(aw26_setup, "POST", "/aw26/categories/bootstrap")
+    assert response.status_code == 503
+    assert response.json()["error"] == "AW26_PUBLISH_CONFIGURATION_UNSAFE"
+    assert aw26_setup[2].category_writes == []
 
 
 def test_aw26_patch_has_independent_disabled_flag(aw26_setup):

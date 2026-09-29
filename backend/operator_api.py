@@ -30,6 +30,18 @@ class Rename(BaseModel):
 
 
 AW26_WOO_PRODUCT_IDS = frozenset({3823, 3854})
+AW26_CATEGORY_DEFINITIONS = (
+    {"name": "Accessories", "slug": "accessories", "parent": 0},
+    {"name": "AW26", "slug": "aw26", "parent": 0},
+)
+AW26_CATEGORY_POLICY_BY_TEMPLATE_ID = {
+    106357278: "top", 106094567: "top", 105624073: "bottom",
+    105623495: "top", 100892117: "hats", 107660910: "bottom",
+    79403270: "top", 107660830: "top", 107658409: "top",
+    107564276: "top", 107563824: "top", 107563422: "hats",
+    107530836: "top", 107221423: "top", 106767107: "bottom",
+    106766446: "accessories", 106357334: "hats",
+}
 
 
 class Aw26ProductPatch(BaseModel):
@@ -629,6 +641,55 @@ class Aw26ProductService:
     def __init__(self, store, woo):
         self.store, self.woo = store, woo
 
+    async def categories(self):
+        items, page = [], 1
+        while True:
+            batch, headers = await self.woo.call(
+                "GET", "products/categories",
+                params={"page": page, "per_page": 100, "hide_empty": "false"})
+            if not isinstance(batch, list):
+                raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+            items.extend(batch)
+            try:
+                total_pages = int(headers.get("X-WP-TotalPages", "1"))
+            except (TypeError, ValueError):
+                raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE") from None
+            if page >= total_pages:
+                break
+            page += 1
+        names = {item.get("id"): item.get("name", "") for item in items
+                 if isinstance(item, dict) and isinstance(item.get("id"), int)}
+        return [{"id": item["id"], "name": item.get("name", ""),
+                 "slug": item.get("slug", ""), "parent": item.get("parent", 0),
+                 "parent_name": names.get(item.get("parent"), "")}
+                for item in items if isinstance(item, dict) and isinstance(item.get("id"), int)]
+
+    async def ensure_categories(self):
+        categories = await self.categories()
+        result = []
+        for expected in AW26_CATEGORY_DEFINITIONS:
+            candidates = [item for item in categories if (
+                item["slug"].casefold() == expected["slug"].casefold()
+                or item["name"].casefold() == expected["name"].casefold())]
+            exact = [item for item in candidates if item["parent"] == 0]
+            if len(exact) > 1 or candidates and not exact:
+                raise OperatorError(409, "CATEGORY_CONFLICT")
+            if exact:
+                item = exact[0]
+                result.append({**item, "created": False})
+                continue
+            raw, _ = await self.woo.call(
+                "POST", "products/categories", payload=expected)
+            if (not isinstance(raw, dict) or not isinstance(raw.get("id"), int)
+                    or raw.get("parent", 0) != 0):
+                raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+            item = {"id": raw["id"], "name": raw.get("name", ""),
+                    "slug": raw.get("slug", ""), "parent": raw.get("parent", 0),
+                    "parent_name": "", "created": True}
+            categories.append(item)
+            result.append(item)
+        return result
+
     @staticmethod
     def _write_fields(body):
         fields = {name: getattr(body, name) for name in Aw26ProductService.EDITABLE_FIELDS
@@ -883,6 +944,22 @@ def create_router(store, woo=None, printful=None):
     async def aw26_product(product_id: str, request: Request):
         async def action():
             return 200, await aw26_service.woo.get_aw26(valid_aw26_product(product_id))
+        return await dispatch(request, action)
+
+    @router.get("/aw26/categories")
+    async def aw26_categories(request: Request):
+        async def action():
+            return 200, {"categories": await aw26_service.categories()}
+        return await dispatch(request, action)
+
+    @router.post("/aw26/categories/bootstrap")
+    async def aw26_category_bootstrap(request: Request):
+        async def action():
+            if os.getenv("AW26_PRODUCT_WRITE_ENABLED") != "true":
+                raise OperatorError(403, "AW26_PRODUCT_WRITES_DISABLED")
+            if os.getenv("AW26_PUBLISH_ENABLED") == "true":
+                raise OperatorError(503, "AW26_PUBLISH_CONFIGURATION_UNSAFE")
+            return 200, {"categories": await aw26_service.ensure_categories()}
         return await dispatch(request, action)
 
     @router.patch("/aw26/products/{product_id}")

@@ -21,7 +21,7 @@ def test_export_matches_routes_and_has_only_operator_endpoints():
     assert exported == actual
     assert {op["operationId"] for ops in document["paths"].values() for op in ops.values()} == {
         "getStatus", "getProducts", "getProduct", "updateProduct", "getAudit",
-        "getAw26Product", "updateAw26Product",
+        "getAw26Product", "updateAw26Product", "getAw26Categories", "bootstrapAw26Categories",
         "getPrintfulStatus", "getPrintfulTemplates", "getPrintfulTemplate",
         "getPrintfulSyncProducts", "getPrintfulSyncProduct", "getPrintfulMockupStyles",
         "createPrintfulMockupPlan", "createPrintfulMockupTask", "getPrintfulMockupTask"}

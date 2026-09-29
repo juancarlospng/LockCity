@@ -64,6 +64,14 @@ def contract():
                                 "verified": {"type": "boolean"},
                                 "product": {"$ref": "#/components/schemas/Aw26Product"},
                                 "error": {"type": "string"}}},
+        "Aw26Category": {"type": "object", "required": [
+            "id", "name", "slug", "parent", "parent_name"], "properties": {
+                "id": {"type": "integer"}, "name": {"type": "string"},
+                "slug": {"type": "string"}, "parent": {"type": "integer"},
+                "parent_name": {"type": "string"}, "created": {"type": "boolean"}}},
+        "Aw26Categories": {"type": "object", "required": ["categories"], "properties": {
+            "categories": {"type": "array", "items": {
+                "$ref": "#/components/schemas/Aw26Category"}}}},
         "Status": {"type": "object", "required": ["status", "audit", "woocommerce", "writes_enabled"],
                    "properties": {"status": {"type": "string"}, "audit": {"type": "string"},
                                   "woocommerce": {"type": "string"}, "writes_enabled": {"type": "boolean"},
@@ -211,6 +219,8 @@ def contract():
         ("/products/{id}", "patch", "updateProduct", "PatchResult", identifier),
         ("/aw26/products/{id}", "get", "getAw26Product", "Aw26Product", identifier),
         ("/aw26/products/{id}", "patch", "updateAw26Product", "Aw26PatchResult", identifier),
+        ("/aw26/categories", "get", "getAw26Categories", "Aw26Categories", []),
+        ("/aw26/categories/bootstrap", "post", "bootstrapAw26Categories", "Aw26Categories", []),
         ("/audit", "get", "getAudit", "Audit", pagination),
         ("/printful/status", "get", "getPrintfulStatus", "PrintfulStatus", []),
         ("/printful/templates", "get", "getPrintfulTemplates", "PrintfulTemplateList", printful_pagination),
@@ -253,6 +263,11 @@ def contract():
                 "to existing variations, and verifies the full product after writing.")
             operation["requestBody"] = {"required": True, "content": {"application/json": {
                 "schema": {"$ref": "#/components/schemas/Aw26ProductPatch"}}}}
+        if operation_id == "bootstrapAw26Categories":
+            operation["description"] = (
+                "Ensure only the root Accessories and AW26 categories. Existing categories are resolved "
+                "by slug, name and hierarchy before creation. Requires AW26 writes enabled and "
+                "publication disabled.")
         if operation_id == "createPrintfulMockupPlan":
             operation["description"] = ("Build and audit an AW26 representative-color mockup plan using only "
                                         "Printful GET requests. An optional exact variant/style selection is "

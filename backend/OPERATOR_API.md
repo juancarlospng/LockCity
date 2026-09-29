@@ -134,6 +134,12 @@ WooCommerce timestamps, permalinks, generated URLs, links, runtime metadata and
 other transient response fields are excluded so repeated unchanged reads produce
 the same version.
 
+The authenticated AW26 category bootstrap is independently gated by the AW26
+write flag and can only ensure the root categories `Accessories` and `AW26`.
+It resolves existing categories by slug, name and hierarchy before creating and
+rejects ambiguous matches. The 17-template root-category policy is centralized;
+future WooCommerce products remain untouched until their AW26 mapping is verified.
+
 ## Run and verify
 
 Render start command:
