@@ -787,10 +787,13 @@ class Aw26ProductService:
                     "sku", "stock_status", "stock_quantity", "manage_stock", "status",
                     "sale_price", "attributes", "printful")):
                 return False
-            if (before["type"] == "variable" and expected_price is not None
-                    and Aw26ProductService._price(
+            if before["type"] == "variable":
+                if (expected_price is None
+                        and current["regular_price"] != old["regular_price"]):
+                    return False
+                if (expected_price is not None and Aw26ProductService._price(
                         current["regular_price"]) != expected_price):
-                return False
+                    return False
         return True
 
     async def patch(self, product_id, body):
