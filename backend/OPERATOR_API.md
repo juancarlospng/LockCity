@@ -127,6 +127,12 @@ to the existing variation IDs read immediately before the write. Status, SKU,
 stock and variation creation/deletion are not accepted. The product must be
 variable and private before the write and remain private after read-after-write.
 The endpoint uses the existing server-side lock and before/after audit records.
+Its `expected_version` hashes a canonical commercial state: parent content,
+category IDs, attribute names/options, ordered image IDs, visibility and menu
+order, plus each variation's prices, status, SKU, stock state and attributes.
+WooCommerce timestamps, permalinks, generated URLs, links, runtime metadata and
+other transient response fields are excluded so repeated unchanged reads produce
+the same version.
 
 ## Run and verify
 

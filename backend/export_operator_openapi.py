@@ -48,7 +48,8 @@ def contract():
             "variation_ids", "variations", "printful", "version"], "properties": {
                 "id": {"type": "integer"}, "name": {"type": "string"},
                 "slug": {"type": "string"}, "status": {"type": "string"},
-                "type": {"type": "string"}, "description": {"type": "string"},
+                "type": {"type": "string"}, "catalog_visibility": {"type": "string"},
+                "description": {"type": "string"},
                 "short_description": {"type": "string"}, "menu_order": {"type": "integer"},
                 "categories": {"type": "array", "items": {"type": "object"}},
                 "images": {"type": "array", "items": {"type": "object"}},

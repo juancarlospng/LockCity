@@ -5,8 +5,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from operator_api import (OperatorError, WooClient, create_router, digest,
-                          product_view)
+from operator_api import (OperatorError, WooClient, aw26_commercial_version,
+                          create_router, digest, product_view)
 
 
 class Store:
@@ -253,6 +253,7 @@ class Aw26Woo:
         self.product = {
             "id": 3823, "name": "Lane Seven LS14014 Premium 1/4 Zip Sweatshirt",
             "slug": "lane-seven-ls14014", "status": "private", "type": "variable",
+            "catalog_visibility": "hidden",
             "description": "Current description", "short_description": "Current short",
             "menu_order": 0,
             "categories": [{"id": 19, "name": "AW26", "slug": "aw26"}],
@@ -265,11 +266,13 @@ class Aw26Woo:
                  "attributes": [{"name": "Color", "option": "Black"},
                                 {"name": "Size", "option": "S"}],
                  "regular_price": "70.00", "sale_price": "", "stock_status": "instock",
+                 "stock_quantity": None, "manage_stock": False,
                  "sku": "PF-S", "printful": [{"key": "_printful_sync_variant_id", "value": 91}]},
                 {"id": 402, "status": "publish", "color": "Black", "size": "M",
                  "attributes": [{"name": "Color", "option": "Black"},
                                 {"name": "Size", "option": "M"}],
                  "regular_price": "70.00", "sale_price": "", "stock_status": "instock",
+                 "stock_quantity": None, "manage_stock": False,
                  "sku": "PF-M", "printful": [{"key": "_printful_sync_variant_id", "value": 92}]},
             ],
             "printful": [{"key": "_printful_sync_product_id", "value": 81}],
@@ -390,3 +393,90 @@ def test_aw26_patch_refuses_unsafe_publish_configuration(aw26_setup, monkeypatch
     assert response.status_code == 503
     assert response.json()["error"] == "AW26_PUBLISH_CONFIGURATION_UNSAFE"
     assert aw26_setup[2].writes == []
+
+
+def commercial_raw():
+    product = {
+        "id": 3823, "name": "Quarter Zip", "status": "private", "type": "variable",
+        "catalog_visibility": "hidden", "description": "Description",
+        "short_description": "Short", "menu_order": 2,
+        "categories": [{"id": 44, "name": "Bottoms"}],
+        "attributes": [
+            {"name": "Size", "options": ["M", "S"], "variation": True},
+            {"name": "Color", "options": ["Navy", "Black"], "variation": True},
+        ],
+        "images": [{"id": 11, "src": "https://one.invalid/a.jpg"},
+                   {"id": 12, "src": "https://one.invalid/b.jpg"}],
+        "date_modified": "2026-01-01T00:00:00", "permalink": "https://one.invalid/product",
+        "price_html": "$43.50", "_links": {"self": [{"href": "https://one.invalid"}]},
+        "meta_data": [{"key": "runtime_nonce", "value": "first"}],
+    }
+    variations = [
+        {"id": 3825, "regular_price": "43.5", "sale_price": "", "status": "publish",
+         "sku": "BLACK-M", "stock_status": "instock", "stock_quantity": None,
+         "manage_stock": False, "attributes": [
+             {"name": "Size", "option": "M"}, {"name": "Color", "option": "Black"}],
+         "date_modified": "2026-01-01T00:00:00", "permalink": "https://one.invalid/v/3825"},
+        {"id": 3824, "regular_price": "43.50", "sale_price": "", "status": "publish",
+         "sku": "BLACK-S", "stock_status": "instock", "stock_quantity": None,
+         "manage_stock": False, "attributes": [
+             {"name": "Color", "option": "Black"}, {"name": "Size", "option": "S"}],
+         "date_modified": "2026-01-01T00:00:00", "permalink": "https://one.invalid/v/3824"},
+    ]
+    return product, variations
+
+
+def test_aw26_version_ignores_changing_timestamps():
+    product, variations = commercial_raw()
+    expected = aw26_commercial_version(product, variations)
+    product["date_created"] = "2030-02-03T04:05:06"
+    product["date_modified"] = "2030-02-03T04:05:07"
+    product["date_created_gmt"] = "2030-02-03T03:05:06"
+    variations[0]["date_modified"] = "2030-02-03T04:05:08"
+    assert aw26_commercial_version(product, variations) == expected
+
+
+def test_aw26_version_ignores_runtime_and_generated_fields():
+    product, variations = commercial_raw()
+    expected = aw26_commercial_version(product, variations)
+    product.update({"permalink": "https://two.invalid/new", "price_html": "dynamic",
+                    "_links": {"self": [{"href": "https://two.invalid"}]},
+                    "meta_data": [{"key": "runtime_nonce", "value": "second"}]})
+    product["images"][0]["src"] = "https://cdn-two.invalid/generated.jpg"
+    variations[0]["permalink"] = "https://two.invalid/v/3825"
+    assert aw26_commercial_version(product, variations) == expected
+
+
+def test_aw26_version_changes_with_name():
+    product, variations = commercial_raw()
+    expected = aw26_commercial_version(product, variations)
+    product["name"] = "Changed"
+    assert aw26_commercial_version(product, variations) != expected
+
+
+def test_aw26_version_changes_with_variation_regular_price():
+    product, variations = commercial_raw()
+    expected = aw26_commercial_version(product, variations)
+    variations[0]["regular_price"] = "78.00"
+    assert aw26_commercial_version(product, variations) != expected
+
+
+def test_aw26_version_changes_with_sku():
+    product, variations = commercial_raw()
+    expected = aw26_commercial_version(product, variations)
+    variations[0]["sku"] = "CHANGED"
+    assert aw26_commercial_version(product, variations) != expected
+
+
+def test_aw26_version_changes_with_variation_count():
+    product, variations = commercial_raw()
+    expected = aw26_commercial_version(product, variations)
+    variations.pop()
+    assert aw26_commercial_version(product, variations) != expected
+
+
+def test_aw26_version_changes_with_category():
+    product, variations = commercial_raw()
+    expected = aw26_commercial_version(product, variations)
+    product["categories"] = [{"id": 43, "name": "Tops"}]
+    assert aw26_commercial_version(product, variations) != expected

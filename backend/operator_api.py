@@ -103,9 +103,77 @@ def variation_view(raw):
         "regular_price": raw.get("regular_price", ""),
         "sale_price": raw.get("sale_price", ""),
         "stock_status": raw.get("stock_status", ""),
+        "stock_quantity": raw.get("stock_quantity"),
+        "manage_stock": bool(raw.get("manage_stock")),
         "sku": raw.get("sku", ""),
         "printful": _safe_printful_metadata(raw.get("meta_data")),
     }
+
+
+def _canonical_price(value):
+    if value in (None, ""):
+        return ""
+    try:
+        return format(Decimal(str(value)).quantize(Decimal("0.01")), "f")
+    except Exception:
+        return str(value)
+
+
+def aw26_commercial_state(raw, variations):
+    """Return only stable commercial fields used for optimistic concurrency."""
+    parent_attributes = []
+    for item in raw.get("attributes", []) if isinstance(raw.get("attributes"), list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+            continue
+        options = item.get("options") if isinstance(item.get("options"), list) else []
+        parent_attributes.append({
+            "name": item["name"],
+            "options": sorted(str(option) for option in options),
+            "variation": bool(item.get("variation")),
+        })
+    parent_attributes.sort(key=lambda item: (item["name"].casefold(), item["name"]))
+
+    stable_variations = []
+    for item in variations:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), int):
+            raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+        attributes = _attributes(item.get("attributes"))
+        attributes.sort(key=lambda value: (value["name"].casefold(), value["name"], value["option"]))
+        stable_variations.append({
+            "id": item["id"],
+            "regular_price": _canonical_price(item.get("regular_price")),
+            "sale_price": _canonical_price(item.get("sale_price")),
+            "status": item.get("status", ""),
+            "sku": item.get("sku", ""),
+            "stock_status": item.get("stock_status", ""),
+            "stock_quantity": item.get("stock_quantity"),
+            "manage_stock": bool(item.get("manage_stock")),
+            "attributes": attributes,
+        })
+    stable_variations.sort(key=lambda item: item["id"])
+
+    category_ids = sorted(item["id"] for item in raw.get("categories", [])
+                          if isinstance(item, dict) and isinstance(item.get("id"), int))
+    image_ids = [item["id"] for item in raw.get("images", [])
+                 if isinstance(item, dict) and isinstance(item.get("id"), int)]
+    return {
+        "id": raw.get("id"),
+        "name": raw.get("name", ""),
+        "status": raw.get("status", ""),
+        "type": raw.get("type", ""),
+        "catalog_visibility": raw.get("catalog_visibility", ""),
+        "description": raw.get("description", ""),
+        "short_description": raw.get("short_description", ""),
+        "category_ids": category_ids,
+        "attributes": parent_attributes,
+        "image_ids": image_ids,
+        "menu_order": raw.get("menu_order", 0),
+        "variations": stable_variations,
+    }
+
+
+def aw26_commercial_version(raw, variations):
+    return digest(aw26_commercial_state(raw, variations))
 
 
 def aw26_product_view(raw, variations):
@@ -133,12 +201,13 @@ def aw26_product_view(raw, variations):
     return {
         "id": raw["id"], "name": raw.get("name", ""), "slug": raw.get("slug", ""),
         "status": raw.get("status", ""), "type": raw.get("type", ""),
+        "catalog_visibility": raw.get("catalog_visibility", ""),
         "description": raw.get("description", ""),
         "short_description": raw.get("short_description", ""),
         "menu_order": raw.get("menu_order", 0), "categories": categories,
         "images": images, "attributes": attributes, "variation_ids": variation_ids,
         "variations": variation_views, "printful": _safe_printful_metadata(raw.get("meta_data")),
-        "version": digest({"product": raw, "variations": variations}),
+        "version": aw26_commercial_version(raw, variations),
     }
 
 
@@ -562,6 +631,7 @@ class Aw26ProductService:
     def _verified(before, after, body):
         if (after["id"] != before["id"] or after["status"] != "private"
                 or after["type"] != "variable"
+                or after["catalog_visibility"] != before["catalog_visibility"]
                 or after["variation_ids"] != before["variation_ids"]):
             return False
         for field in ("name", "description", "short_description", "menu_order"):
@@ -576,7 +646,10 @@ class Aw26ProductService:
                 return False
         elif after["categories"] != before["categories"]:
             return False
-        for field in ("slug", "images", "attributes", "printful"):
+        if ([item["id"] for item in after["images"]]
+                != [item["id"] for item in before["images"]]):
+            return False
+        for field in ("slug", "attributes", "printful"):
             if after[field] != before[field]:
                 return False
         before_variations = {item["id"]: item for item in before["variations"]}
@@ -587,7 +660,8 @@ class Aw26ProductService:
         for variation_id, old in before_variations.items():
             current = after_variations[variation_id]
             if any(current[field] != old[field] for field in (
-                    "sku", "stock_status", "status", "sale_price", "attributes", "printful")):
+                    "sku", "stock_status", "stock_quantity", "manage_stock", "status",
+                    "sale_price", "attributes", "printful")):
                 return False
             if expected_price is not None and Aw26ProductService._price(
                     current["regular_price"]) != expected_price:
