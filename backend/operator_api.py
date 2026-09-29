@@ -393,7 +393,7 @@ class PostgresStore:
                  AND locks.operation_id = audit.operation_id
                  AND audit.product_id = $1
                  AND audit.state = 'uncertain'
-                 AND audit.after_payload IS NULL
+                 AND (audit.after_payload IS NULL OR audit.after_payload = 'null'::jsonb)
                  AND audit.before_payload->>'version' = $2
                  AND locks.acquired_at < now() - interval '5 minutes'
                RETURNING locks.operation_id""",

@@ -131,7 +131,7 @@ def test_postgres_reconciles_only_stale_unchanged_uncertain_lock():
     assert asyncio.run(store.reconcile_uncertain_lock(3823, "a" * 64)) is True
     _, query, args = pool.calls[0]
     assert "audit.state = 'uncertain'" in query
-    assert "audit.after_payload IS NULL" in query
+    assert "audit.after_payload IS NULL OR audit.after_payload = 'null'::jsonb" in query
     assert "audit.before_payload->>'version' = $2" in query
     assert "interval '5 minutes'" in query
     assert args == (3823, "a" * 64)
