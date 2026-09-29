@@ -29,7 +29,7 @@ class Rename(BaseModel):
     idempotency_key: StrictStr = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
 
 
-AW26_WOO_PRODUCT_IDS = frozenset({3823})
+AW26_WOO_PRODUCT_IDS = frozenset({3823, 3854})
 
 
 class Aw26ProductPatch(BaseModel):

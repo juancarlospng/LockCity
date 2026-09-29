@@ -5,8 +5,9 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from operator_api import (OperatorError, WooClient, aw26_commercial_version,
-                          create_router, digest, product_view)
+from operator_api import (AW26_WOO_PRODUCT_IDS, OperatorError, WooClient,
+                          aw26_commercial_version, create_router, digest,
+                          product_view)
 
 
 class Store:
@@ -334,6 +335,7 @@ def aw26_body(aw26_setup):
 
 
 def test_aw26_detailed_read_is_authenticated_and_allowlisted(aw26_setup):
+    assert AW26_WOO_PRODUCT_IDS == frozenset({3823, 3854})
     assert request(aw26_setup, "GET", "/aw26/products/3823", headers={}).status_code == 401
     response = request(aw26_setup, "GET", "/aw26/products/3823")
     assert response.status_code == 200

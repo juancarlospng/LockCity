@@ -118,7 +118,7 @@ before/after plus `operation_id` and `verified`. A stale version returns
 manual reconciliation and are never automatically replayed.
 
 The AW26 product route is independently allowlisted and currently accepts only
-WooCommerce product `3823`. Its GET response audits the private variable parent,
+the synchronized private WooCommerce AW26 products `3823` and `3854`. Its GET response audits the private variable parent,
 all paginated variations, prices, stock status, SKU, attributes, images,
 categories and non-sensitive Printful metadata. PATCH accepts only `name`,
 `description`, `short_description`, category IDs, `menu_order`, `retail_price`,
