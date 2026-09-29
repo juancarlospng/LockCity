@@ -117,10 +117,10 @@ before/after plus `operation_id` and `verified`. A stale version returns
 `409 VERSION_CONFLICT`. Write outcomes that cannot be verified remain locked for
 manual reconciliation and are never automatically replayed.
 
-The AW26 product route is independently allowlisted for 19 verified AW26
-WooCommerce candidates. The active merchandising set contains 18 products;
-WooCommerce product `3854` remains readable and hard-hideable but is excluded
-from merchandising writes because of its confirmed template mapping conflict.
+The AW26 product route is independently allowlisted for 19 verified candidates.
+The active merchandising set contains 18 products. WooCommerce product `4102`
+remains readable and hard-hideable but is excluded from AW26 by Lock City and does
+not permit merchandising writes through this route.
 Its GET response audits the draft/hidden parent,
 all paginated variations, parent and variation prices, stock status, SKU, attributes, images,
 categories and non-sensitive Printful metadata. PATCH accepts only `name`,

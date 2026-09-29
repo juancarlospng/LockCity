@@ -367,7 +367,7 @@ def test_aw26_detailed_read_is_authenticated_and_allowlisted(aw26_setup):
         3996, 4005, 4022, 4040, 4048, 4067, 4084, 4093, 4102, 4143,
     })
     assert len(AW26_WOO_PRODUCT_IDS) == 19
-    assert AW26_ACTIVE_WOO_PRODUCT_IDS == AW26_WOO_PRODUCT_IDS - {3854}
+    assert AW26_ACTIVE_WOO_PRODUCT_IDS == AW26_WOO_PRODUCT_IDS - {4102}
     assert len(AW26_ACTIVE_WOO_PRODUCT_IDS) == 18
     assert AW26_MERCHANDISING_WRITE_PRODUCT_IDS == AW26_ACTIVE_WOO_PRODUCT_IDS
     assert len(AW26_CATEGORY_POLICY_BY_TEMPLATE_ID) == 17
@@ -410,11 +410,11 @@ def test_aw26_patch_has_independent_disabled_flag(aw26_setup):
     assert response.json()["error"] == "AW26_PRODUCT_WRITES_DISABLED"
 
 
-def test_aw26_mapping_conflict_is_readable_but_not_merchandising_writable(
+def test_aw26_excluded_product_is_readable_but_not_merchandising_writable(
         aw26_setup, monkeypatch):
     monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
     response = request(
-        aw26_setup, "PATCH", "/aw26/products/3854", json=aw26_body(aw26_setup))
+        aw26_setup, "PATCH", "/aw26/products/4102", json=aw26_body(aw26_setup))
     assert response.status_code == 403
     assert response.json()["error"] == "AW26_MERCHANDISING_WRITE_NOT_ALLOWED"
     assert aw26_setup[2].writes == []
