@@ -5,7 +5,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from operator_api import OperatorError, WooClient, create_router, digest, product_view
+from operator_api import (OperatorError, WooClient, create_router, digest,
+                          product_view)
 
 
 class Store:
@@ -244,3 +245,148 @@ def test_body_limit_and_prohibited_methods(setup):
 def test_missing_operator_config(setup, monkeypatch):
     monkeypatch.delenv("OPERATOR_API_TOKEN")
     assert request(setup, "GET", "/status").json()["error"] == "OPERATOR_NOT_CONFIGURED"
+
+
+class Aw26Woo:
+    def __init__(self):
+        self.writes = []
+        self.product = {
+            "id": 3823, "name": "Lane Seven LS14014 Premium 1/4 Zip Sweatshirt",
+            "slug": "lane-seven-ls14014", "status": "private", "type": "variable",
+            "description": "Current description", "short_description": "Current short",
+            "menu_order": 0,
+            "categories": [{"id": 19, "name": "AW26", "slug": "aw26"}],
+            "images": [{"id": 501, "src": "https://example.invalid/front.jpg", "alt": ""}],
+            "attributes": [{"id": 1, "name": "Color", "options": ["Black"], "variation": True},
+                           {"id": 2, "name": "Size", "options": ["S", "M"], "variation": True}],
+            "variation_ids": [401, 402],
+            "variations": [
+                {"id": 401, "status": "publish", "color": "Black", "size": "S",
+                 "attributes": [{"name": "Color", "option": "Black"},
+                                {"name": "Size", "option": "S"}],
+                 "regular_price": "70.00", "sale_price": "", "stock_status": "instock",
+                 "sku": "PF-S", "printful": [{"key": "_printful_sync_variant_id", "value": 91}]},
+                {"id": 402, "status": "publish", "color": "Black", "size": "M",
+                 "attributes": [{"name": "Color", "option": "Black"},
+                                {"name": "Size", "option": "M"}],
+                 "regular_price": "70.00", "sale_price": "", "stock_status": "instock",
+                 "sku": "PF-M", "printful": [{"key": "_printful_sync_variant_id", "value": 92}]},
+            ],
+            "printful": [{"key": "_printful_sync_product_id", "value": 81}],
+        }
+        self._version()
+
+    def _version(self):
+        versionless = {key: value for key, value in self.product.items() if key != "version"}
+        self.product["version"] = digest(versionless)
+
+    async def get_aw26(self, product_id):
+        if product_id != 3823:
+            raise OperatorError(404, "PRODUCT_NOT_FOUND")
+        return copy.deepcopy(self.product)
+
+    async def update_aw26(self, product_id, fields, variation_ids, retail_price=None):
+        self.writes.append((product_id, copy.deepcopy(fields), list(variation_ids), retail_price))
+        for field, value in fields.items():
+            if field == "categories":
+                self.product[field] = [{"id": item["id"], "name": "", "slug": ""}
+                                       for item in value]
+            else:
+                self.product[field] = value
+        if retail_price is not None:
+            for variation in self.product["variations"]:
+                variation["regular_price"] = retail_price
+        self._version()
+
+    async def call(self, method, path, params=None):
+        return [self.product], {"X-WP-Total": "1", "X-WP-TotalPages": "1"}
+
+
+@pytest.fixture
+def aw26_setup(monkeypatch):
+    monkeypatch.setenv("OPERATOR_API_TOKEN", "t" * 32)
+    monkeypatch.setenv("OPERATOR_WRITES_ENABLED", "false")
+    monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "false")
+    monkeypatch.setenv("AW26_PUBLISH_ENABLED", "false")
+    store, woo = Store(), Aw26Woo()
+    app = FastAPI()
+    app.include_router(create_router(store, woo))
+    return app, store, woo
+
+
+def aw26_body(aw26_setup):
+    return {
+        "name": "LC Code Quarter-Zip Sweatshirt", "retail_price": "78.00",
+        "reason": "Apply approved AW26 name and retail price",
+        "idempotency_key": "aw26-product-3823-pilot-01",
+        "expected_version": aw26_setup[2].product["version"],
+    }
+
+
+def test_aw26_detailed_read_is_authenticated_and_allowlisted(aw26_setup):
+    assert request(aw26_setup, "GET", "/aw26/products/3823", headers={}).status_code == 401
+    response = request(aw26_setup, "GET", "/aw26/products/3823")
+    assert response.status_code == 200
+    assert response.json()["variation_ids"] == [401, 402]
+    assert response.json()["printful"][0]["key"] == "_printful_sync_product_id"
+    assert request(aw26_setup, "GET", "/aw26/products/3704").status_code == 403
+
+
+def test_aw26_patch_has_independent_disabled_flag(aw26_setup):
+    response = request(aw26_setup, "PATCH", "/aw26/products/3823", json=aw26_body(aw26_setup))
+    assert response.status_code == 403
+    assert response.json()["error"] == "AW26_PRODUCT_WRITES_DISABLED"
+    assert aw26_setup[2].writes == []
+
+
+def test_aw26_patch_updates_only_parent_allowlist_and_variation_prices(aw26_setup, monkeypatch):
+    monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
+    before = copy.deepcopy(aw26_setup[2].product)
+    payload = aw26_body(aw26_setup)
+    response = request(aw26_setup, "PATCH", "/aw26/products/3823", json=payload)
+    assert response.status_code == 200 and response.json()["verified"] is True
+    assert aw26_setup[2].writes == [(3823, {"name": payload["name"]}, [401, 402], "78.00")]
+    after = response.json()["product"]
+    assert after["status"] == "private" and after["variation_ids"] == [401, 402]
+    assert {item["regular_price"] for item in after["variations"]} == {"78.00"}
+    assert [item["sku"] for item in after["variations"]] == ["PF-S", "PF-M"]
+    assert [item["stock_status"] for item in after["variations"]] == ["instock", "instock"]
+    audit = list(aw26_setup[1].records.values())[0]
+    assert audit["before"]["name"] == before["name"]
+    assert audit["after"]["name"] == payload["name"]
+    assert request(aw26_setup, "PATCH", "/aw26/products/3823", json=payload).json() == response.json()
+    assert len(aw26_setup[2].writes) == 1
+
+
+@pytest.mark.parametrize("change", [
+    {"status": "publish"}, {"sku": "CHANGED"}, {"stock_status": "outofstock"},
+    {"variations": []}, {"retail_price": 78}, {"categories": [19, 19]},
+])
+def test_aw26_patch_rejects_non_allowlisted_fields_and_invalid_values(aw26_setup, monkeypatch, change):
+    monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
+    response = request(aw26_setup, "PATCH", "/aw26/products/3823",
+                       json={**aw26_body(aw26_setup), **change})
+    assert response.status_code == 400
+    assert aw26_setup[2].writes == []
+
+
+def test_aw26_patch_requires_private_variable_and_current_version(aw26_setup, monkeypatch):
+    monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
+    stale = {**aw26_body(aw26_setup), "expected_version": "a" * 64}
+    assert request(aw26_setup, "PATCH", "/aw26/products/3823", json=stale).status_code == 409
+    aw26_setup[2].product["status"] = "publish"
+    aw26_setup[2]._version()
+    current = {**aw26_body(aw26_setup), "expected_version": aw26_setup[2].product["version"],
+               "idempotency_key": "aw26-product-3823-pilot-02"}
+    response = request(aw26_setup, "PATCH", "/aw26/products/3823", json=current)
+    assert response.status_code == 409 and response.json()["error"] == "PRODUCT_NOT_PRIVATE"
+    assert aw26_setup[2].writes == []
+
+
+def test_aw26_patch_refuses_unsafe_publish_configuration(aw26_setup, monkeypatch):
+    monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
+    monkeypatch.setenv("AW26_PUBLISH_ENABLED", "true")
+    response = request(aw26_setup, "PATCH", "/aw26/products/3823", json=aw26_body(aw26_setup))
+    assert response.status_code == 503
+    assert response.json()["error"] == "AW26_PUBLISH_CONFIGURATION_UNSAFE"
+    assert aw26_setup[2].writes == []

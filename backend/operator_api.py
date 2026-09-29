@@ -6,12 +6,13 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from urllib.parse import urlsplit
 
 import asyncpg
 import httpx
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, ValidationError
 from starlette.responses import JSONResponse
 
 
@@ -23,6 +24,23 @@ class OperatorError(Exception):
 class Rename(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     name: StrictStr = Field(min_length=1, max_length=200)
+    reason: StrictStr = Field(min_length=1, max_length=500)
+    expected_version: StrictStr = Field(pattern=r"^[a-f0-9]{64}$")
+    idempotency_key: StrictStr = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
+
+
+AW26_WOO_PRODUCT_IDS = frozenset({3823})
+
+
+class Aw26ProductPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: StrictStr | None = Field(default=None, min_length=1, max_length=200)
+    description: StrictStr | None = Field(default=None, max_length=50000)
+    short_description: StrictStr | None = Field(default=None, max_length=10000)
+    categories: list[StrictInt] | None = Field(default=None, min_length=1, max_length=20)
+    menu_order: StrictInt | None = Field(default=None, ge=0, le=10000)
+    retail_price: StrictStr | None = Field(
+        default=None, pattern=r"^(?:0|[1-9][0-9]{0,5})(?:\.[0-9]{1,2})?$")
     reason: StrictStr = Field(min_length=1, max_length=500)
     expected_version: StrictStr = Field(pattern=r"^[a-f0-9]{64}$")
     idempotency_key: StrictStr = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
@@ -40,6 +58,88 @@ def product_view(raw):
     return {"id": raw["id"], "name": raw.get("name", ""),
             "slug": raw.get("slug", ""), "status": raw.get("status", ""),
             "type": raw.get("type", ""), "version": digest(raw)}
+
+
+def _safe_printful_metadata(items):
+    safe = []
+    forbidden = ("secret", "token", "password", "authorization", "consumer_key")
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        key = item.get("key")
+        value = item.get("value")
+        if (not isinstance(key, str) or "printful" not in key.lower()
+                or any(word in key.lower() for word in forbidden)
+                or not isinstance(value, (str, int, float, bool))
+                or isinstance(value, str) and len(value) > 200):
+            continue
+        safe.append({"key": key, "value": value})
+    return safe
+
+
+def _attributes(items):
+    result = []
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name") if isinstance(item.get("name"), str) else ""
+        option = item.get("option") if isinstance(item.get("option"), str) else ""
+        if name:
+            result.append({"name": name, "option": option})
+    return result
+
+
+def variation_view(raw):
+    if not isinstance(raw, dict) or not isinstance(raw.get("id"), int):
+        raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+    attributes = _attributes(raw.get("attributes"))
+    named = {item["name"].strip().lower(): item["option"] for item in attributes}
+    return {
+        "id": raw["id"],
+        "status": raw.get("status", ""),
+        "color": next((value for name, value in named.items() if "color" in name or "colour" in name), None),
+        "size": next((value for name, value in named.items() if "size" in name or "talla" in name), None),
+        "attributes": attributes,
+        "regular_price": raw.get("regular_price", ""),
+        "sale_price": raw.get("sale_price", ""),
+        "stock_status": raw.get("stock_status", ""),
+        "sku": raw.get("sku", ""),
+        "printful": _safe_printful_metadata(raw.get("meta_data")),
+    }
+
+
+def aw26_product_view(raw, variations):
+    if not isinstance(raw, dict) or not isinstance(raw.get("id"), int):
+        raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+    variation_views = [variation_view(item) for item in variations]
+    variation_ids = raw.get("variations")
+    if not isinstance(variation_ids, list) or any(not isinstance(item, int) for item in variation_ids):
+        raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+    if set(variation_ids) != {item["id"] for item in variation_views}:
+        raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+    categories = [{"id": item.get("id"), "name": item.get("name", ""), "slug": item.get("slug", "")}
+                  for item in raw.get("categories", []) if isinstance(item, dict)
+                  and isinstance(item.get("id"), int)]
+    images = [{"id": item.get("id"), "src": item.get("src", ""), "alt": item.get("alt", "")}
+              for item in raw.get("images", []) if isinstance(item, dict)
+              and isinstance(item.get("id"), int)]
+    attributes = []
+    for item in raw.get("attributes", []) if isinstance(raw.get("attributes"), list) else []:
+        if isinstance(item, dict) and isinstance(item.get("name"), str):
+            options = item.get("options") if isinstance(item.get("options"), list) else []
+            attributes.append({"id": item.get("id"), "name": item["name"],
+                               "options": [str(option) for option in options],
+                               "variation": bool(item.get("variation"))})
+    return {
+        "id": raw["id"], "name": raw.get("name", ""), "slug": raw.get("slug", ""),
+        "status": raw.get("status", ""), "type": raw.get("type", ""),
+        "description": raw.get("description", ""),
+        "short_description": raw.get("short_description", ""),
+        "menu_order": raw.get("menu_order", 0), "categories": categories,
+        "images": images, "attributes": attributes, "variation_ids": variation_ids,
+        "variations": variation_views, "printful": _safe_printful_metadata(raw.get("meta_data")),
+        "version": digest({"product": raw, "variations": variations}),
+    }
 
 
 class WooClient:
@@ -75,6 +175,40 @@ class WooClient:
 
     async def rename(self, product_id, name):
         await self.call("PUT", f"products/{product_id}", payload={"name": name})
+
+    async def get_aw26(self, product_id):
+        raw, _ = await self.call("GET", f"products/{product_id}", params={"context": "edit"})
+        variations = []
+        page = 1
+        while True:
+            batch, headers = await self.call(
+                "GET", f"products/{product_id}/variations",
+                params={"context": "edit", "page": page, "per_page": 100})
+            if not isinstance(batch, list):
+                raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+            variations.extend(batch)
+            try:
+                total_pages = int(headers.get("X-WP-TotalPages", "1"))
+            except (TypeError, ValueError):
+                raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE") from None
+            if page >= total_pages:
+                break
+            page += 1
+        view = aw26_product_view(raw, variations)
+        if view["id"] != product_id:
+            raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+        return view
+
+    async def update_aw26(self, product_id, fields, variation_ids, retail_price=None):
+        if fields:
+            await self.call("PUT", f"products/{product_id}", payload=fields)
+        if retail_price is not None:
+            if not variation_ids or len(variation_ids) > 100:
+                raise OperatorError(409, "VARIATION_SET_UNSAFE")
+            await self.call("POST", f"products/{product_id}/variations/batch", payload={
+                "update": [{"id": variation_id, "regular_price": retail_price}
+                           for variation_id in variation_ids]
+            })
 
 
 class PostgresStore:
@@ -401,6 +535,129 @@ class OperatorService:
                 await self.store.unlock(product_id, op)
 
 
+class Aw26ProductService:
+    EDITABLE_FIELDS = ("name", "description", "short_description", "categories", "menu_order")
+
+    def __init__(self, store, woo):
+        self.store, self.woo = store, woo
+
+    @staticmethod
+    def _write_fields(body):
+        fields = {name: getattr(body, name) for name in Aw26ProductService.EDITABLE_FIELDS
+                  if getattr(body, name) is not None}
+        if "categories" in fields:
+            fields["categories"] = [{"id": category_id} for category_id in fields["categories"]]
+        return fields
+
+    @staticmethod
+    def _price(value):
+        if value is None:
+            return None
+        try:
+            return format(Decimal(value).quantize(Decimal("0.01")), "f")
+        except Exception:
+            return None
+
+    @staticmethod
+    def _verified(before, after, body):
+        if (after["id"] != before["id"] or after["status"] != "private"
+                or after["type"] != "variable"
+                or after["variation_ids"] != before["variation_ids"]):
+            return False
+        for field in ("name", "description", "short_description", "menu_order"):
+            expected = getattr(body, field)
+            if expected is not None and after[field] != expected:
+                return False
+            if expected is None and after[field] != before[field]:
+                return False
+        if body.categories is not None:
+            if ({item["id"] for item in after["categories"]} != set(body.categories)
+                    or len(after["categories"]) != len(body.categories)):
+                return False
+        elif after["categories"] != before["categories"]:
+            return False
+        for field in ("slug", "images", "attributes", "printful"):
+            if after[field] != before[field]:
+                return False
+        before_variations = {item["id"]: item for item in before["variations"]}
+        after_variations = {item["id"]: item for item in after["variations"]}
+        if before_variations.keys() != after_variations.keys():
+            return False
+        expected_price = Aw26ProductService._price(body.retail_price)
+        for variation_id, old in before_variations.items():
+            current = after_variations[variation_id]
+            if any(current[field] != old[field] for field in (
+                    "sku", "stock_status", "status", "sale_price", "attributes", "printful")):
+                return False
+            if expected_price is not None and Aw26ProductService._price(
+                    current["regular_price"]) != expected_price:
+                return False
+        return True
+
+    async def patch(self, product_id, body):
+        key = digest(body.idempotency_key)
+        fingerprint = digest({"route": "aw26", "id": product_id, **body.model_dump()})
+        previous = await self.store.find(key)
+        if previous:
+            if previous["fingerprint"] != fingerprint:
+                raise OperatorError(409, "IDEMPOTENCY_CONFLICT")
+            return previous.get("http_status") or 409, previous.get("result") or {
+                "error": "OPERATION_IN_PROGRESS", "operation_id": previous["operation_id"]}
+        op = str(uuid.uuid4())
+        record = {
+            "operation_id": op, "product_id": product_id, "fingerprint": fingerprint,
+            "reason": body.reason, "actor": "operator-aw26",
+            "created_at": datetime.now(timezone.utc).isoformat(), "state": "pending",
+            "before": None, "after": None,
+        }
+        if not await self.store.reserve(key, record):
+            return await self.patch(product_id, body)
+        locked = False
+        write_started = False
+        resolved = False
+        try:
+            locked = await self.store.lock(product_id, op)
+            if not locked:
+                raise OperatorError(409, "PRODUCT_BUSY")
+            before = await self.woo.get_aw26(product_id)
+            await self.store.save(key, {"before": before})
+            if before["version"] != body.expected_version:
+                raise OperatorError(409, "VERSION_CONFLICT")
+            if before["type"] != "variable":
+                raise OperatorError(409, "PRODUCT_NOT_VARIABLE")
+            if before["status"] != "private":
+                raise OperatorError(409, "PRODUCT_NOT_PRIVATE")
+            await self.store.save(key, {"state": "writing"})
+            write_started = True
+            await self.woo.update_aw26(
+                product_id, self._write_fields(body), before["variation_ids"],
+                self._price(body.retail_price))
+            after = await self.woo.get_aw26(product_id)
+            verified = self._verified(before, after, body)
+            status = 200 if verified else 502
+            result = {"operation_id": op, "verified": verified, "product": after}
+            if not verified:
+                result["error"] = "VERIFICATION_FAILED"
+            await self.store.save(key, {
+                "state": "verified" if verified else "unverified", "after": after,
+                "result": result, "http_status": status,
+            })
+            resolved = verified
+            return status, result
+        except OperatorError as exc:
+            result = {"error": exc.code, "operation_id": op, "verified": False}
+            await self.store.save(key, {
+                "state": "uncertain" if write_started else "rejected",
+                "result": result, "http_status": exc.status,
+            })
+            return exc.status, result
+        except Exception:
+            return 503, {"error": "OPERATION_UNCERTAIN", "operation_id": op, "verified": False}
+        finally:
+            if locked and (not write_started or resolved):
+                await self.store.unlock(product_id, op)
+
+
 def create_router(store, woo=None, printful=None):
     from printful_api import (AW26_EDITORIAL_RECOMMENDATIONS, AW26_TEMPLATE_IDS,
                               PrintfulClient, normalize_mockup_task_result,
@@ -408,6 +665,7 @@ def create_router(store, woo=None, printful=None):
 
     router = APIRouter(prefix="/api/operator/v1")
     service = OperatorService(store, woo or WooClient())
+    aw26_service = Aw26ProductService(store, service.woo)
     printful_client = printful or PrintfulClient()
 
     async def dispatch(request, action):
@@ -448,6 +706,12 @@ def create_router(store, woo=None, printful=None):
             raise OperatorError(403, "TEMPLATE_NOT_ALLOWED")
         return template_id
 
+    def valid_aw26_product(value):
+        product_id = valid_id(value)
+        if product_id not in AW26_WOO_PRODUCT_IDS:
+            raise OperatorError(403, "AW26_PRODUCT_NOT_ALLOWED")
+        return product_id
+
     def valid_plan_id(value):
         try:
             parsed = uuid.UUID(value)
@@ -473,7 +737,10 @@ def create_router(store, woo=None, printful=None):
             await store.ping()
             await service.woo.call("GET", "products", params={"per_page": 1})
             return 200, {"status": "ok", "audit": "ok", "woocommerce": "ok",
-                         "writes_enabled": os.getenv("OPERATOR_WRITES_ENABLED") == "true"}
+                         "writes_enabled": os.getenv("OPERATOR_WRITES_ENABLED") == "true",
+                         "aw26_product_writes_enabled":
+                             os.getenv("AW26_PRODUCT_WRITE_ENABLED") == "true",
+                         "aw26_publish_enabled": os.getenv("AW26_PUBLISH_ENABLED") == "true"}
         return await dispatch(request, action)
 
     @router.get("/products")
@@ -511,6 +778,43 @@ def create_router(store, woo=None, printful=None):
             except (ValidationError, ValueError):
                 raise OperatorError(400, "INVALID_PATCH") from None
             return await service.patch(product_id_int, body)
+        return await dispatch(request, action)
+
+    @router.get("/aw26/products/{product_id}")
+    async def aw26_product(product_id: str, request: Request):
+        async def action():
+            return 200, await aw26_service.woo.get_aw26(valid_aw26_product(product_id))
+        return await dispatch(request, action)
+
+    @router.patch("/aw26/products/{product_id}")
+    async def patch_aw26_product(product_id: str, request: Request):
+        async def action():
+            product_id_int = valid_aw26_product(product_id)
+            if os.getenv("AW26_PRODUCT_WRITE_ENABLED") != "true":
+                raise OperatorError(403, "AW26_PRODUCT_WRITES_DISABLED")
+            if os.getenv("AW26_PUBLISH_ENABLED") == "true":
+                raise OperatorError(503, "AW26_PUBLISH_CONFIGURATION_UNSAFE")
+            raw = await request.body()
+            if len(raw) > 65536:
+                raise OperatorError(413, "BODY_TOO_LARGE")
+            try:
+                body = Aw26ProductPatch.model_validate_json(raw)
+                editable = [*Aw26ProductService.EDITABLE_FIELDS, "retail_price"]
+                if not any(getattr(body, field) is not None for field in editable):
+                    raise ValueError()
+                if body.categories is not None and (
+                        len(set(body.categories)) != len(body.categories)
+                        or any(category_id < 1 for category_id in body.categories)):
+                    raise ValueError()
+                if body.name is not None and any(ord(char) < 32 or char in "<>" for char in body.name):
+                    raise ValueError()
+                for value in (body.description, body.short_description):
+                    lowered = (value or "").lower()
+                    if "\x00" in lowered or "<script" in lowered or "javascript:" in lowered:
+                        raise ValueError()
+            except (ValidationError, ValueError):
+                raise OperatorError(400, "INVALID_AW26_PATCH") from None
+            return await aw26_service.patch(product_id_int, body)
         return await dispatch(request, action)
 
     @router.get("/audit")

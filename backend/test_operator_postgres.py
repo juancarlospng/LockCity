@@ -152,6 +152,8 @@ def test_operator_environment_example_excludes_legacy_mongodb():
     legacy_names = (backend / "legacy.env.example").read_text(encoding="utf-8")
     assert "DATABASE_URL=" in operator_names
     assert "PRINTFUL_MOCKUP_GENERATION_ENABLED=false" in operator_names
+    assert "AW26_PRODUCT_WRITE_ENABLED=false" in operator_names
+    assert "AW26_PUBLISH_ENABLED=false" in operator_names
     assert "MONGO_URL=" not in operator_names
     assert "DB_NAME=" not in operator_names
     assert "MONGO_URL=" in legacy_names

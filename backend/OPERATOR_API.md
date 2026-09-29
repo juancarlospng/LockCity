@@ -40,6 +40,10 @@ The database credential and all API credentials belong only in Render secrets.
   `OPERATOR_WRITES_ENABLED` stays `false` and WooCommerce writes remain blocked.
 - `OPERATOR_API_TOKEN` — secret Bearer token, at least 32 characters.
 - `OPERATOR_WRITES_ENABLED` — set to `false`; `start.py` also forces it to false.
+- `AW26_PRODUCT_WRITE_ENABLED` — independent, default `false`; enables only the
+  allowlisted AW26 product endpoint when an approved write is ready.
+- `AW26_PUBLISH_ENABLED` — forced to `false` by `start.py`; the AW26 endpoint never
+  accepts a status field and refuses to run under an unsafe publish configuration.
 - `PORT` — provided by Render.
 
 `MONGO_URL` and `DB_NAME` are not used by this service. They remain documented in
@@ -55,6 +59,8 @@ The database credential and all API credentials belong only in Render secrets.
 - `GET /api/operator/v1/products?page=1&per_page=20`
 - `GET /api/operator/v1/products/{id}`
 - `PATCH /api/operator/v1/products/{id}`
+- `GET /api/operator/v1/aw26/products/{id}`
+- `PATCH /api/operator/v1/aw26/products/{id}`
 - `GET /api/operator/v1/audit?page=1&per_page=20`
 - `GET /api/operator/v1/printful/status`
 - `GET /api/operator/v1/printful/templates?limit=20&offset=0`
@@ -110,6 +116,17 @@ idempotency key, locks the product, writes only `name`, reads again, and records
 before/after plus `operation_id` and `verified`. A stale version returns
 `409 VERSION_CONFLICT`. Write outcomes that cannot be verified remain locked for
 manual reconciliation and are never automatically replayed.
+
+The AW26 product route is independently allowlisted and currently accepts only
+WooCommerce product `3823`. Its GET response audits the private variable parent,
+all paginated variations, prices, stock status, SKU, attributes, images,
+categories and non-sensitive Printful metadata. PATCH accepts only `name`,
+`description`, `short_description`, category IDs, `menu_order`, `retail_price`,
+`reason`, `expected_version`, and `idempotency_key`. Retail price is applied only
+to the existing variation IDs read immediately before the write. Status, SKU,
+stock and variation creation/deletion are not accepted. The product must be
+variable and private before the write and remain private after read-after-write.
+The endpoint uses the existing server-side lock and before/after audit records.
 
 ## Run and verify
 

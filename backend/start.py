@@ -7,6 +7,8 @@ import uvicorn
 def production_settings():
     # This deployment phase is read-only regardless of a stale provider variable.
     os.environ["OPERATOR_WRITES_ENABLED"] = "false"
+    os.environ["AW26_PUBLISH_ENABLED"] = "false"
+    os.environ.setdefault("AW26_PRODUCT_WRITE_ENABLED", "false")
     try:
         port = int(os.environ.get("PORT", "8000"))
     except ValueError as exc:

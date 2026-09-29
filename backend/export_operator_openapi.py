@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from operator_api import Rename
+from operator_api import Aw26ProductPatch, Rename
 
 
 def contract():
@@ -42,9 +42,32 @@ def contract():
     }
     schemas = {
         "Product": product, "Error": error, "Rename": Rename.model_json_schema(),
+        "Aw26ProductPatch": Aw26ProductPatch.model_json_schema(),
+        "Aw26Product": {"type": "object", "required": [
+            "id", "name", "status", "type", "categories", "images", "attributes",
+            "variation_ids", "variations", "printful", "version"], "properties": {
+                "id": {"type": "integer"}, "name": {"type": "string"},
+                "slug": {"type": "string"}, "status": {"type": "string"},
+                "type": {"type": "string"}, "description": {"type": "string"},
+                "short_description": {"type": "string"}, "menu_order": {"type": "integer"},
+                "categories": {"type": "array", "items": {"type": "object"}},
+                "images": {"type": "array", "items": {"type": "object"}},
+                "attributes": {"type": "array", "items": {"type": "object"}},
+                "variation_ids": {"type": "array", "items": {"type": "integer"}},
+                "variations": {"type": "array", "items": {"type": "object"}},
+                "printful": {"type": "array", "items": {"type": "object"}},
+                "version": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}},
+        "Aw26PatchResult": {"type": "object", "required": ["operation_id", "verified"],
+                            "properties": {
+                                "operation_id": {"type": "string", "format": "uuid"},
+                                "verified": {"type": "boolean"},
+                                "product": {"$ref": "#/components/schemas/Aw26Product"},
+                                "error": {"type": "string"}}},
         "Status": {"type": "object", "required": ["status", "audit", "woocommerce", "writes_enabled"],
                    "properties": {"status": {"type": "string"}, "audit": {"type": "string"},
-                                  "woocommerce": {"type": "string"}, "writes_enabled": {"type": "boolean"}}},
+                                  "woocommerce": {"type": "string"}, "writes_enabled": {"type": "boolean"},
+                                  "aw26_product_writes_enabled": {"type": "boolean"},
+                                  "aw26_publish_enabled": {"type": "boolean"}}},
         "Products": {"type": "object", "properties": {
             "products": {"type": "array", "items": ref}, "page": {"type": "integer"},
             "per_page": {"type": "integer"}, "total": {"type": "integer"},
@@ -185,6 +208,8 @@ def contract():
         ("/products", "get", "getProducts", "Products", pagination),
         ("/products/{id}", "get", "getProduct", "Product", identifier),
         ("/products/{id}", "patch", "updateProduct", "PatchResult", identifier),
+        ("/aw26/products/{id}", "get", "getAw26Product", "Aw26Product", identifier),
+        ("/aw26/products/{id}", "patch", "updateAw26Product", "Aw26PatchResult", identifier),
         ("/audit", "get", "getAudit", "Audit", pagination),
         ("/printful/status", "get", "getPrintfulStatus", "PrintfulStatus", []),
         ("/printful/templates", "get", "getPrintfulTemplates", "PrintfulTemplateList", printful_pagination),
@@ -212,7 +237,7 @@ def contract():
         }.items():
             operation["responses"][code] = {"description": description, "content": {
                 "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
-        if method == "patch":
+        if operation_id == "updateProduct":
             operation["description"] = (
                 "Rename only. Production writes must remain disabled. Uses expected_version from GET, "
                 "reason and idempotency_key. No other WooCommerce fields are accepted. "
@@ -220,6 +245,13 @@ def contract():
                 "External WordPress edits are not protected by an atomic compare-and-swap.")
             operation["requestBody"] = {"required": True, "content": {"application/json": {
                 "schema": {"$ref": "#/components/schemas/Rename"}}}}
+        if operation_id == "updateAw26Product":
+            operation["description"] = (
+                "Controlled AW26 update restricted to the server-side WooCommerce product allowlist. "
+                "Requires a separate feature flag, keeps publication disabled, applies retail_price only "
+                "to existing variations, and verifies the full product after writing.")
+            operation["requestBody"] = {"required": True, "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/Aw26ProductPatch"}}}}
         if operation_id == "createPrintfulMockupPlan":
             operation["description"] = ("Build and audit an AW26 representative-color mockup plan using only "
                                         "Printful GET requests. An optional exact variant/style selection is "
