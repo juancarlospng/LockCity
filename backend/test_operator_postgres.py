@@ -125,6 +125,18 @@ def test_postgres_store_lock_save_unlock_and_ping():
     assert pool.closed is True
 
 
+def test_postgres_reconciles_only_stale_unchanged_uncertain_lock():
+    store, pool = make_store()
+    pool.row = {"operation_id": uuid.uuid4()}
+    assert asyncio.run(store.reconcile_uncertain_lock(3823, "a" * 64)) is True
+    _, query, args = pool.calls[0]
+    assert "audit.state = 'uncertain'" in query
+    assert "audit.after_payload IS NULL" in query
+    assert "audit.before_payload->>'version' = $2" in query
+    assert "interval '5 minutes'" in query
+    assert args == (3823, "a" * 64)
+
+
 def test_operator_migration_is_private_and_defines_both_tables():
     migration = (Path(__file__).parent / "supabase" / "migrations" /
                  "002_operator_api.sql").read_text(encoding="utf-8")

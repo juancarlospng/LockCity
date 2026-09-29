@@ -13,6 +13,7 @@ class Store:
     def __init__(self):
         self.records = {}
         self.locks = set()
+        self.reconcile_versions = {}
 
     async def find(self, key):
         return self.records.get(key)
@@ -31,6 +32,12 @@ class Store:
 
     async def unlock(self, product_id, operation_id):
         self.locks.remove(product_id)
+
+    async def reconcile_uncertain_lock(self, product_id, expected_version):
+        if self.reconcile_versions.get(product_id) != expected_version:
+            return False
+        self.locks.discard(product_id)
+        return True
 
     async def save(self, key, fields):
         self.records[key].update(fields)
@@ -358,6 +365,17 @@ def test_aw26_patch_updates_only_parent_allowlist_and_variation_prices(aw26_setu
     assert audit["before"]["name"] == before["name"]
     assert audit["after"]["name"] == payload["name"]
     assert request(aw26_setup, "PATCH", "/aw26/products/3823", json=payload).json() == response.json()
+    assert len(aw26_setup[2].writes) == 1
+
+
+def test_aw26_patch_reconciles_only_matching_uncertain_lock(aw26_setup, monkeypatch):
+    monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
+    payload = aw26_body(aw26_setup)
+    aw26_setup[1].locks.add(3823)
+    aw26_setup[1].reconcile_versions[3823] = payload["expected_version"]
+    response = request(aw26_setup, "PATCH", "/aw26/products/3823", json=payload)
+    assert response.status_code == 200
+    assert response.json()["verified"] is True
     assert len(aw26_setup[2].writes) == 1
 
 

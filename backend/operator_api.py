@@ -383,6 +383,25 @@ class PostgresStore:
             uuid.UUID(operation_id),
         )
 
+    async def reconcile_uncertain_lock(self, product_id, expected_version):
+        """Release only an old uncertain lock whose resource is demonstrably unchanged."""
+        pool = await self._get_pool()
+        row = await pool.fetchrow(
+            """DELETE FROM public.operator_locks AS locks
+               USING public.operator_audit AS audit
+               WHERE locks.product_id = $1
+                 AND locks.operation_id = audit.operation_id
+                 AND audit.product_id = $1
+                 AND audit.state = 'uncertain'
+                 AND audit.after_payload IS NULL
+                 AND audit.before_payload->>'version' = $2
+                 AND locks.acquired_at < now() - interval '5 minutes'
+               RETURNING locks.operation_id""",
+            product_id,
+            expected_version,
+        )
+        return row is not None
+
     async def save(self, key, fields):
         if not fields:
             return
@@ -692,7 +711,13 @@ class Aw26ProductService:
         try:
             locked = await self.store.lock(product_id, op)
             if not locked:
-                raise OperatorError(409, "PRODUCT_BUSY")
+                current = await self.woo.get_aw26(product_id)
+                if (current["version"] == body.expected_version
+                        and await self.store.reconcile_uncertain_lock(
+                            product_id, body.expected_version)):
+                    locked = await self.store.lock(product_id, op)
+                if not locked:
+                    raise OperatorError(409, "PRODUCT_BUSY")
             before = await self.woo.get_aw26(product_id)
             await self.store.save(key, {"before": before})
             if before["version"] != body.expected_version:
