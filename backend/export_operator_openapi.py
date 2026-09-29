@@ -261,8 +261,10 @@ def contract():
         if operation_id == "updateAw26Product":
             operation["description"] = (
                 "Controlled AW26 update restricted to the server-side WooCommerce product allowlist. "
-                "Requires a separate feature flag, keeps publication disabled, applies retail_price only "
-                "to existing variations, and verifies the full product after writing.")
+                "Requires a separate feature flag, requires draft/hidden pre-launch state, keeps "
+                "publication disabled, applies retail_price to the existing variations of variable "
+                "products or the parent price of a simple product, and verifies the full product after "
+                "writing.")
             operation["requestBody"] = {"required": True, "content": {"application/json": {
                 "schema": {"$ref": "#/components/schemas/Aw26ProductPatch"}}}}
         if operation_id == "hardHideAw26Product":

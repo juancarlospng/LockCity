@@ -704,7 +704,7 @@
             }
           }
         },
-        "description": "Controlled AW26 update restricted to the server-side WooCommerce product allowlist. Requires a separate feature flag, keeps publication disabled, applies retail_price only to existing variations, and verifies the full product after writing.",
+        "description": "Controlled AW26 update restricted to the server-side WooCommerce product allowlist. Requires a separate feature flag, requires draft/hidden pre-launch state, keeps publication disabled, applies retail_price to the existing variations of variable products or the parent price of a simple product, and verifies the full product after writing.",
         "requestBody": {
           "required": true,
           "content": {

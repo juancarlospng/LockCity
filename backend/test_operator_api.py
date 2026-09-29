@@ -267,10 +267,13 @@ class Aw26Woo:
         ]
         self.product = {
             "id": 3823, "name": "Lane Seven LS14014 Premium 1/4 Zip Sweatshirt",
-            "slug": "lane-seven-ls14014", "status": "private", "type": "variable",
+            "slug": "lane-seven-ls14014", "status": "draft", "type": "variable",
             "catalog_visibility": "hidden",
             "description": "Current description", "short_description": "Current short",
             "menu_order": 0,
+            "regular_price": "", "sale_price": "", "sku": "",
+            "stock_status": "instock", "stock_quantity": None,
+            "manage_stock": False,
             "categories": [{"id": 19, "name": "AW26", "slug": "aw26"}],
             "images": [{"id": 501, "src": "https://example.invalid/front.jpg", "alt": ""}],
             "attributes": [{"id": 1, "name": "Color", "options": ["Black"], "variation": True},
@@ -303,17 +306,22 @@ class Aw26Woo:
             raise OperatorError(404, "PRODUCT_NOT_FOUND")
         return copy.deepcopy(self.product)
 
-    async def update_aw26(self, product_id, fields, variation_ids, retail_price=None):
-        self.writes.append((product_id, copy.deepcopy(fields), list(variation_ids), retail_price))
+    async def update_aw26(
+            self, product_id, fields, variation_ids, retail_price=None,
+            product_type=None):
+        self.writes.append((product_id, copy.deepcopy(fields), list(variation_ids),
+                            retail_price, product_type))
         for field, value in fields.items():
             if field == "categories":
                 self.product[field] = [{"id": item["id"], "name": "", "slug": ""}
                                        for item in value]
             else:
                 self.product[field] = value
-        if retail_price is not None:
+        if retail_price is not None and product_type == "variable":
             for variation in self.product["variations"]:
                 variation["regular_price"] = retail_price
+        if retail_price is not None and product_type == "simple":
+            self.product["regular_price"] = retail_price
         self._version()
 
     async def call(self, method, path, params=None, payload=None):
@@ -357,7 +365,7 @@ def test_aw26_detailed_read_is_authenticated_and_allowlisted(aw26_setup):
         3823, 3854, 3915, 3923, 3932, 3941, 3950, 3973, 3979,
         3996, 4005, 4022, 4040, 4048, 4067, 4084, 4093,
     })
-    assert AW26_MERCHANDISING_WRITE_PRODUCT_IDS == frozenset({3823, 3854})
+    assert AW26_MERCHANDISING_WRITE_PRODUCT_IDS == AW26_WOO_PRODUCT_IDS
     assert len(AW26_CATEGORY_POLICY_BY_TEMPLATE_ID) == 17
     assert request(aw26_setup, "GET", "/aw26/products/3823", headers={}).status_code == 401
     response = request(aw26_setup, "GET", "/aw26/products/3823")
@@ -399,6 +407,9 @@ def test_aw26_patch_has_independent_disabled_flag(aw26_setup):
 
 
 def test_aw26_hard_hide_is_exact_authenticated_and_idempotent(aw26_setup, monkeypatch):
+    aw26_setup[2].product["status"] = "private"
+    aw26_setup[2].product["catalog_visibility"] = "visible"
+    aw26_setup[2]._version()
     product = copy.deepcopy(aw26_setup[2].product)
     body = {
         "reason": "AW26 pre-launch hard hide",
@@ -416,7 +427,8 @@ def test_aw26_hard_hide_is_exact_authenticated_and_idempotent(aw26_setup, monkey
     assert after["status"] == "draft"
     assert after["catalog_visibility"] == "hidden"
     assert aw26_setup[2].writes == [(
-        3823, {"status": "draft", "catalog_visibility": "hidden"}, [401, 402], None)]
+        3823, {"status": "draft", "catalog_visibility": "hidden"}, [401, 402],
+        None, None)]
     assert request(aw26_setup, "PATCH", path, json=body).json() == response.json()
     assert len(aw26_setup[2].writes) == 1
     expected = {key: value for key, value in product.items()
@@ -426,7 +438,7 @@ def test_aw26_hard_hide_is_exact_authenticated_and_idempotent(aw26_setup, monkey
     assert observed == expected
 
 
-def test_aw26_hard_hide_rejects_extra_fields_and_merchandising_stays_limited(
+def test_aw26_hard_hide_rejects_extra_fields_and_merchandising_is_allowlisted(
         aw26_setup, monkeypatch):
     monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
     body = {
@@ -439,9 +451,9 @@ def test_aw26_hard_hide_rejects_extra_fields_and_merchandising_stays_limited(
     assert response.status_code == 400
     assert response.json()["error"] == "INVALID_AW26_HARD_HIDE"
     merchandising = request(
-        aw26_setup, "PATCH", "/aw26/products/3915", json=aw26_body(aw26_setup))
+        aw26_setup, "PATCH", "/aw26/products/3704", json=aw26_body(aw26_setup))
     assert merchandising.status_code == 403
-    assert merchandising.json()["error"] == "AW26_MERCHANDISING_WRITE_NOT_ALLOWED"
+    assert merchandising.json()["error"] == "AW26_PRODUCT_NOT_ALLOWED"
     assert aw26_setup[2].writes == []
 
 
@@ -451,9 +463,11 @@ def test_aw26_patch_updates_only_parent_allowlist_and_variation_prices(aw26_setu
     payload = aw26_body(aw26_setup)
     response = request(aw26_setup, "PATCH", "/aw26/products/3823", json=payload)
     assert response.status_code == 200 and response.json()["verified"] is True
-    assert aw26_setup[2].writes == [(3823, {"name": payload["name"]}, [401, 402], "78.00")]
+    assert aw26_setup[2].writes == [(
+        3823, {"name": payload["name"]}, [401, 402], "78.00", "variable")]
     after = response.json()["product"]
-    assert after["status"] == "private" and after["variation_ids"] == [401, 402]
+    assert after["status"] == "draft" and after["catalog_visibility"] == "hidden"
+    assert after["variation_ids"] == [401, 402]
     assert {item["regular_price"] for item in after["variations"]} == {"78.00"}
     assert [item["sku"] for item in after["variations"]] == ["PF-S", "PF-M"]
     assert [item["stock_status"] for item in after["variations"]] == ["instock", "instock"]
@@ -487,7 +501,7 @@ def test_aw26_patch_rejects_non_allowlisted_fields_and_invalid_values(aw26_setup
     assert aw26_setup[2].writes == []
 
 
-def test_aw26_patch_requires_private_variable_and_current_version(aw26_setup, monkeypatch):
+def test_aw26_patch_requires_hard_hidden_product_and_current_version(aw26_setup, monkeypatch):
     monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
     stale = {**aw26_body(aw26_setup), "expected_version": "a" * 64}
     assert request(aw26_setup, "PATCH", "/aw26/products/3823", json=stale).status_code == 409
@@ -496,8 +510,35 @@ def test_aw26_patch_requires_private_variable_and_current_version(aw26_setup, mo
     current = {**aw26_body(aw26_setup), "expected_version": aw26_setup[2].product["version"],
                "idempotency_key": "aw26-product-3823-pilot-02"}
     response = request(aw26_setup, "PATCH", "/aw26/products/3823", json=current)
-    assert response.status_code == 409 and response.json()["error"] == "PRODUCT_NOT_PRIVATE"
+    assert response.status_code == 409 and response.json()["error"] == "PRODUCT_NOT_HARD_HIDDEN"
     assert aw26_setup[2].writes == []
+
+
+def test_aw26_patch_updates_simple_parent_price_without_variations(aw26_setup, monkeypatch):
+    monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
+    product = aw26_setup[2].product
+    product.update({
+        "type": "simple", "variation_ids": [], "variations": [],
+        "regular_price": "28.00", "sku": "BEANIE-ONE",
+    })
+    product["attributes"] = []
+    aw26_setup[2]._version()
+    payload = {
+        "name": "Lockmark Ribbed Beanie",
+        "retail_price": "36.00",
+        "reason": "Approved AW26 simple product merchandising",
+        "idempotency_key": "aw26-simple-product-3823-01",
+        "expected_version": product["version"],
+    }
+    response = request(aw26_setup, "PATCH", "/aw26/products/3823", json=payload)
+    assert response.status_code == 200
+    after = response.json()["product"]
+    assert response.json()["verified"] is True
+    assert after["regular_price"] == "36.00"
+    assert after["sku"] == "BEANIE-ONE"
+    assert after["variations"] == []
+    assert aw26_setup[2].writes == [(
+        3823, {"name": "Lockmark Ribbed Beanie"}, [], "36.00", "simple")]
 
 
 def test_aw26_patch_refuses_unsafe_publish_configuration(aw26_setup, monkeypatch):

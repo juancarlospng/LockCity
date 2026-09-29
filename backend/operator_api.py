@@ -33,7 +33,7 @@ AW26_WOO_PRODUCT_IDS = frozenset({
     3823, 3854, 3915, 3923, 3932, 3941, 3950, 3973, 3979,
     3996, 4005, 4022, 4040, 4048, 4067, 4084, 4093,
 })
-AW26_MERCHANDISING_WRITE_PRODUCT_IDS = frozenset({3823, 3854})
+AW26_MERCHANDISING_WRITE_PRODUCT_IDS = AW26_WOO_PRODUCT_IDS
 AW26_CATEGORY_DEFINITIONS = (
     {"name": "Accessories", "slug": "accessories", "parent": 0},
     {"name": "AW26", "slug": "aw26", "parent": 0},
@@ -191,6 +191,12 @@ def aw26_commercial_state(raw, variations):
         "attributes": parent_attributes,
         "image_ids": image_ids,
         "menu_order": raw.get("menu_order", 0),
+        "regular_price": _canonical_price(raw.get("regular_price")),
+        "sale_price": _canonical_price(raw.get("sale_price")),
+        "sku": raw.get("sku", ""),
+        "stock_status": raw.get("stock_status", ""),
+        "stock_quantity": raw.get("stock_quantity"),
+        "manage_stock": bool(raw.get("manage_stock")),
         "variations": stable_variations,
     }
 
@@ -228,6 +234,12 @@ def aw26_product_view(raw, variations):
         "description": raw.get("description", ""),
         "short_description": raw.get("short_description", ""),
         "menu_order": raw.get("menu_order", 0), "categories": categories,
+        "regular_price": _canonical_price(raw.get("regular_price")),
+        "sale_price": _canonical_price(raw.get("sale_price")),
+        "sku": raw.get("sku", ""),
+        "stock_status": raw.get("stock_status", ""),
+        "stock_quantity": raw.get("stock_quantity"),
+        "manage_stock": bool(raw.get("manage_stock")),
         "images": images, "attributes": attributes, "variation_ids": variation_ids,
         "variations": variation_views, "printful": _safe_printful_metadata(raw.get("meta_data")),
         "version": aw26_commercial_version(raw, variations),
@@ -291,10 +303,17 @@ class WooClient:
             raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
         return view
 
-    async def update_aw26(self, product_id, fields, variation_ids, retail_price=None):
+    async def update_aw26(
+            self, product_id, fields, variation_ids, retail_price=None,
+            product_type=None):
+        fields = dict(fields)
+        if retail_price is not None and product_type == "simple":
+            if variation_ids:
+                raise OperatorError(409, "VARIATION_SET_UNSAFE")
+            fields["regular_price"] = retail_price
         if fields:
             await self.call("PUT", f"products/{product_id}", payload=fields)
-        if retail_price is not None:
+        if retail_price is not None and product_type == "variable":
             if not variation_ids or len(variation_ids) > 100:
                 raise OperatorError(409, "VARIATION_SET_UNSAFE")
             await self.call("POST", f"products/{product_id}/variations/batch", payload={
@@ -720,9 +739,9 @@ class Aw26ProductService:
 
     @staticmethod
     def _verified(before, after, body):
-        if (after["id"] != before["id"] or after["status"] != "private"
-                or after["type"] != "variable"
-                or after["catalog_visibility"] != before["catalog_visibility"]
+        if (after["id"] != before["id"] or after["status"] != "draft"
+                or after["type"] != before["type"]
+                or after["catalog_visibility"] != "hidden"
                 or after["variation_ids"] != before["variation_ids"]):
             return False
         for field in ("name", "description", "short_description", "menu_order"):
@@ -740,22 +759,37 @@ class Aw26ProductService:
         if ([item["id"] for item in after["images"]]
                 != [item["id"] for item in before["images"]]):
             return False
-        for field in ("slug", "attributes", "printful"):
+        for field in (
+                "slug", "attributes", "printful", "sale_price", "sku",
+                "stock_status", "stock_quantity", "manage_stock"):
             if after[field] != before[field]:
                 return False
+        expected_price = Aw26ProductService._price(body.retail_price)
+        if before["type"] == "simple":
+            if after["variations"] or before["variations"]:
+                return False
+            if expected_price is not None and Aw26ProductService._price(
+                    after["regular_price"]) != expected_price:
+                return False
+            if expected_price is None and after["regular_price"] != before["regular_price"]:
+                return False
+        elif before["type"] != "variable":
+            return False
+        elif after["regular_price"] != before["regular_price"]:
+            return False
         before_variations = {item["id"]: item for item in before["variations"]}
         after_variations = {item["id"]: item for item in after["variations"]}
         if before_variations.keys() != after_variations.keys():
             return False
-        expected_price = Aw26ProductService._price(body.retail_price)
         for variation_id, old in before_variations.items():
             current = after_variations[variation_id]
             if any(current[field] != old[field] for field in (
                     "sku", "stock_status", "stock_quantity", "manage_stock", "status",
                     "sale_price", "attributes", "printful")):
                 return False
-            if expected_price is not None and Aw26ProductService._price(
-                    current["regular_price"]) != expected_price:
+            if (before["type"] == "variable" and expected_price is not None
+                    and Aw26ProductService._price(
+                        current["regular_price"]) != expected_price):
                 return False
         return True
 
@@ -794,15 +828,16 @@ class Aw26ProductService:
             await self.store.save(key, {"before": before})
             if before["version"] != body.expected_version:
                 raise OperatorError(409, "VERSION_CONFLICT")
-            if before["type"] != "variable":
-                raise OperatorError(409, "PRODUCT_NOT_VARIABLE")
-            if before["status"] != "private":
-                raise OperatorError(409, "PRODUCT_NOT_PRIVATE")
+            if before["type"] not in {"simple", "variable"}:
+                raise OperatorError(409, "PRODUCT_TYPE_UNSUPPORTED")
+            if (before["status"] != "draft"
+                    or before["catalog_visibility"] != "hidden"):
+                raise OperatorError(409, "PRODUCT_NOT_HARD_HIDDEN")
             await self.store.save(key, {"state": "writing"})
             write_started = True
             await self.woo.update_aw26(
                 product_id, self._write_fields(body), before["variation_ids"],
-                self._price(body.retail_price))
+                self._price(body.retail_price), before["type"])
             after = await self.woo.get_aw26(product_id)
             verified = self._verified(before, after, body)
             status = 200 if verified else 502

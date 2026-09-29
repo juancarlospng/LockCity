@@ -117,15 +117,16 @@ before/after plus `operation_id` and `verified`. A stale version returns
 `409 VERSION_CONFLICT`. Write outcomes that cannot be verified remain locked for
 manual reconciliation and are never automatically replayed.
 
-The AW26 product route is independently allowlisted and currently accepts only
-the synchronized private WooCommerce AW26 products `3823` and `3854`. Its GET response audits the private variable parent,
-all paginated variations, prices, stock status, SKU, attributes, images,
+The AW26 product route is independently allowlisted for the 17 verified AW26
+WooCommerce product IDs. Its GET response audits the draft/hidden parent,
+all paginated variations, parent and variation prices, stock status, SKU, attributes, images,
 categories and non-sensitive Printful metadata. PATCH accepts only `name`,
 `description`, `short_description`, category IDs, `menu_order`, `retail_price`,
 `reason`, `expected_version`, and `idempotency_key`. Retail price is applied only
-to the existing variation IDs read immediately before the write. Status, SKU,
+to the existing variation IDs read immediately before the write for variable
+products, or to the parent regular price for a simple product. Status, SKU,
 stock and variation creation/deletion are not accepted. The product must be
-variable and private before the write and remain private after read-after-write.
+`draft` and `hidden` before the write and remain so after read-after-write.
 The endpoint uses the existing server-side lock and before/after audit records.
 Its `expected_version` hashes a canonical commercial state: parent content,
 category IDs, attribute names/options, ordered image IDs, visibility and menu
