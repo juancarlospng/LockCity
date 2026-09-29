@@ -29,7 +29,11 @@ class Rename(BaseModel):
     idempotency_key: StrictStr = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
 
 
-AW26_WOO_PRODUCT_IDS = frozenset({3823, 3854})
+AW26_WOO_PRODUCT_IDS = frozenset({
+    3823, 3854, 3915, 3923, 3932, 3941, 3950, 3973, 3979,
+    3996, 4005, 4022, 4040, 4048, 4067, 4084, 4093,
+})
+AW26_MERCHANDISING_WRITE_PRODUCT_IDS = frozenset({3823, 3854})
 AW26_CATEGORY_DEFINITIONS = (
     {"name": "Accessories", "slug": "accessories", "parent": 0},
     {"name": "AW26", "slug": "aw26", "parent": 0},
@@ -53,6 +57,13 @@ class Aw26ProductPatch(BaseModel):
     menu_order: StrictInt | None = Field(default=None, ge=0, le=10000)
     retail_price: StrictStr | None = Field(
         default=None, pattern=r"^(?:0|[1-9][0-9]{0,5})(?:\.[0-9]{1,2})?$")
+    reason: StrictStr = Field(min_length=1, max_length=500)
+    expected_version: StrictStr = Field(pattern=r"^[a-f0-9]{64}$")
+    idempotency_key: StrictStr = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
+
+
+class Aw26HardHide(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     reason: StrictStr = Field(min_length=1, max_length=500)
     expected_version: StrictStr = Field(pattern=r"^[a-f0-9]{64}$")
     idempotency_key: StrictStr = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
@@ -817,6 +828,75 @@ class Aw26ProductService:
             if locked and (not write_started or resolved):
                 await self.store.unlock(product_id, op)
 
+    async def hard_hide(self, product_id, body):
+        key = digest(body.idempotency_key)
+        fingerprint = digest({"route": "aw26-hard-hide", "id": product_id, **body.model_dump()})
+        previous = await self.store.find(key)
+        if previous:
+            if previous["fingerprint"] != fingerprint:
+                raise OperatorError(409, "IDEMPOTENCY_CONFLICT")
+            return previous.get("http_status") or 409, previous.get("result") or {
+                "error": "OPERATION_IN_PROGRESS", "operation_id": previous["operation_id"]}
+        op = str(uuid.uuid4())
+        record = {
+            "operation_id": op, "product_id": product_id, "fingerprint": fingerprint,
+            "reason": body.reason, "actor": "operator-aw26-hard-hide",
+            "created_at": datetime.now(timezone.utc).isoformat(), "state": "pending",
+            "before": None, "after": None,
+        }
+        if not await self.store.reserve(key, record):
+            return await self.hard_hide(product_id, body)
+        locked = False
+        write_started = False
+        resolved = False
+        try:
+            locked = await self.store.lock(product_id, op)
+            if not locked:
+                current = await self.woo.get_aw26(product_id)
+                if (current["version"] == body.expected_version
+                        and await self.store.reconcile_uncertain_lock(
+                            product_id, body.expected_version)):
+                    locked = await self.store.lock(product_id, op)
+                if not locked:
+                    raise OperatorError(409, "PRODUCT_BUSY")
+            before = await self.woo.get_aw26(product_id)
+            await self.store.save(key, {"before": before})
+            if before["version"] != body.expected_version:
+                raise OperatorError(409, "VERSION_CONFLICT")
+            if before["status"] != "draft" or before["catalog_visibility"] != "hidden":
+                await self.store.save(key, {"state": "writing"})
+                write_started = True
+                await self.woo.update_aw26(
+                    product_id, {"status": "draft", "catalog_visibility": "hidden"},
+                    before["variation_ids"])
+            after = await self.woo.get_aw26(product_id)
+            expected = {key: value for key, value in before.items() if key != "version"}
+            expected.update({"status": "draft", "catalog_visibility": "hidden"})
+            observed = {key: value for key, value in after.items() if key != "version"}
+            verified = observed == expected
+            status = 200 if verified else 502
+            result = {"operation_id": op, "verified": verified, "product": after}
+            if not verified:
+                result["error"] = "VERIFICATION_FAILED"
+            await self.store.save(key, {
+                "state": "verified" if verified else "unverified", "after": after,
+                "result": result, "http_status": status,
+            })
+            resolved = verified
+            return status, result
+        except OperatorError as exc:
+            result = {"error": exc.code, "operation_id": op, "verified": False}
+            await self.store.save(key, {
+                "state": "uncertain" if write_started else "rejected",
+                "result": result, "http_status": exc.status,
+            })
+            return exc.status, result
+        except Exception:
+            return 503, {"error": "OPERATION_UNCERTAIN", "operation_id": op, "verified": False}
+        finally:
+            if locked and (not write_started or resolved):
+                await self.store.unlock(product_id, op)
+
 
 def create_router(store, woo=None, printful=None):
     from printful_api import (AW26_EDITORIAL_RECOMMENDATIONS, AW26_TEMPLATE_IDS,
@@ -966,6 +1046,8 @@ def create_router(store, woo=None, printful=None):
     async def patch_aw26_product(product_id: str, request: Request):
         async def action():
             product_id_int = valid_aw26_product(product_id)
+            if product_id_int not in AW26_MERCHANDISING_WRITE_PRODUCT_IDS:
+                raise OperatorError(403, "AW26_MERCHANDISING_WRITE_NOT_ALLOWED")
             if os.getenv("AW26_PRODUCT_WRITE_ENABLED") != "true":
                 raise OperatorError(403, "AW26_PRODUCT_WRITES_DISABLED")
             if os.getenv("AW26_PUBLISH_ENABLED") == "true":
@@ -991,6 +1073,24 @@ def create_router(store, woo=None, printful=None):
             except (ValidationError, ValueError):
                 raise OperatorError(400, "INVALID_AW26_PATCH") from None
             return await aw26_service.patch(product_id_int, body)
+        return await dispatch(request, action)
+
+    @router.patch("/aw26/products/{product_id}/hard-hide")
+    async def hard_hide_aw26_product(product_id: str, request: Request):
+        async def action():
+            product_id_int = valid_aw26_product(product_id)
+            if os.getenv("AW26_PRODUCT_WRITE_ENABLED") != "true":
+                raise OperatorError(403, "AW26_PRODUCT_WRITES_DISABLED")
+            if os.getenv("AW26_PUBLISH_ENABLED") == "true":
+                raise OperatorError(503, "AW26_PUBLISH_CONFIGURATION_UNSAFE")
+            raw = await request.body()
+            if len(raw) > 8192:
+                raise OperatorError(413, "BODY_TOO_LARGE")
+            try:
+                body = Aw26HardHide.model_validate_json(raw)
+            except ValidationError:
+                raise OperatorError(400, "INVALID_AW26_HARD_HIDE") from None
+            return await aw26_service.hard_hide(product_id_int, body)
         return await dispatch(request, action)
 
     @router.get("/audit")

@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI
 
 from operator_api import (AW26_CATEGORY_POLICY_BY_TEMPLATE_ID,
+                          AW26_MERCHANDISING_WRITE_PRODUCT_IDS,
                           AW26_WOO_PRODUCT_IDS, OperatorError, WooClient,
                           aw26_commercial_version, create_router, digest,
                           product_view)
@@ -352,7 +353,11 @@ def aw26_body(aw26_setup):
 
 
 def test_aw26_detailed_read_is_authenticated_and_allowlisted(aw26_setup):
-    assert AW26_WOO_PRODUCT_IDS == frozenset({3823, 3854})
+    assert AW26_WOO_PRODUCT_IDS == frozenset({
+        3823, 3854, 3915, 3923, 3932, 3941, 3950, 3973, 3979,
+        3996, 4005, 4022, 4040, 4048, 4067, 4084, 4093,
+    })
+    assert AW26_MERCHANDISING_WRITE_PRODUCT_IDS == frozenset({3823, 3854})
     assert len(AW26_CATEGORY_POLICY_BY_TEMPLATE_ID) == 17
     assert request(aw26_setup, "GET", "/aw26/products/3823", headers={}).status_code == 401
     response = request(aw26_setup, "GET", "/aw26/products/3823")
@@ -391,6 +396,52 @@ def test_aw26_patch_has_independent_disabled_flag(aw26_setup):
     response = request(aw26_setup, "PATCH", "/aw26/products/3823", json=aw26_body(aw26_setup))
     assert response.status_code == 403
     assert response.json()["error"] == "AW26_PRODUCT_WRITES_DISABLED"
+
+
+def test_aw26_hard_hide_is_exact_authenticated_and_idempotent(aw26_setup, monkeypatch):
+    product = copy.deepcopy(aw26_setup[2].product)
+    body = {
+        "reason": "AW26 pre-launch hard hide",
+        "expected_version": product["version"],
+        "idempotency_key": "aw26-hard-hide-3823-0001",
+    }
+    path = "/aw26/products/3823/hard-hide"
+    assert request(aw26_setup, "PATCH", path, json=body, headers={}).status_code == 401
+    assert request(aw26_setup, "PATCH", path, json=body).status_code == 403
+    monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
+    response = request(aw26_setup, "PATCH", path, json=body)
+    assert response.status_code == 200
+    assert response.json()["verified"] is True
+    after = response.json()["product"]
+    assert after["status"] == "draft"
+    assert after["catalog_visibility"] == "hidden"
+    assert aw26_setup[2].writes == [(
+        3823, {"status": "draft", "catalog_visibility": "hidden"}, [401, 402], None)]
+    assert request(aw26_setup, "PATCH", path, json=body).json() == response.json()
+    assert len(aw26_setup[2].writes) == 1
+    expected = {key: value for key, value in product.items()
+                if key not in {"status", "catalog_visibility", "version"}}
+    observed = {key: value for key, value in after.items()
+                if key not in {"status", "catalog_visibility", "version"}}
+    assert observed == expected
+
+
+def test_aw26_hard_hide_rejects_extra_fields_and_merchandising_stays_limited(
+        aw26_setup, monkeypatch):
+    monkeypatch.setenv("AW26_PRODUCT_WRITE_ENABLED", "true")
+    body = {
+        "reason": "AW26 pre-launch hard hide",
+        "expected_version": aw26_setup[2].product["version"],
+        "idempotency_key": "aw26-hard-hide-3823-0002",
+        "name": "Not allowed",
+    }
+    response = request(aw26_setup, "PATCH", "/aw26/products/3823/hard-hide", json=body)
+    assert response.status_code == 400
+    assert response.json()["error"] == "INVALID_AW26_HARD_HIDE"
+    merchandising = request(
+        aw26_setup, "PATCH", "/aw26/products/3915", json=aw26_body(aw26_setup))
+    assert merchandising.status_code == 403
+    assert merchandising.json()["error"] == "AW26_MERCHANDISING_WRITE_NOT_ALLOWED"
     assert aw26_setup[2].writes == []
 
 

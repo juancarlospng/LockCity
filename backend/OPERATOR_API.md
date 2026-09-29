@@ -140,6 +140,12 @@ It resolves existing categories by slug, name and hierarchy before creating and
 rejects ambiguous matches. The 17-template root-category policy is centralized;
 future WooCommerce products remain untouched until their AW26 mapping is verified.
 
+The authenticated AW26 hard-hide endpoint accepts only concurrency, idempotency
+and audit fields. It hardcodes `status=draft` and `catalog_visibility=hidden`,
+then compares every other normalized parent and variation field after the write.
+The allowlist contains only the 17 verified AW26 WooCommerce IDs. Ordinary AW26
+merchandising updates remain restricted to the separately approved pilot IDs.
+
 ## Run and verify
 
 Render start command:

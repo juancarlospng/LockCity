@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from operator_api import Aw26ProductPatch, Rename
+from operator_api import Aw26HardHide, Aw26ProductPatch, Rename
 
 
 def contract():
@@ -43,6 +43,7 @@ def contract():
     schemas = {
         "Product": product, "Error": error, "Rename": Rename.model_json_schema(),
         "Aw26ProductPatch": Aw26ProductPatch.model_json_schema(),
+        "Aw26HardHide": Aw26HardHide.model_json_schema(),
         "Aw26Product": {"type": "object", "required": [
             "id", "name", "status", "type", "categories", "images", "attributes",
             "variation_ids", "variations", "printful", "version"], "properties": {
@@ -219,6 +220,7 @@ def contract():
         ("/products/{id}", "patch", "updateProduct", "PatchResult", identifier),
         ("/aw26/products/{id}", "get", "getAw26Product", "Aw26Product", identifier),
         ("/aw26/products/{id}", "patch", "updateAw26Product", "Aw26PatchResult", identifier),
+        ("/aw26/products/{id}/hard-hide", "patch", "hardHideAw26Product", "Aw26PatchResult", identifier),
         ("/aw26/categories", "get", "getAw26Categories", "Aw26Categories", []),
         ("/aw26/categories/bootstrap", "post", "bootstrapAw26Categories", "Aw26Categories", []),
         ("/audit", "get", "getAudit", "Audit", pagination),
@@ -263,6 +265,13 @@ def contract():
                 "to existing variations, and verifies the full product after writing.")
             operation["requestBody"] = {"required": True, "content": {"application/json": {
                 "schema": {"$ref": "#/components/schemas/Aw26ProductPatch"}}}}
+        if operation_id == "hardHideAw26Product":
+            operation["description"] = (
+                "Set one verified AW26 allowlisted product to draft and hidden. No commercial field is "
+                "accepted from the caller; every other normalized parent and variation field is verified "
+                "unchanged after the write.")
+            operation["requestBody"] = {"required": True, "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/Aw26HardHide"}}}}
         if operation_id == "bootstrapAw26Categories":
             operation["description"] = (
                 "Ensure only the root Accessories and AW26 categories. Existing categories are resolved "
