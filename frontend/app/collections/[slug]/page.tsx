@@ -8,7 +8,7 @@ import { MaskText } from "@/components/Reveal";
 import { CatalogError } from "@/components/CatalogError";
 import { commerce } from "@/lib/commerce";
 import { DISTRICTS } from "@/lib/districts";
-import { activeDropProducts, coreProducts } from "@/lib/merchandising";
+import { activeDropProducts, coreProducts, DROP_VISIBLE } from "@/lib/merchandising";
 import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -51,7 +51,7 @@ export async function generateMetadata({
       title: district.name,
       description: description(slug),
       path: `/collections/${encodeURIComponent(slug)}`,
-      noIndex: slug !== "core" || products.length === 0,
+      noIndex: products.length === 0 || (slug === "drop" && !DROP_VISIBLE),
     });
   } catch {
     return pageMetadata({
@@ -71,6 +71,7 @@ export default async function CollectionPage({
   const { slug } = await params;
   const district = DISTRICTS.find((entry) => entry.slug === slug);
   if (!district) notFound();
+  if (slug === "drop" && !DROP_VISIBLE) notFound();
   let products;
   try { products = await getCollectionProducts(slug); }
   catch (error) { return <CatalogError error={error} />; }

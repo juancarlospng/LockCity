@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { formatPrice } from "@/lib/utils";
+import { isPublicStoreProduct } from "@/lib/merchandising";
 
 interface SearchResult {
   id: number;
@@ -51,7 +52,8 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
           return;
         }
         setAvailable(true);
-        setResults(await res.json());
+        const matches: SearchResult[] = await res.json();
+        setResults(matches.filter((product) => isPublicStoreProduct(product.id)));
       } catch {
         if (!controller.signal.aborted) { setAvailable(false); setErrorKind("network"); }
       } finally {

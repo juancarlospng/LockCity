@@ -55,7 +55,7 @@ export default async function ProductPage({
   let product;
   try { product = await getProduct(slug); }
   catch (error) { return <CatalogError error={error} />; }
-  if (!product) notFound();
+  if (!product || !isPublicStoreProduct(product.wooProductId)) notFound();
   let all: Product[] = [];
   let relatedError: unknown;
   try { all = await commerce.getProducts(); }

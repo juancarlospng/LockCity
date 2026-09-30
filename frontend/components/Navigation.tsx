@@ -5,10 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useCart } from "@/lib/cart";
+import { DROP_VISIBLE } from "@/lib/merchandising";
 import { MobileMenu } from "./MobileMenu";
 
 export const NAV_LINKS = [
   { href: "/shop", label: "SHOP" },
+  ...(DROP_VISIBLE ? [{ href: "/collections/drop", label: "DROP" }] : []),
   { href: "/collections/core", label: "CORE" },
   { href: "/contact", label: "CONTACT" },
 ];

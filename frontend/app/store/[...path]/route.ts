@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fetchWooMedia } from "@/lib/media-core";
 
 export const runtime = "nodejs";
 
@@ -100,15 +101,12 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   try {
     // Read-only image proxy: only this store's uploads, no arbitrary hosts or redirects.
     if (path.length === 1 && path[0] === "media") {
-      const src = new URL(req.nextUrl.searchParams.get("src") ?? "", storeUrl);
-      const base = new URL(storeUrl);
-      if (src.origin !== base.origin || !src.pathname.startsWith("/wp-content/uploads/") || src.username || src.password) {
-        return NextResponse.json({ error: "invalid_image" }, { status: 400 });
-      }
-      const media = await fetch(src, { redirect: "error", signal: AbortSignal.timeout(15000), cache: "no-store" });
-      if (!media.ok) return NextResponse.json({ error: "woocommerce" }, { status: media.status });
-      const type = media.headers.get("content-type") ?? "";
-      if (!/^image\/(jpeg|png|webp|gif|avif)(;|$)/i.test(type)) return NextResponse.json({ error: "invalid_image" }, { status: 415 });
+      const source = req.nextUrl.searchParams.get("src") ?? "";
+      let media: Response | undefined;
+      try { media = await fetchWooMedia(source, storeUrl); }
+      catch { return NextResponse.json({ error: "invalid_image" }, { status: 400 }); }
+      if (!media) return NextResponse.json({ error: "image_unavailable" }, { status: 502 });
+      const type = media.headers.get("content-type") ?? "image/jpeg";
       return new NextResponse(media.body, { headers: { "Content-Type": type, "Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff" } });
     }
     if (path[0] === "products") {
