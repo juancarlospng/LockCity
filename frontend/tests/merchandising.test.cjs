@@ -137,9 +137,14 @@ test('home keeps the approved Hero before the native-scroll Three.js city and Co
   assert.match(scene, /CITY_CAMERA_START/);
   assert.match(scene, /CITY_CAMERA_MID/);
   assert.match(scene, /CITY_CAMERA_END/);
+  assert.match(scene, /CITY_CAMERA_MID_MOBILE/);
+  assert.match(scene, /CITY_CAMERA_END_MOBILE/);
+  assert.match(scene, /CITY_CAMERA_TARGET_END/);
   assert.match(scene, /progress <= 0\.12/);
-  assert.match(scene, /progress <= 0\.72/);
+  assert.match(scene, /progress <= 0\.2/);
+  assert.match(scene, /progress <= 0\.68/);
   assert.match(scene, /progress <= 0\.82/);
+  assert.match(scene, /size\.width < 768/);
   assert.match(canvas, /IntersectionObserver/);
   assert.match(canvas, /frameloop=\{visible && !pageHidden \? "always" : "never"\}/);
   assert.match(canvas, /dpr=\{\[1, 1\.5\]\}/);
