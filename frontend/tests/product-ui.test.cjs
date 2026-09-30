@@ -64,6 +64,8 @@ test('card action exposes priced quick add, active variable options and honest s
 
   const variable = getProductCardAction(product({ type: 'variable', variants: [{ id: 'unresolved', status: 'UNKNOWN', detailsState: 'unresolved' }] }));
   assert.deepEqual(variable, { kind: 'select-options', label: 'Select options' });
+  const preview = getProductCardAction(product({ previewOnly: true, availability: { is_in_stock: true, is_purchasable: false } }));
+  assert.deepEqual(preview, { kind: 'select-options', label: 'Select options' });
   assert.equal(getProductCardAction(product({ status: 'SOLD_OUT', availability: { is_in_stock: false, is_purchasable: false } })).kind, 'sold-out');
   assert.equal(getProductCardAction(product({ price: 0, variants: [resolvedVariant({ price: 0 })] })).kind, 'unavailable');
 });

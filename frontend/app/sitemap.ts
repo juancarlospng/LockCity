@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { commerce } from "@/lib/commerce";
 import { activeDropProducts, coreProducts, publicStoreProducts } from "@/lib/merchandising";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, seoIndexingEnabled } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,7 @@ const STATIC_PATHS = [
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  if (!seoIndexingEnabled()) return [];
   const entries: MetadataRoute.Sitemap = STATIC_PATHS.map((path) => ({ url: absoluteUrl(path) }));
   try {
     const allProducts = await commerce.getProducts();

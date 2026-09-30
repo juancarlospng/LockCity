@@ -1,8 +1,11 @@
 import type { MetadataRoute } from "next";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, seoIndexingEnabled } from "@/lib/seo";
 import { DROP_VISIBLE } from "@/lib/merchandising";
 
 export default function robots(): MetadataRoute.Robots {
+  if (!seoIndexingEnabled()) {
+    return { rules: { userAgent: "*", disallow: "/" } };
+  }
   return {
     rules: {
       userAgent: "*",

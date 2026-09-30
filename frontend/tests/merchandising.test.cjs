@@ -33,7 +33,7 @@ const product = (wooProductId) => ({
   availability: {}, sourceImages: [], price: 1, currency: 'USD', status: 'AVAILABLE', images: [], variants: [],
 });
 
-test('launch classification exposes exactly 8 Core and 3 Shop-extra products', () => {
+test('QA classification exposes 8 Core, 3 Shop-extra and 18 AW26 products', () => {
   const m = merchandising();
   assert.equal(m.CORE_PRODUCT_IDS.length, 8);
   assert.equal(m.SHOP_EXTRA_PRODUCT_IDS.length, 3);
@@ -41,26 +41,26 @@ test('launch classification exposes exactly 8 Core and 3 Shop-extra products', (
   assert.deepEqual(m.AW26_EXCLUDED_PRODUCT_IDS, [4102]);
   assert.equal(new Set(m.AW26_PRODUCT_IDS).size, 18);
   assert.equal(m.AW26_PRODUCT_IDS.includes(4102), false);
-  assert.equal(m.AW26_VISIBLE, false);
-  assert.equal(m.DROP_VISIBLE, false);
-  assert.equal(m.ACTIVE_DROP_PRODUCT_IDS.length, 0);
+  assert.equal(m.AW26_VISIBLE, true);
+  assert.equal(m.DROP_VISIBLE, true);
+  assert.equal(m.ACTIVE_DROP_PRODUCT_IDS.length, 18);
   assert.equal(m.LEGACY_PRODUCT_IDS.length, 14);
-  assert.equal(m.PUBLIC_STORE_PRODUCT_IDS.length, 11);
-  assert.equal(new Set(m.PUBLIC_STORE_PRODUCT_IDS).size, 11);
+  assert.equal(m.PUBLIC_STORE_PRODUCT_IDS.length, 29);
+  assert.equal(new Set(m.PUBLIC_STORE_PRODUCT_IDS).size, 29);
 });
 
 test('Shop allowlist excludes every legacy product and preserves configured order', () => {
   const m = merchandising();
-  const allIds = [...m.LEGACY_PRODUCT_IDS, ...m.SHOP_EXTRA_PRODUCT_IDS, ...m.CORE_PRODUCT_IDS];
+  const allIds = [...m.LEGACY_PRODUCT_IDS, ...m.PUBLIC_STORE_PRODUCT_IDS];
   const all = allIds.map(product);
   const visible = m.publicStoreProducts(all);
   assert.deepEqual(visible.map((item) => item.wooProductId), m.PUBLIC_STORE_PRODUCT_IDS);
   assert.equal(visible.some((item) => m.isLegacyProduct(item.wooProductId)), false);
   assert.deepEqual(m.coreProducts(all).map((item) => item.wooProductId), m.CORE_PRODUCT_IDS);
-  assert.deepEqual(m.activeDropProducts(all), []);
+  assert.deepEqual(m.activeDropProducts(all).map((item) => item.wooProductId), m.AW26_PRODUCT_IDS);
 });
 
-test('AW26 is fully registered but remains absent from every public selector', () => {
+test('AW26 is fully registered for QA and excluded product 4102 stays absent', () => {
   const m = merchandising();
   const all = [...m.AW26_PRODUCT_IDS, ...m.AW26_EXCLUDED_PRODUCT_IDS, ...m.PUBLIC_STORE_PRODUCT_IDS].map(product);
   assert.deepEqual(m.aw26Products(all).map((item) => item.wooProductId), m.AW26_PRODUCT_IDS);
@@ -69,9 +69,9 @@ test('AW26 is fully registered but remains absent from every public selector', (
   assert.equal(m.isAw26Product(4143), true);
   assert.equal(m.isAw26Product(4102), false);
   assert.equal(m.isExcludedAw26Product(4102), true);
-  assert.equal(m.publicStoreProducts(all).some((item) => m.isAw26Product(item.wooProductId)), false);
+  assert.equal(m.publicStoreProducts(all).filter((item) => m.isAw26Product(item.wooProductId)).length, 18);
   assert.equal(m.isPublicStoreProduct(4102), false);
-  assert.deepEqual(m.activeDropProducts(all), []);
+  assert.deepEqual(m.activeDropProducts(all).map((item) => item.wooProductId), m.AW26_PRODUCT_IDS);
 });
 
 test('related products stay within the public merchandising rules', () => {
@@ -157,7 +157,7 @@ test('home merchandising is centralized, public and visually non-repetitive', ()
 
   assert.equal(home.HOME_HERO_PRODUCT_IDS[0], 3292);
   assert.deepEqual(home.HOME_AW26_PRODUCT_IDS, m.AW26_PRODUCT_IDS);
-  assert.equal(home.HOME_AW26_VISIBLE, false);
+  assert.equal(home.HOME_AW26_VISIBLE, true);
   assert.equal(home.HOME_CORE_PRODUCT_IDS.length, 5);
   assert.equal(home.HOME_SELECTED_PRODUCT_IDS.length, 5);
   for (const id of [
@@ -178,7 +178,10 @@ test('home merchandising is centralized, public and visually non-repetitive', ()
   assert.deepEqual(home.homeSelectedProducts(all).map((item) => item.wooProductId), home.HOME_SELECTED_PRODUCT_IDS);
   assert.equal(home.homeCoreProducts(all).some((item) => m.isLegacyProduct(item.wooProductId)), false);
   assert.equal(home.homeSelectedProducts(all).some((item) => m.isLegacyProduct(item.wooProductId)), false);
-  assert.deepEqual(home.homeAw26Products(m.AW26_PRODUCT_IDS.map(product)), []);
+  assert.deepEqual(
+    home.homeAw26Products(m.AW26_PRODUCT_IDS.map(product)).map((item) => item.wooProductId),
+    m.AW26_PRODUCT_IDS,
+  );
 });
 
 test('home hero and editorial retain the approved copy and real product media', () => {

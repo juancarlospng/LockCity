@@ -109,6 +109,7 @@ export interface Product {
   sku?: string;
   wooProductId?: number;
   printfulProductId?: string;
+  previewOnly?: boolean;
   variants: ProductVariant[];
 }
 

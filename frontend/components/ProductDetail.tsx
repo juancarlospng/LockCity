@@ -57,19 +57,21 @@ export function ProductDetail({
     ? product.variants[0]
     : findExactVariant(product.variants, selection);
   const validSelection = optionGroups.length > 0 && Object.keys(selection).length === optionGroups.length;
-  const canAdd = canPurchaseVariant(selectedVariant);
+  const canAdd = !product.previewOnly && canPurchaseVariant(selectedVariant);
   const selectedStatus = selectedVariant?.status ?? (validSelection ? "UNKNOWN" : product.status);
   const ctaLabel = !validSelection && product.type === "variable"
     ? "Select all options"
     : !selectedVariant
       ? "Combination unavailable"
-      : !selectedVariant.availability?.is_purchasable
-        ? "Unavailable"
-        : !selectedVariant.availability?.is_in_stock
-          ? "Sold out"
-          : selectedVariant.status === "PRE_ORDER"
-            ? "Pre-order"
-            : "Add to bag";
+      : product.previewOnly
+        ? "Preview only"
+        : !selectedVariant.availability?.is_purchasable
+          ? "Unavailable"
+          : !selectedVariant.availability?.is_in_stock
+            ? "Sold out"
+            : selectedVariant.status === "PRE_ORDER"
+              ? "Pre-order"
+              : "Add to bag";
 
   const onAdd = async () => {
     if (!canAdd || !selectedVariant || isAdding) return;
@@ -233,7 +235,11 @@ export function ProductDetail({
                       ...selection,
                       [group.key]: value,
                     });
-                    const unavailable = Boolean(candidate && !canPurchaseVariant(candidate));
+                    const unavailable = Boolean(candidate && (
+                      product.previewOnly
+                        ? candidate.availability?.is_in_stock === false
+                        : !canPurchaseVariant(candidate)
+                    ));
                     return (
                       <button
                         key={value}

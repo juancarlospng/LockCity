@@ -10,10 +10,10 @@ export const AW26_PRODUCT_IDS = [
 ] as const;
 export const AW26_EXCLUDED_PRODUCT_IDS = [4102] as const;
 
-// Launch is an explicit code change. Keeping this false prevents an accidental
-// WooCommerce status change from exposing AW26 through V2.
-export const AW26_VISIBLE = false;
-export const DROP_VISIBLE = AW26_VISIBLE;
+// Vercel is the current QA storefront. WooCommerce products remain draft and
+// hidden; V2 reads their preview data server-side through Operator API.
+export const AW26_VISIBLE = true;
+export const DROP_VISIBLE = true;
 export const ACTIVE_DROP_PRODUCT_IDS: readonly number[] = DROP_VISIBLE ? AW26_PRODUCT_IDS : [];
 export const LEGACY_PRODUCT_IDS = [
   3745, 3709, 3673, 3633, 3621, 3609, 3351,
