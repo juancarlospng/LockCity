@@ -29,6 +29,7 @@ try {
   Module._load = originalLoad;
 }
 const { mapOperatorProduct } = compiled.exports;
+const operatorSource = readFileSync(filename, 'utf8');
 
 const hiddenProduct = (extra = {}) => ({
   id: 3823,
@@ -69,4 +70,10 @@ test('refuses AW26 products that are published or publicly visible', () => {
 
 test('refuses zero or missing AW26 retail pricing', () => {
   assert.throws(() => mapOperatorProduct(hiddenProduct({ variations: [{ id: 100, regular_price: '0', stock_status: 'instock' }] })), /no valid retail price/);
+});
+
+test('loads the protected AW26 catalog with bounded upstream concurrency', () => {
+  assert.match(operatorSource, /OPERATOR_CONCURRENCY = 3/);
+  assert.match(operatorSource, /fetchProductsWithLimit\(productIds\)/);
+  assert.doesNotMatch(operatorSource, /Promise\.all\(productIds\.map\(fetchProduct\)\)/);
 });
