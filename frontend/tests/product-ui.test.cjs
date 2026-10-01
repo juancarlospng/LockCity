@@ -98,3 +98,8 @@ test('AW26 image quality prioritizes hero and primary PDP without overfetching t
   assert.match(hero, /sizes="\(max-width: 1023px\) 100vw, 70vw"/);
   assert.match(config, /qualities: \[70, 75, 82, 88\]/);
 });
+
+test('AW26 hero keeps the campaign label clear of the oversized title', () => {
+  const hero = read('components/home/Aw26Hero.tsx');
+  assert.match(hero, /mt-10[^\"]*sm:mt-12[^\"]*lg:mt-14/);
+});
