@@ -39,6 +39,7 @@ export function ProductCard({ product, index, priority = false }: { product: Pro
                   src={mainImage}
                   alt={product.name}
                   fill
+                  quality={82}
                   sizes="(max-width: 639px) calc(100vw - 2rem), (max-width: 1023px) calc(50vw - 2.5rem), (max-width: 1535px) calc(33vw - 2.5rem), 280px"
                   className="object-contain p-4 sm:p-6"
                   {...(priority ? { priority: true } : { loading: "lazy" as const })}

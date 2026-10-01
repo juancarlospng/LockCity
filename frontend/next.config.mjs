@@ -3,6 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   images: {
     localPatterns: [{ pathname: "/store/media" }],
+    qualities: [70, 75, 82, 88],
   },
   outputFileTracingRoot: new URL(".", import.meta.url).pathname,
   allowedDevOrigins: [

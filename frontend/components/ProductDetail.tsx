@@ -117,6 +117,7 @@ export function ProductDetail({
                   alt={product.name}
                   fill
                   priority
+                  quality={88}
                   sizes="(max-width: 1023px) calc(100vw - 2rem), 58vw"
                   className="object-contain p-4 sm:p-8 lg:p-10"
                 />
@@ -162,7 +163,7 @@ export function ProductDetail({
                     }`}
                   >
                     <span className="relative block h-full w-full">
-                      <Image src={src} alt="" fill sizes="80px" className="object-contain" />
+                      <Image src={src} alt="" fill quality={70} sizes="80px" className="object-contain" />
                     </span>
                   </button>
                 ))}

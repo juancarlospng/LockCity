@@ -15,6 +15,7 @@ export function Aw26Hero({ product }: { product?: Product }) {
             fill
             priority
             fetchPriority="high"
+            quality={88}
             sizes="(max-width: 1023px) 100vw, 70vw"
             className="object-contain object-[center_18%] opacity-70 lg:object-center"
           />

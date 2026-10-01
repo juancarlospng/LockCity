@@ -76,13 +76,25 @@ test('product UI keeps media contained, thumbnails fixed and footer credit subtl
   const footer = read('components/Footer.tsx');
   assert.match(card, /object-contain/);
   assert.match(card, /bg-white/);
+  assert.match(card, /quality=\{82\}/);
   assert.match(card, /select-options-link/);
   assert.match(detail, /object-contain/);
   assert.match(detail, /bg-white/);
+  assert.match(detail, /quality=\{88\}/);
+  assert.match(detail, /quality=\{70\}/);
   assert.match(detail, /h-20 w-20 shrink-0 snap-start/);
   assert.match(detail, /overflow-x-auto/);
   assert.match(detail, /Previous product images/);
   assert.match(detail, /Next product images/);
   assert.match(detail, /getColorAccent/);
   assert.match(footer, /Powered by Blueether/);
+});
+
+test('AW26 image quality prioritizes hero and primary PDP without overfetching thumbnails', () => {
+  const hero = read('components/home/Aw26Hero.tsx');
+  const config = read('next.config.mjs');
+  assert.match(hero, /quality=\{88\}/);
+  assert.match(hero, /fetchPriority="high"/);
+  assert.match(hero, /sizes="\(max-width: 1023px\) 100vw, 70vw"/);
+  assert.match(config, /qualities: \[70, 75, 82, 88\]/);
 });
