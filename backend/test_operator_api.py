@@ -307,6 +307,9 @@ class Aw26Woo:
             raise OperatorError(404, "PRODUCT_NOT_FOUND")
         return copy.deepcopy(self.product)
 
+    async def get_aw26_catalog(self, product_ids):
+        return [copy.deepcopy(self.product) for product_id in product_ids if product_id == 3823]
+
     async def update_aw26(
             self, product_id, fields, variation_ids, retail_price=None,
             product_type=None):
@@ -377,6 +380,13 @@ def test_aw26_detailed_read_is_authenticated_and_allowlisted(aw26_setup):
     assert response.json()["variation_ids"] == [401, 402]
     assert response.json()["printful"][0]["key"] == "_printful_sync_product_id"
     assert request(aw26_setup, "GET", "/aw26/products/3704").status_code == 403
+
+
+def test_aw26_catalog_read_is_authenticated(aw26_setup):
+    assert request(aw26_setup, "GET", "/aw26/products", headers={}).status_code == 401
+    response = request(aw26_setup, "GET", "/aw26/products")
+    assert response.status_code == 200
+    assert response.json()["products"][0]["id"] == 3823
 
 
 def test_aw26_category_bootstrap_is_authenticated_flagged_and_idempotent(aw26_setup, monkeypatch):

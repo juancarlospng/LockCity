@@ -59,6 +59,9 @@ def contract():
                 "variations": {"type": "array", "items": {"type": "object"}},
                 "printful": {"type": "array", "items": {"type": "object"}},
                 "version": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}},
+        "Aw26Products": {"type": "object", "required": ["products"], "properties": {
+            "products": {"type": "array", "items": {
+                "$ref": "#/components/schemas/Aw26Product"}}}},
         "Aw26PatchResult": {"type": "object", "required": ["operation_id", "verified"],
                             "properties": {
                                 "operation_id": {"type": "string", "format": "uuid"},
@@ -218,6 +221,7 @@ def contract():
         ("/products", "get", "getProducts", "Products", pagination),
         ("/products/{id}", "get", "getProduct", "Product", identifier),
         ("/products/{id}", "patch", "updateProduct", "PatchResult", identifier),
+        ("/aw26/products", "get", "getAw26Products", "Aw26Products", []),
         ("/aw26/products/{id}", "get", "getAw26Product", "Aw26Product", identifier),
         ("/aw26/products/{id}", "patch", "updateAw26Product", "Aw26PatchResult", identifier),
         ("/aw26/products/{id}/hard-hide", "patch", "hardHideAw26Product", "Aw26PatchResult", identifier),

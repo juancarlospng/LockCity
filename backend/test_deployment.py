@@ -45,6 +45,7 @@ def test_independent_app_exposes_only_requested_routes():
         ("/api/operator/v1/products/{product_id}", "GET"),
         ("/api/operator/v1/products/{product_id}", "PATCH"),
         ("/api/operator/v1/aw26/products/{product_id}", "GET"),
+        ("/api/operator/v1/aw26/products", "GET"),
         ("/api/operator/v1/aw26/products/{product_id}", "PATCH"),
         ("/api/operator/v1/aw26/products/{product_id}/hard-hide", "PATCH"),
         ("/api/operator/v1/aw26/categories", "GET"),

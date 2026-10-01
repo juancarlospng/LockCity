@@ -304,6 +304,41 @@ class WooClient:
             raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
         return view
 
+    async def get_aw26_catalog(self, product_ids):
+        """Read hidden AW26 parents once and fetch variations with bounded concurrency."""
+        ids = tuple(product_ids)
+        raw_products, _ = await self.call("GET", "products", params={
+            "context": "edit", "include": ",".join(str(item) for item in ids),
+            "orderby": "include", "per_page": 100,
+        })
+        if not isinstance(raw_products, list):
+            raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+        by_id = {item.get("id"): item for item in raw_products if isinstance(item, dict)}
+        if len(by_id) != len(ids) or any(item not in by_id for item in ids):
+            raise OperatorError(502, "INCOMPLETE_AW26_CATALOG")
+        semaphore = asyncio.Semaphore(4)
+
+        async def read_product(product_id):
+            async with semaphore:
+                variations, page = [], 1
+                while True:
+                    batch, headers = await self.call(
+                        "GET", f"products/{product_id}/variations",
+                        params={"context": "edit", "page": page, "per_page": 100})
+                    if not isinstance(batch, list):
+                        raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+                    variations.extend(batch)
+                    try:
+                        total_pages = int(headers.get("X-WP-TotalPages", "1"))
+                    except (TypeError, ValueError):
+                        raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE") from None
+                    if page >= total_pages:
+                        break
+                    page += 1
+                return aw26_product_view(by_id[product_id], variations)
+
+        return await asyncio.gather(*(read_product(product_id) for product_id in ids))
+
     async def update_aw26(
             self, product_id, fields, variation_ids, retail_price=None,
             product_type=None):
@@ -1057,6 +1092,14 @@ def create_router(store, woo=None, printful=None):
             except (ValidationError, ValueError):
                 raise OperatorError(400, "INVALID_PATCH") from None
             return await service.patch(product_id_int, body)
+        return await dispatch(request, action)
+
+    @router.get("/aw26/products")
+    async def aw26_products(request: Request):
+        async def action():
+            products = await aw26_service.woo.get_aw26_catalog(
+                sorted(AW26_ACTIVE_WOO_PRODUCT_IDS))
+            return 200, {"products": products}
         return await dispatch(request, action)
 
     @router.get("/aw26/products/{product_id}")
