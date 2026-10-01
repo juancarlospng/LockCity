@@ -56,6 +56,40 @@ interface OperatorProduct {
   variations?: OperatorVariation[];
 }
 
+const AW26_IMAGE_COLOR_SLUGS: Readonly<Partial<Record<number, readonly string[]>>> = {
+  3823: ["black", "navy", "smoke"],
+  3854: ["black", "dust", "forest", "maroon", "navy", "vintage-brown"],
+  3915: ["rust"],
+  3923: ["black"],
+  3932: ["black"],
+  3941: ["black"],
+  3950: ["black", "ivory", "peachy"],
+  3973: ["white"],
+  3979: ["black", "french-navy"],
+  3996: ["white"],
+  4005: ["white"],
+  4022: ["black", "french-navy"],
+  4040: ["black", "dark-olive", "oxford-navy"],
+  4048: ["black", "forest-green", "navy"],
+  4067: ["black"],
+  4084: ["white"],
+  4093: ["black", "dark-olive", "oxford-navy"],
+  4143: ["black", "navy-blazer"],
+};
+
+function storefrontImages(productId: number, images: ProductImage[]): ProductImage[] {
+  const colors = AW26_IMAGE_COLOR_SLUGS[productId];
+  if (!colors?.length) return images;
+  const filtered = images.filter((image) => {
+    const pathname = (() => {
+      try { return new URL(image.src).pathname.toLowerCase(); }
+      catch { return image.src.toLowerCase(); }
+    })();
+    return colors.some((color) => pathname.includes(`-${color}-`));
+  });
+  return filtered.length > 0 ? filtered : images;
+}
+
 function plainText(value?: string): string | undefined {
   const text = value
     ?.replace(/<[^>]*>/g, " ")
@@ -148,9 +182,9 @@ export function mapOperatorProduct(raw: OperatorProduct): Product {
     throw new CommerceError("woocommerce", "AW26 product is not safely hidden in WooCommerce");
   }
 
-  const sourceImages: ProductImage[] = (raw.images ?? []).flatMap((image) => (
+  const sourceImages = storefrontImages(raw.id!, (raw.images ?? []).flatMap((image) => (
     image.src ? [{ id: image.id, src: image.src, alt: image.alt }] : []
-  ));
+  )));
   let variants = (raw.variations ?? []).flatMap((variant) => {
     const mapped = mapVariant(variant, raw.id!);
     return mapped ? [mapped] : [];

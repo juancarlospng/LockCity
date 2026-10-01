@@ -75,6 +75,31 @@ test('refuses zero or missing AW26 retail pricing', () => {
   assert.throws(() => mapOperatorProduct(hiddenProduct({ variations: [{ id: 100, regular_price: '0', stock_status: 'instock' }] })), /no valid retail price/);
 });
 
+test('AW26 galleries expose only colors confirmed by sellable variants and Printful sync', () => {
+  const product = mapOperatorProduct(hiddenProduct({
+    id: 3950,
+    name: 'Lock City Mascot Youth Hoodie',
+    slug: 'lock-city-mascot-kid-hoodie',
+    images: [
+      { id: 1, src: 'https://lockcityclothes.com/uploads/youth-hoodie-black-front.jpg' },
+      { id: 2, src: 'https://lockcityclothes.com/uploads/youth-hoodie-blue-jean-front.jpg' },
+      { id: 3, src: 'https://lockcityclothes.com/uploads/youth-hoodie-ivory-front.jpg' },
+      { id: 4, src: 'https://lockcityclothes.com/uploads/youth-hoodie-peachy-front.jpg' },
+    ],
+  }));
+  assert.deepEqual(product.sourceImages.map((image) => image.id), [1, 3, 4]);
+});
+
+test('a missing expected filename token never creates an empty gallery', () => {
+  const product = mapOperatorProduct(hiddenProduct({
+    id: 3915,
+    name: 'Lockmark Ribbed Beanie',
+    slug: 'lockmark-ribbed-beanie',
+    images: [{ id: 1, src: 'https://lockcityclothes.com/uploads/editorial-beanie.jpg' }],
+  }));
+  assert.equal(product.sourceImages.length, 1);
+});
+
 test('loads the protected AW26 catalog in one cacheable batch and supports direct PDP reads', () => {
   assert.match(operatorSource, /operatorFetch\("\/aw26\/products"\)/);
   assert.match(operatorSource, /next: \{ revalidate: 300 \}/);
