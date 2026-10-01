@@ -19,6 +19,9 @@ Module._load = function(request, parent, isMain) {
       }
     } };
   }
+  if (request === './merchandising') {
+    return { AW26_PRODUCT_ID_BY_SLUG: { 'lc-code-quarter-zip-sweatshirt': 3823 } };
+  }
   return originalLoad.call(this, request, parent, isMain);
 };
 try {
@@ -72,8 +75,9 @@ test('refuses zero or missing AW26 retail pricing', () => {
   assert.throws(() => mapOperatorProduct(hiddenProduct({ variations: [{ id: 100, regular_price: '0', stock_status: 'instock' }] })), /no valid retail price/);
 });
 
-test('loads the protected AW26 catalog with bounded upstream concurrency', () => {
-  assert.match(operatorSource, /OPERATOR_CONCURRENCY = 3/);
-  assert.match(operatorSource, /fetchProductsWithLimit\(productIds\)/);
-  assert.doesNotMatch(operatorSource, /Promise\.all\(productIds\.map\(fetchProduct\)\)/);
+test('loads the protected AW26 catalog in one cacheable batch and supports direct PDP reads', () => {
+  assert.match(operatorSource, /operatorFetch\("\/aw26\/products"\)/);
+  assert.match(operatorSource, /next: \{ revalidate: 300 \}/);
+  assert.match(operatorSource, /AW26_PRODUCT_ID_BY_SLUG/);
+  assert.match(operatorSource, /getOperatorProductBySlug/);
 });

@@ -20,7 +20,9 @@ export function wooMediaCandidates(source: string, configuredStore: string): URL
     && LOCK_CITY_MEDIA_HOSTS.has(store.hostname);
   if (image.origin !== store.origin && !isKnownLockCityPair) throw new Error("Invalid media origin");
 
-  const candidates = [image];
+  const preferred = new URL(image);
+  if (isKnownLockCityPair) preferred.hostname = store.hostname;
+  const candidates = [preferred];
   if (isKnownLockCityPair) {
     for (const hostname of LOCK_CITY_MEDIA_HOSTS) {
       const alternate = new URL(image);
@@ -41,7 +43,7 @@ export async function fetchWooMedia(
     try {
       response = await request(candidate, {
         redirect: "error",
-        cache: "no-store",
+        next: { revalidate: 86400 },
         signal: AbortSignal.timeout(15000),
       });
     } catch {

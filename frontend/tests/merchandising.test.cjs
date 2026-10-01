@@ -40,6 +40,8 @@ test('QA classification exposes 8 Core, 3 Shop-extra and 18 AW26 products', () =
   assert.equal(m.AW26_PRODUCT_IDS.length, 18);
   assert.deepEqual(m.AW26_EXCLUDED_PRODUCT_IDS, [4102]);
   assert.equal(new Set(m.AW26_PRODUCT_IDS).size, 18);
+  assert.equal(Object.keys(m.AW26_PRODUCT_ID_BY_SLUG).length, 18);
+  assert.deepEqual(new Set(Object.values(m.AW26_PRODUCT_ID_BY_SLUG)), new Set(m.AW26_PRODUCT_IDS));
   assert.equal(m.AW26_PRODUCT_IDS.includes(4102), false);
   assert.equal(m.AW26_VISIBLE, true);
   assert.equal(m.DROP_VISIBLE, true);
@@ -115,7 +117,8 @@ test('home keeps the approved Hero before the native-scroll Three.js city and Co
   assert.ok(home.indexOf('<CityExperience />') < home.indexOf('id="aw26-drop"'));
   assert.ok(home.indexOf('id="aw26-drop"') < home.indexOf('data-testid="core-reveal"'));
   assert.match(home, /data-testid="core-reveal"/);
-  assert.match(home, /-mt-\[16svh\]/);
+  assert.match(home, /HOME_AW26_VISIBLE \? "border-t border-graphite pt-12 sm:pt-16"/);
+  assert.ok(home.indexOf('-mt-[16svh]') < home.indexOf('data-testid="core-reveal"'));
   assert.match(home, /scene=\{HOME_AW26_VISIBLE \? "04 — Permanent pieces" : "03 — Permanent pieces"\}/);
   assert.match(city, /dynamic\(/);
   assert.match(city, /components\/three\/HeroScene/);
@@ -214,7 +217,7 @@ test('Shop and collection routes use central merchandising selectors', () => {
   assert.match(collection, /activeDropProducts/);
   assert.match(collection, /slug === "drop" && !DROP_VISIBLE/);
   assert.match(collection, /Permanent Lock City pieces built around the lock/);
-  assert.match(productPage, /relatedStoreProducts/);
+  assert.match(productPage, /commerce\.getRelatedProducts/);
   assert.match(productPage, /noIndex: !isPublicStoreProduct/);
   assert.match(productPage, /!product \|\| !isPublicStoreProduct\(product\.wooProductId\)/);
   assert.match(search, /matches\.filter\(\(product\) => isPublicStoreProduct\(product\.id\)\)/);

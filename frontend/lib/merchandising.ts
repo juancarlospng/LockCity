@@ -9,6 +9,26 @@ export const AW26_PRODUCT_IDS = [
   3996, 4005, 4022, 4040, 4048, 4067, 4084, 4093, 4143,
 ] as const;
 export const AW26_EXCLUDED_PRODUCT_IDS = [4102] as const;
+export const AW26_PRODUCT_ID_BY_SLUG: Readonly<Record<string, number>> = {
+  "lane-seven-ls14014-premium-1-4-zip-sweatshirt": 3823,
+  "oversized-heavyweight-hoodie": 3854,
+  "lockmark-ribbed-beanie": 3915,
+  "lc-code-strappy-crop-top": 3923,
+  "lockmark-luxe-bra": 3932,
+  "lockmark-fleece-shorts": 3941,
+  "lock-city-mascot-kid-hoodie": 3950,
+  "lockmark-embroidered-socks": 3973,
+  "lockmark-t-shirt": 3979,
+  "lockmark-athletic-shorts": 3996,
+  "dreamers-crest-sweater": 4005,
+  "lockmark-sport-shirt": 4022,
+  "lc-code-corduroy-cap": 4040,
+  "lockmark-windbreaker": 4048,
+  "lc-ice-day-sweatshirt": 4067,
+  "lockmark-athletic-shorts-2": 4084,
+  "lockmark-corduroy-cap": 4093,
+  "unisex-fleece-sweatpants": 4143,
+};
 
 // Vercel is the current QA storefront. WooCommerce products remain draft and
 // hidden; V2 reads their preview data server-side through Operator API.
@@ -108,4 +128,12 @@ export function relatedStoreProducts(product: Product, products: Product[], limi
   else if (isActiveDropProduct(id)) candidates = activeDropProducts(products);
   else if (isShopExtraProduct(id)) candidates = publicStoreProducts(products);
   return candidates.filter((candidate) => candidate.wooProductId !== id).slice(0, limit);
+}
+
+export function relatedStoreProductIds(product: Product, limit = 3): number[] {
+  const id = product.wooProductId;
+  const ids = isCoreProduct(id) ? CORE_PRODUCT_IDS
+    : isActiveDropProduct(id) ? AW26_PRODUCT_IDS
+      : isShopExtraProduct(id) ? PUBLIC_STORE_PRODUCT_IDS : [];
+  return ids.filter((candidate) => candidate !== id).slice(0, limit);
 }

@@ -82,11 +82,21 @@ export default async function CollectionPage({
       className="px-4 pb-24 pt-32 sm:px-8 lg:px-12 lg:pt-40"
     >
       <p className="text-[10px] uppercase tracking-[0.3em] text-steel">
-        {slug === "core" ? "Permanent collection" : "Collection"}
+        {slug === "core" ? "Permanent collection" : "01 — Current drop"}
       </p>
       <h1 className="mt-4 font-display text-6xl uppercase leading-[0.85] text-bone sm:text-8xl lg:text-[10rem]">
-        <MaskText lines={[district.name]} />
+        <MaskText lines={[slug === "drop" ? "AW26" : district.name]} />
       </h1>
+
+      {slug === "drop" ? (
+        <div className="mt-8 grid gap-8 border-y border-graphite py-8 sm:grid-cols-2 sm:items-end lg:grid-cols-[1fr_auto] lg:py-10">
+          <div>
+            <p className="text-xs uppercase tracking-[0.32em] text-bone">Autumn / Winter 2026</p>
+            <p className="mt-5 max-w-lg text-sm leading-7 text-steel">Built for the city. Designed for what comes next.</p>
+          </div>
+          <p className="text-xs uppercase tracking-[0.3em] text-steel">{products.length} pieces</p>
+        </div>
+      ) : null}
 
       {slug === "core" ? (
         <div className="mt-8 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
@@ -109,9 +119,9 @@ export default async function CollectionPage({
           />
         </div>
       ) : (
-        <div className="mt-16 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="mx-auto mt-16 grid w-full max-w-[1800px] grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           {products.map((product, index) => (
-            <ProductCard key={product.id} product={product} index={index} />
+            <ProductCard key={product.id} product={product} index={index} priority={index < 3} />
           ))}
         </div>
       )}

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Media } from "@/components/Media";
@@ -110,12 +111,14 @@ export function ProductDetail({
         <div className="lg:col-span-7">
           <div data-testid="product-gallery" className="border border-graphite">
             {images.length > 0 ? (
-              <div className="aspect-[4/5] w-full bg-white p-4 sm:p-8 lg:p-10">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+              <div className="relative aspect-[4/5] w-full bg-white">
+                <Image
                   src={images[frame] ?? images[0]}
                   alt={product.name}
-                  className="h-full w-full object-contain"
+                  fill
+                  priority
+                  sizes="(max-width: 1023px) calc(100vw - 2rem), 58vw"
+                  className="object-contain p-4 sm:p-8 lg:p-10"
                 />
               </div>
             ) : (
@@ -158,8 +161,9 @@ export function ProductDetail({
                       frame === i ? "border-bone" : "border-graphite hover:border-steel"
                     }`}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt="" className="h-full w-full object-contain" />
+                    <span className="relative block h-full w-full">
+                      <Image src={src} alt="" fill sizes="80px" className="object-contain" />
+                    </span>
                   </button>
                 ))}
               </div>

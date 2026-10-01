@@ -49,19 +49,21 @@ export default async function HomePage() {
       {catalogError ? <CatalogError error={catalogError} /> : (
         <>
           {HOME_AW26_VISIBLE ? (
-            <ProductShowcase
-              id="aw26-drop"
-              scene="03 — Autumn Winter 2026"
-              title="AW26 Drop"
-              products={aw26}
-              ctaHref="/collections/drop"
-              ctaLabel="Explore AW26"
-              layout="grid"
-            />
+            <div className="relative z-20 -mt-[16svh] bg-bg md:-mt-[29svh] motion-reduce:-mt-[8svh]">
+              <ProductShowcase
+                id="aw26-drop"
+                scene="03 — Autumn Winter 2026"
+                title="AW26 Drop"
+                products={aw26}
+                ctaHref="/collections/drop"
+                ctaLabel="Explore AW26"
+                layout="grid"
+              />
+            </div>
           ) : null}
           <div
             data-testid="core-reveal"
-            className="relative z-20 -mt-[16svh] bg-bg md:-mt-[29svh] motion-reduce:-mt-[8svh]"
+            className={`relative z-20 bg-bg ${HOME_AW26_VISIBLE ? "border-t border-graphite pt-12 sm:pt-16" : "-mt-[16svh] md:-mt-[29svh] motion-reduce:-mt-[8svh]"}`}
           >
             <ProductShowcase
               id="core"

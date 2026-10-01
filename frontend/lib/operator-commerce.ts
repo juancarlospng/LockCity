@@ -1,5 +1,6 @@
 import "server-only";
 import { CommerceError } from "./commerce-core";
+import { AW26_PRODUCT_ID_BY_SLUG } from "./merchandising";
 import type {
   Product,
   ProductAttribute,
@@ -223,13 +224,13 @@ function operatorConfig(): { baseUrl: string; token: string } {
   return { baseUrl: parsed.origin, token };
 }
 
-async function fetchProduct(productId: number): Promise<Product> {
+async function operatorFetch(path: string): Promise<unknown> {
   const { baseUrl, token } = operatorConfig();
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}/api/operator/v1/aw26/products/${productId}`, {
+    response = await fetch(`${baseUrl}/api/operator/v1${path}`, {
       headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
+      next: { revalidate: 300 },
       signal: AbortSignal.timeout(60000),
     });
   } catch {
@@ -238,42 +239,56 @@ async function fetchProduct(productId: number): Promise<Product> {
   if (!response.ok) {
     throw new CommerceError("woocommerce", `AW26 preview service returned HTTP ${response.status}`, response.status);
   }
-  const body: unknown = await response.json().catch(() => undefined);
-  return mapOperatorProduct(body as OperatorProduct);
+  return response.json().catch(() => undefined);
 }
 
-let cache: { expiresAt: number; products: Product[] } | undefined;
-let inFlight: Promise<Product[]> | undefined;
-const OPERATOR_CONCURRENCY = 3;
+const productCache = new Map<number, { expiresAt: number; product: Product }>();
+const productInFlight = new Map<number, Promise<Product>>();
+let catalogCache: { expiresAt: number; products: Product[] } | undefined;
+let catalogInFlight: Promise<Product[]> | undefined;
 
-async function fetchProductsWithLimit(productIds: readonly number[]): Promise<Product[]> {
-  const products = new Array<Product>(productIds.length);
-  let nextIndex = 0;
-  const workers = Array.from(
-    { length: Math.min(OPERATOR_CONCURRENCY, productIds.length) },
-    async () => {
-      while (nextIndex < productIds.length) {
-        const index = nextIndex;
-        nextIndex += 1;
-        products[index] = await fetchProduct(productIds[index]);
+export async function getOperatorProduct(productId: number): Promise<Product> {
+  const cached = productCache.get(productId);
+  if (cached && cached.expiresAt > Date.now()) return cached.product;
+  const existing = productInFlight.get(productId);
+  if (existing) return existing;
+  const request = operatorFetch(`/aw26/products/${productId}`)
+    .then((body) => mapOperatorProduct(body as OperatorProduct))
+    .then((product) => {
+      productCache.set(productId, { expiresAt: Date.now() + 300_000, product });
+      return product;
+    })
+    .finally(() => productInFlight.delete(productId));
+  productInFlight.set(productId, request);
+  return request;
+}
+
+export async function getOperatorCatalog(productIds: readonly number[]): Promise<Product[]> {
+  if (catalogCache && catalogCache.expiresAt > Date.now()) return catalogCache.products;
+  if (!catalogInFlight) {
+    catalogInFlight = operatorFetch("/aw26/products").then((body) => {
+      const raw = (body as { products?: OperatorProduct[] })?.products;
+      if (!Array.isArray(raw)) throw new CommerceError("woocommerce", "AW26 preview returned an invalid catalog");
+      const products = raw.map(mapOperatorProduct);
+      const byId = new Map(products.map((product) => [product.wooProductId!, product]));
+      if (byId.size !== productIds.length || productIds.some((id) => !byId.has(id))) {
+        throw new CommerceError("woocommerce", "AW26 preview returned an incomplete catalog");
       }
-    },
-  );
-  await Promise.all(workers);
-  return products;
+      const ordered = productIds.map((id) => byId.get(id)!);
+      const expiresAt = Date.now() + 300_000;
+      for (const product of ordered) productCache.set(product.wooProductId!, { expiresAt, product });
+      catalogCache = { expiresAt, products: ordered };
+      return ordered;
+    }).finally(() => { catalogInFlight = undefined; });
+  }
+  return catalogInFlight;
 }
 
 export async function getOperatorProducts(productIds: readonly number[]): Promise<Product[]> {
-  if (cache && cache.expiresAt > Date.now()) return cache.products;
-  if (!inFlight) {
-    inFlight = fetchProductsWithLimit(productIds).then((products) => {
-      const returned = new Set(products.map((product) => product.wooProductId));
-      if (returned.size !== productIds.length || productIds.some((id) => !returned.has(id))) {
-        throw new CommerceError("woocommerce", "AW26 preview returned an incomplete catalog");
-      }
-      cache = { expiresAt: Date.now() + 300_000, products };
-      return products;
-    }).finally(() => { inFlight = undefined; });
-  }
-  return inFlight;
+  return Promise.all(productIds.map(getOperatorProduct));
+}
+
+export async function getOperatorProductBySlug(productSlug: string): Promise<Product | undefined> {
+  const id = AW26_PRODUCT_ID_BY_SLUG[productSlug];
+  return id ? getOperatorProduct(id) : undefined;
 }

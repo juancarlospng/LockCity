@@ -107,7 +107,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       catch { return NextResponse.json({ error: "invalid_image" }, { status: 400 }); }
       if (!media) return NextResponse.json({ error: "image_unavailable" }, { status: 502 });
       const type = media.headers.get("content-type") ?? "image/jpeg";
-      return new NextResponse(media.body, { headers: { "Content-Type": type, "Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff" } });
+      return new NextResponse(media.body, { headers: { "Content-Type": type, "Cache-Control": "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400", "X-Content-Type-Options": "nosniff" } });
     }
     if (path[0] === "products") {
       const upstream = new URL(`/wp-json/wc/store/v1/${path.map(encodeURIComponent).join("/")}`, storeUrl);
