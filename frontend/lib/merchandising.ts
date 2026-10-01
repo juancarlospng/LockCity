@@ -5,15 +5,17 @@ import type { Product } from "./types";
 export const CORE_PRODUCT_IDS = [2911, 3011, 3058, 3149, 3179, 3214, 3292, 3686] as const;
 export const SHOP_EXTRA_PRODUCT_IDS = [2415, 3699, 3704] as const;
 export const AW26_PRODUCT_IDS = [
-  3823, 3854, 3915, 3923, 3932, 3941, 3950, 3973, 3979,
+  3823, 3854, 3915, 3932, 3941, 3950, 3973, 3979,
   3996, 4005, 4022, 4040, 4048, 4067, 4084, 4093, 4143,
 ] as const;
-export const AW26_EXCLUDED_PRODUCT_IDS = [4102] as const;
+export const AW26_EXCLUDED_PRODUCT_IDS = [3923, 4102] as const;
+export const AW26_BLOCKED_PRODUCT_IDS: Readonly<Record<number, string>> = {
+  3923: "BLOCKED_PENDING_PRINTFUL_CORRECTION",
+};
 export const AW26_PRODUCT_ID_BY_SLUG: Readonly<Record<string, number>> = {
   "lane-seven-ls14014-premium-1-4-zip-sweatshirt": 3823,
   "oversized-heavyweight-hoodie": 3854,
   "lockmark-ribbed-beanie": 3915,
-  "lc-code-strappy-crop-top": 3923,
   "lockmark-luxe-bra": 3932,
   "lockmark-fleece-shorts": 3941,
   "lock-city-mascot-kid-hoodie": 3950,

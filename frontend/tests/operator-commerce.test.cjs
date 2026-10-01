@@ -103,6 +103,7 @@ test('a missing expected filename token never creates an empty gallery', () => {
 test('loads the protected AW26 catalog in one cacheable batch and supports direct PDP reads', () => {
   assert.match(operatorSource, /operatorFetch\("\/aw26\/products"\)/);
   assert.match(operatorSource, /next: \{ revalidate: 300 \}/);
+  assert.match(operatorSource, /requestedIds\.has\(product\.id\)/);
   assert.match(operatorSource, /AW26_PRODUCT_ID_BY_SLUG/);
   assert.match(operatorSource, /getOperatorProductBySlug/);
 });

@@ -33,22 +33,23 @@ const product = (wooProductId) => ({
   availability: {}, sourceImages: [], price: 1, currency: 'USD', status: 'AVAILABLE', images: [], variants: [],
 });
 
-test('QA classification exposes 8 Core, 3 Shop-extra and 18 AW26 products', () => {
+test('QA classification exposes 8 Core, 3 Shop-extra and 17 active AW26 products', () => {
   const m = merchandising();
   assert.equal(m.CORE_PRODUCT_IDS.length, 8);
   assert.equal(m.SHOP_EXTRA_PRODUCT_IDS.length, 3);
-  assert.equal(m.AW26_PRODUCT_IDS.length, 18);
-  assert.deepEqual(m.AW26_EXCLUDED_PRODUCT_IDS, [4102]);
-  assert.equal(new Set(m.AW26_PRODUCT_IDS).size, 18);
-  assert.equal(Object.keys(m.AW26_PRODUCT_ID_BY_SLUG).length, 18);
+  assert.equal(m.AW26_PRODUCT_IDS.length, 17);
+  assert.deepEqual(m.AW26_EXCLUDED_PRODUCT_IDS, [3923, 4102]);
+  assert.equal(m.AW26_BLOCKED_PRODUCT_IDS[3923], 'BLOCKED_PENDING_PRINTFUL_CORRECTION');
+  assert.equal(new Set(m.AW26_PRODUCT_IDS).size, 17);
+  assert.equal(Object.keys(m.AW26_PRODUCT_ID_BY_SLUG).length, 17);
   assert.deepEqual(new Set(Object.values(m.AW26_PRODUCT_ID_BY_SLUG)), new Set(m.AW26_PRODUCT_IDS));
   assert.equal(m.AW26_PRODUCT_IDS.includes(4102), false);
   assert.equal(m.AW26_VISIBLE, true);
   assert.equal(m.DROP_VISIBLE, true);
-  assert.equal(m.ACTIVE_DROP_PRODUCT_IDS.length, 18);
+  assert.equal(m.ACTIVE_DROP_PRODUCT_IDS.length, 17);
   assert.equal(m.LEGACY_PRODUCT_IDS.length, 14);
-  assert.equal(m.PUBLIC_STORE_PRODUCT_IDS.length, 29);
-  assert.equal(new Set(m.PUBLIC_STORE_PRODUCT_IDS).size, 29);
+  assert.equal(m.PUBLIC_STORE_PRODUCT_IDS.length, 28);
+  assert.equal(new Set(m.PUBLIC_STORE_PRODUCT_IDS).size, 28);
 });
 
 test('Shop allowlist excludes every legacy product and preserves configured order', () => {
@@ -62,16 +63,19 @@ test('Shop allowlist excludes every legacy product and preserves configured orde
   assert.deepEqual(m.activeDropProducts(all).map((item) => item.wooProductId), m.AW26_PRODUCT_IDS);
 });
 
-test('AW26 is fully registered for QA and excluded product 4102 stays absent', () => {
+test('AW26 is fully registered for QA and blocked products stay absent', () => {
   const m = merchandising();
   const all = [...m.AW26_PRODUCT_IDS, ...m.AW26_EXCLUDED_PRODUCT_IDS, ...m.PUBLIC_STORE_PRODUCT_IDS].map(product);
   assert.deepEqual(m.aw26Products(all).map((item) => item.wooProductId), m.AW26_PRODUCT_IDS);
-  assert.equal(m.aw26Products(all).length, 18);
+  assert.equal(m.aw26Products(all).length, 17);
   assert.equal(m.isAw26Product(3854), true);
   assert.equal(m.isAw26Product(4143), true);
   assert.equal(m.isAw26Product(4102), false);
+  assert.equal(m.isAw26Product(3923), false);
+  assert.equal(m.isExcludedAw26Product(3923), true);
   assert.equal(m.isExcludedAw26Product(4102), true);
-  assert.equal(m.publicStoreProducts(all).filter((item) => m.isAw26Product(item.wooProductId)).length, 18);
+  assert.equal(m.publicStoreProducts(all).filter((item) => m.isAw26Product(item.wooProductId)).length, 17);
+  assert.equal(m.isPublicStoreProduct(3923), false);
   assert.equal(m.isPublicStoreProduct(4102), false);
   assert.deepEqual(m.activeDropProducts(all).map((item) => item.wooProductId), m.AW26_PRODUCT_IDS);
 });

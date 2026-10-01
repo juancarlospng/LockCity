@@ -60,7 +60,6 @@ const AW26_IMAGE_COLOR_SLUGS: Readonly<Partial<Record<number, readonly string[]>
   3823: ["black", "navy", "smoke"],
   3854: ["black", "dust", "forest", "maroon", "navy", "vintage-brown"],
   3915: ["rust"],
-  3923: ["black"],
   3932: ["black"],
   3941: ["black"],
   3950: ["black", "ivory", "peachy"],
@@ -303,7 +302,10 @@ export async function getOperatorCatalog(productIds: readonly number[]): Promise
     catalogInFlight = operatorFetch("/aw26/products").then((body) => {
       const raw = (body as { products?: OperatorProduct[] })?.products;
       if (!Array.isArray(raw)) throw new CommerceError("woocommerce", "AW26 preview returned an invalid catalog");
-      const products = raw.map(mapOperatorProduct);
+      const requestedIds = new Set(productIds);
+      const products = raw
+        .filter((product) => typeof product.id === "number" && requestedIds.has(product.id))
+        .map(mapOperatorProduct);
       const byId = new Map(products.map((product) => [product.wooProductId!, product]));
       if (byId.size !== productIds.length || productIds.some((id) => !byId.has(id))) {
         throw new CommerceError("woocommerce", "AW26 preview returned an incomplete catalog");
