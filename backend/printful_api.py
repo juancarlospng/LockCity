@@ -9,6 +9,8 @@ from operator_api import OperatorError
 
 PRINTFUL_BASE_URL = "https://api.printful.com"
 AW26_TEMPLATE_IDS = frozenset({
+    79403270,
+    100892117,
     105623495,
     105624073,
     106094567,
@@ -17,8 +19,6 @@ AW26_TEMPLATE_IDS = frozenset({
     106766446,
     106767107,
     107221423,
-    107365805,
-    107366128,
     107530836,
     107563422,
     107563824,
@@ -74,6 +74,91 @@ def normalize_template(raw):
 
 def _text(value):
     return value if isinstance(value, str) and value else None
+
+
+def _safe_validation_text(value):
+    if not isinstance(value, str):
+        return None
+    text = value[:300]
+    secrets = [os.getenv(name, "") for name in (
+        "PRINTFUL_API_TOKEN", "OPERATOR_API_TOKEN", "DATABASE_URL")]
+    if any(secret and secret in text for secret in secrets):
+        return "[REDACTED]"
+    if "authorization" in text.casefold() or "bearer" in text.casefold():
+        return "[REDACTED]"
+    return text
+
+
+def sanitize_printful_validation(response):
+    """Return a small allowlisted view of Printful validation errors."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    root = payload.get("error", payload) if isinstance(payload, dict) else None
+    if not isinstance(root, dict):
+        return None
+    raw_issues = root.get("errors")
+    issues = raw_issues if isinstance(raw_issues, list) else [root]
+    sanitized = []
+    for issue in issues[:10]:
+        if not isinstance(issue, dict):
+            continue
+        item = {}
+        for key in ("type", "title", "detail"):
+            value = _safe_validation_text(issue.get(key))
+            if value:
+                item[key] = value
+        if "detail" not in item:
+            message = _safe_validation_text(issue.get("message"))
+            if message:
+                item["detail"] = message
+        source = issue.get("source")
+        if isinstance(source, dict):
+            clean_source = {}
+            for key in ("pointer", "parameter", "header"):
+                value = _safe_validation_text(source.get(key))
+                if value:
+                    clean_source[key] = value
+            if clean_source:
+                item["source"] = clean_source
+        valid_values = issue.get("valid_values")
+        if isinstance(valid_values, list):
+            item["valid_values"] = [value for value in valid_values[:20]
+                                    if isinstance(value, (str, int, float, bool))]
+        if item:
+            sanitized.append(item)
+    return sanitized or None
+
+
+def build_mockup_request_body(template_id, variant_ids, style_ids):
+    """Build the exact non-secret Printful v2 Product Template request."""
+    return {
+        "format": "jpg",
+        "products": [{
+            "source": "product_template",
+            "product_template_id": template_id,
+            "catalog_variant_ids": list(variant_ids),
+            "mockup_style_ids": list(style_ids),
+        }],
+    }
+
+
+def sanitize_printful_generation_error(response, outbound_body):
+    """Expose only safe validation metadata and the non-secret request body."""
+    details = {
+        "status": response.status_code,
+        "outboundBody": outbound_body,
+    }
+    issues = sanitize_printful_validation(response)
+    if issues:
+        details["issues"] = issues
+    for header in ("x-request-id", "x-correlation-id", "request-id"):
+        request_id = _safe_validation_text(response.headers.get(header))
+        if request_id:
+            details["requestId"] = request_id
+            break
+    return details
 
 
 def _variant_ids(raw):
@@ -420,7 +505,8 @@ class PrintfulClient:
         }
         if response.status_code in errors:
             status, code = errors[response.status_code]
-            raise OperatorError(status, code)
+            details = sanitize_printful_validation(response) if response.status_code == 400 else None
+            raise OperatorError(status, code, details)
         if response.status_code >= 500:
             raise OperatorError(502, "PRINTFUL_UNAVAILABLE")
         if not 200 <= response.status_code < 300:
@@ -650,9 +736,7 @@ class PrintfulClient:
         token = os.getenv("PRINTFUL_API_TOKEN", "")
         if not token:
             raise OperatorError(503, "PRINTFUL_NOT_CONFIGURED")
-        body = {"format": "jpg", "mockup_width_px": 1000, "products": [{
-            "source": "product_template", "product_template_id": template_id,
-            "catalog_variant_ids": variant_ids, "mockup_style_ids": style_ids}]}
+        body = build_mockup_request_body(template_id, variant_ids, style_ids)
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(25.0, connect=5.0),
                                          follow_redirects=False, transport=self.transport) as client:
@@ -671,7 +755,9 @@ class PrintfulClient:
         }
         if response.status_code in errors:
             status, code = errors[response.status_code]
-            raise OperatorError(status, code)
+            details = (sanitize_printful_generation_error(response, body)
+                       if response.status_code == 400 else None)
+            raise OperatorError(status, code, details)
         if response.status_code >= 500:
             raise OperatorError(502, "PRINTFUL_UNAVAILABLE")
         if not 200 <= response.status_code < 300:

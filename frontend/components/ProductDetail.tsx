@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Media } from "@/components/Media";
@@ -9,7 +10,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useCart } from "@/lib/cart";
 import { cartErrorMessage } from "@/lib/cart-core";
 import { getColorAccent, isColorAttribute } from "@/lib/color-accent";
-import { orderedProductImages, shouldPrioritizeVariantImage } from "@/lib/product-media";
+import { productImagesForColor, shouldPrioritizeVariantImage } from "@/lib/product-media";
 import { selectSize as trackSelectSize, viewItem } from "@/lib/analytics";
 import type { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/utils";
@@ -57,19 +58,23 @@ export function ProductDetail({
     ? product.variants[0]
     : findExactVariant(product.variants, selection);
   const validSelection = optionGroups.length > 0 && Object.keys(selection).length === optionGroups.length;
-  const canAdd = canPurchaseVariant(selectedVariant);
+  const canAdd = !product.previewOnly && canPurchaseVariant(selectedVariant);
+  const selectedColor = Object.entries(selection)
+    .find(([key]) => /colou?r/i.test(key))?.[1] ?? selectedVariant?.color;
   const selectedStatus = selectedVariant?.status ?? (validSelection ? "UNKNOWN" : product.status);
   const ctaLabel = !validSelection && product.type === "variable"
     ? "Select all options"
     : !selectedVariant
       ? "Combination unavailable"
-      : !selectedVariant.availability?.is_purchasable
-        ? "Unavailable"
-        : !selectedVariant.availability?.is_in_stock
-          ? "Sold out"
-          : selectedVariant.status === "PRE_ORDER"
-            ? "Pre-order"
-            : "Add to bag";
+      : product.previewOnly
+        ? "Preview only"
+        : !selectedVariant.availability?.is_purchasable
+          ? "Unavailable"
+          : !selectedVariant.availability?.is_in_stock
+            ? "Sold out"
+            : selectedVariant.status === "PRE_ORDER"
+              ? "Pre-order"
+              : "Add to bag";
 
   const onAdd = async () => {
     if (!canAdd || !selectedVariant || isAdding) return;
@@ -86,17 +91,17 @@ export function ProductDetail({
 
   const images = useMemo(() => {
     const selectedImage = selectedVariant?.image;
-    const ordered = orderedProductImages(product);
+    const ordered = productImagesForColor(product, selectedColor);
     return selectedImage && shouldPrioritizeVariantImage(selectedVariant?.sourceImage)
       ? [selectedImage, ...ordered.filter((image) => image !== selectedImage)]
       : ordered;
-  }, [product, selectedVariant?.image]);
+  }, [product, selectedColor, selectedVariant?.image, selectedVariant?.sourceImage]);
 
   const scrollThumbnails = (direction: -1 | 1) => {
     thumbnailStrip.current?.scrollBy({ left: direction * 276, behavior: "smooth" });
   };
 
-  useEffect(() => setFrame(0), [selectedVariant?.id]);
+  useEffect(() => setFrame(0), [selectedColor, selectedVariant?.id]);
   const details = [
     product.description && { title: "Description", body: product.description },
     ...(product.details ?? []),
@@ -108,12 +113,15 @@ export function ProductDetail({
         <div className="lg:col-span-7">
           <div data-testid="product-gallery" className="border border-graphite">
             {images.length > 0 ? (
-              <div className="aspect-[4/5] w-full bg-white p-4 sm:p-8 lg:p-10">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+              <div className="relative aspect-[4/5] w-full bg-white">
+                <Image
                   src={images[frame] ?? images[0]}
                   alt={product.name}
-                  className="h-full w-full object-contain"
+                  fill
+                  priority
+                  quality={88}
+                  sizes="(max-width: 1023px) calc(100vw - 2rem), 58vw"
+                  className="object-contain p-4 sm:p-8 lg:p-10"
                 />
               </div>
             ) : (
@@ -156,8 +164,9 @@ export function ProductDetail({
                       frame === i ? "border-bone" : "border-graphite hover:border-steel"
                     }`}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt="" className="h-full w-full object-contain" />
+                    <span className="relative block h-full w-full">
+                      <Image src={src} alt="" fill quality={70} sizes="80px" className="object-contain" />
+                    </span>
                   </button>
                 ))}
               </div>
@@ -233,7 +242,11 @@ export function ProductDetail({
                       ...selection,
                       [group.key]: value,
                     });
-                    const unavailable = Boolean(candidate && !canPurchaseVariant(candidate));
+                    const unavailable = Boolean(candidate && (
+                      product.previewOnly
+                        ? candidate.availability?.is_in_stock === false
+                        : !canPurchaseVariant(candidate)
+                    ));
                     return (
                       <button
                         key={value}

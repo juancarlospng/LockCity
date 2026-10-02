@@ -28,7 +28,7 @@ export function ProductShowcase({
       id={id}
       data-testid={`${id}-section`}
       aria-labelledby={`${id}-heading`}
-      className="border-t border-graphite px-4 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32"
+      className={`border-t border-graphite px-4 sm:px-8 lg:px-12 ${id === "aw26-drop" ? "py-24 sm:py-28 lg:pb-44 lg:pt-32" : "py-20 sm:py-24 lg:py-32"}`}
     >
       <div className="mx-auto max-w-[1800px]">
         <div className="flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
@@ -53,7 +53,7 @@ export function ProductShowcase({
         </div>
 
         <div className={`mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:mt-16 ${
-          layout === "editorial" ? "lg:grid-cols-12" : "lg:grid-cols-3 xl:grid-cols-5"
+          layout === "editorial" ? "lg:grid-cols-12" : id === "aw26-drop" ? "lg:grid-cols-3 xl:grid-cols-6" : "lg:grid-cols-3 xl:grid-cols-5"
         }`}>
           {products.map((product, index) => (
             <div

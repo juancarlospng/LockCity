@@ -44,6 +44,12 @@ def test_independent_app_exposes_only_requested_routes():
         ("/api/operator/v1/products", "GET"),
         ("/api/operator/v1/products/{product_id}", "GET"),
         ("/api/operator/v1/products/{product_id}", "PATCH"),
+        ("/api/operator/v1/aw26/products/{product_id}", "GET"),
+        ("/api/operator/v1/aw26/products", "GET"),
+        ("/api/operator/v1/aw26/products/{product_id}", "PATCH"),
+        ("/api/operator/v1/aw26/products/{product_id}/hard-hide", "PATCH"),
+        ("/api/operator/v1/aw26/categories", "GET"),
+        ("/api/operator/v1/aw26/categories/bootstrap", "POST"),
         ("/api/operator/v1/audit", "GET"),
         ("/api/operator/v1/printful/status", "GET"),
         ("/api/operator/v1/printful/templates", "GET"),
@@ -60,9 +66,13 @@ def test_independent_app_exposes_only_requested_routes():
 def test_production_launcher_binds_provider_port_and_forces_read_only(monkeypatch):
     monkeypatch.setenv("PORT", "9123")
     monkeypatch.setenv("OPERATOR_WRITES_ENABLED", "true")
+    monkeypatch.setenv("AW26_PUBLISH_ENABLED", "true")
+    monkeypatch.delenv("AW26_PRODUCT_WRITE_ENABLED", raising=False)
     settings = production_settings()
     assert settings == {"app": "operator_server:app", "host": "0.0.0.0", "port": 9123}
     assert os.environ["OPERATOR_WRITES_ENABLED"] == "false"
+    assert os.environ["AW26_PUBLISH_ENABLED"] == "false"
+    assert os.environ["AW26_PRODUCT_WRITE_ENABLED"] == "false"
 
 
 def test_production_launcher_rejects_invalid_port(monkeypatch):
