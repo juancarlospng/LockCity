@@ -8,7 +8,7 @@ export function Aw26Hero({ product }: { product?: Product }) {
   return (
     <section data-testid="aw26-hero" className="relative min-h-[100svh] overflow-hidden bg-bg">
       {image ? (
-        <div className="absolute inset-y-16 right-0 w-full sm:inset-y-10 lg:inset-y-0 lg:w-[70%]">
+        <div className="absolute inset-y-14 right-[-8%] w-[112%] [mask-image:radial-gradient(ellipse_72%_88%_at_58%_48%,black_52%,transparent_84%)] sm:inset-y-8 sm:right-[-4%] sm:w-[104%] lg:inset-y-0 lg:right-[-2%] lg:w-[72%]">
           <Image
             src={image}
             alt="AW26 campaign garment"
@@ -17,7 +17,7 @@ export function Aw26Hero({ product }: { product?: Product }) {
             fetchPriority="high"
             quality={88}
             sizes="(max-width: 1023px) 100vw, 70vw"
-            className="object-contain object-[center_18%] opacity-70 lg:object-center"
+            className="object-contain object-[center_18%] opacity-90 contrast-[1.1] saturate-[0.88] drop-shadow-[0_30px_60px_rgba(0,0,0,0.7)] lg:object-center"
           />
         </div>
       ) : null}

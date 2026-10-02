@@ -39,7 +39,7 @@ export function ProductCard({ product, index, priority = false }: { product: Pro
                   src={mainImage}
                   alt={product.name}
                   fill
-                  quality={82}
+                  quality={86}
                   sizes="(max-width: 639px) calc(100vw - 2rem), (max-width: 1023px) calc(50vw - 2.5rem), (max-width: 1535px) calc(33vw - 2.5rem), 280px"
                   className="object-contain p-4 sm:p-6"
                   {...(priority ? { priority: true } : { loading: "lazy" as const })}
@@ -50,10 +50,13 @@ export function ProductCard({ product, index, priority = false }: { product: Pro
             )}
           </div>
           <div className="absolute left-3 top-3 flex items-center gap-3">
-            <span className="text-[9px] tracking-[0.3em] text-steel">
+            <span className={`text-[9px] tracking-[0.3em] ${product.previewOnly ? "text-neutral-950" : "text-steel"}`}>
               {String(index + 1).padStart(2, "0")}
             </span>
-            <StatusBadge status={product.status} />
+            <StatusBadge
+              status={product.status}
+              className={product.previewOnly ? "!text-neutral-950 [&>span]:!bg-neutral-950" : ""}
+            />
           </div>
         </div>
         <div className="flex items-start justify-between gap-3 border-t border-graphite p-5">

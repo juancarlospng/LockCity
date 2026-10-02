@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useCart } from "@/lib/cart";
 import { cartErrorMessage } from "@/lib/cart-core";
 import { getColorAccent, isColorAttribute } from "@/lib/color-accent";
-import { orderedProductImages, shouldPrioritizeVariantImage } from "@/lib/product-media";
+import { productImagesForColor, shouldPrioritizeVariantImage } from "@/lib/product-media";
 import { selectSize as trackSelectSize, viewItem } from "@/lib/analytics";
 import type { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/utils";
@@ -59,6 +59,8 @@ export function ProductDetail({
     : findExactVariant(product.variants, selection);
   const validSelection = optionGroups.length > 0 && Object.keys(selection).length === optionGroups.length;
   const canAdd = !product.previewOnly && canPurchaseVariant(selectedVariant);
+  const selectedColor = Object.entries(selection)
+    .find(([key]) => /colou?r/i.test(key))?.[1] ?? selectedVariant?.color;
   const selectedStatus = selectedVariant?.status ?? (validSelection ? "UNKNOWN" : product.status);
   const ctaLabel = !validSelection && product.type === "variable"
     ? "Select all options"
@@ -89,17 +91,17 @@ export function ProductDetail({
 
   const images = useMemo(() => {
     const selectedImage = selectedVariant?.image;
-    const ordered = orderedProductImages(product);
+    const ordered = productImagesForColor(product, selectedColor);
     return selectedImage && shouldPrioritizeVariantImage(selectedVariant?.sourceImage)
       ? [selectedImage, ...ordered.filter((image) => image !== selectedImage)]
       : ordered;
-  }, [product, selectedVariant?.image]);
+  }, [product, selectedColor, selectedVariant?.image, selectedVariant?.sourceImage]);
 
   const scrollThumbnails = (direction: -1 | 1) => {
     thumbnailStrip.current?.scrollBy({ left: direction * 276, behavior: "smooth" });
   };
 
-  useEffect(() => setFrame(0), [selectedVariant?.id]);
+  useEffect(() => setFrame(0), [selectedColor, selectedVariant?.id]);
   const details = [
     product.description && { title: "Description", body: product.description },
     ...(product.details ?? []),

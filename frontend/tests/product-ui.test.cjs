@@ -42,7 +42,7 @@ test('color accents cover launch colors and use a neutral future-safe fallback',
 });
 
 test('image ordering prefers mockup and model imagery while preserving single images', () => {
-  const { orderedProductImages, mainProductImage } = load('lib/product-media.ts');
+  const { orderedProductImages, mainProductImage, productImagesForColor } = load('lib/product-media.ts');
   const gallery = {
     images: ['/flat', '/back', '/mockup'],
     sourceImages: [
@@ -53,6 +53,18 @@ test('image ordering prefers mockup and model imagery while preserving single im
   };
   assert.deepEqual(orderedProductImages(gallery), ['/mockup', '/back', '/flat']);
   assert.equal(mainProductImage({ images: ['/only'], sourceImages: [{ src: 'only.jpg' }] }), '/only');
+
+  const colorGallery = {
+    images: ['/black-front', '/navy-front', '/black-back', '/navy-back'],
+    sourceImages: [
+      { src: 'https://store.test/cap-black-front.jpg' },
+      { src: 'https://store.test/cap-oxford-navy-front.jpg' },
+      { src: 'https://store.test/cap-black-back.jpg' },
+      { src: 'https://store.test/cap-oxford-navy-back.jpg' },
+    ],
+  };
+  assert.deepEqual(productImagesForColor(colorGallery, 'Oxford Navy').slice(0, 2), ['/navy-front', '/navy-back']);
+  assert.deepEqual(productImagesForColor(colorGallery, 'Missing Color'), orderedProductImages(colorGallery));
 });
 
 test('card action exposes priced quick add, active variable options and honest sold-out states', () => {
@@ -76,7 +88,8 @@ test('product UI keeps media contained, thumbnails fixed and footer credit subtl
   const footer = read('components/Footer.tsx');
   assert.match(card, /object-contain/);
   assert.match(card, /bg-white/);
-  assert.match(card, /quality=\{82\}/);
+  assert.match(card, /quality=\{86\}/);
+  assert.match(card, /!text-neutral-950/);
   assert.match(card, /select-options-link/);
   assert.match(detail, /object-contain/);
   assert.match(detail, /bg-white/);
@@ -96,7 +109,9 @@ test('AW26 image quality prioritizes hero and primary PDP without overfetching t
   assert.match(hero, /quality=\{88\}/);
   assert.match(hero, /fetchPriority="high"/);
   assert.match(hero, /sizes="\(max-width: 1023px\) 100vw, 70vw"/);
-  assert.match(config, /qualities: \[70, 75, 82, 88\]/);
+  assert.match(config, /qualities: \[70, 75, 82, 86, 88\]/);
+  assert.match(hero, /mask-image:radial-gradient/);
+  assert.match(hero, /drop-shadow/);
 });
 
 test('AW26 hero keeps the campaign label clear of the oversized title', () => {
