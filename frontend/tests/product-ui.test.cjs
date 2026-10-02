@@ -130,6 +130,7 @@ test('AW26 image quality prioritizes hero and primary PDP without overfetching t
   assert.match(hero, /fetchPriority="high"/);
   assert.match(hero, /sizes="\(max-width: 1023px\) 100vw, 72vw"/);
   assert.match(config, /qualities: \[70, 75, 82, 86, 88, 90\]/);
+  assert.match(config, /pathname: "\/images\/\*\*"/);
   assert.match(hero, /\/images\/aw26-quarter-zip-cutout\.png/);
   assert.doesNotMatch(hero, /mask-image:radial-gradient/);
   assert.match(hero, /drop-shadow/);
