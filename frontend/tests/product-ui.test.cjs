@@ -65,6 +65,25 @@ test('image ordering prefers mockup and model imagery while preserving single im
   };
   assert.deepEqual(productImagesForColor(colorGallery, 'Oxford Navy').slice(0, 2), ['/navy-front', '/navy-back']);
   assert.deepEqual(productImagesForColor(colorGallery, 'Missing Color'), orderedProductImages(colorGallery));
+
+  const topGallery = {
+    images: ['/black-top', '/navy-top', '/smoke-top'],
+    sourceImages: [
+      { src: 'https://store.test/quarter-zip-black-front.jpg' },
+      { src: 'https://store.test/quarter-zip-navy-front.jpg' },
+      { src: 'https://store.test/quarter-zip-smoke-front.jpg' },
+    ],
+  };
+  assert.equal(productImagesForColor(topGallery, 'Navy')[0], '/navy-top');
+
+  const bottomGallery = {
+    images: ['/black-bottom', '/navy-bottom'],
+    sourceImages: [
+      { src: 'https://store.test/sweatpants-black-front.jpg' },
+      { src: 'https://store.test/sweatpants-navy-blazer-front.jpg' },
+    ],
+  };
+  assert.equal(productImagesForColor(bottomGallery, 'Navy Blazer')[0], '/navy-bottom');
 });
 
 test('card action exposes priced quick add, active variable options and honest sold-out states', () => {
