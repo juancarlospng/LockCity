@@ -34,14 +34,14 @@ export function ProductCard({ product, index, priority = false }: { product: Pro
         <div className="relative overflow-hidden">
           <div className="transition-transform duration-700 ease-out group-hover:scale-[1.04]">
             {mainImage ? (
-              <div className="relative aspect-[4/5] w-full bg-white">
+              <div className="relative aspect-[10/11] w-full bg-white sm:aspect-[4/5]">
                 <Image
                   src={mainImage}
                   alt={product.name}
                   fill
                   quality={90}
                   sizes="(max-width: 639px) 100vw, (max-width: 1023px) 55vw, (max-width: 1535px) 50vw, 400px"
-                  className="object-contain p-4 sm:p-6"
+                  className="object-contain p-3 sm:p-6"
                   {...(priority ? { priority: true } : { loading: "lazy" as const })}
                 />
               </div>
@@ -59,7 +59,7 @@ export function ProductCard({ product, index, priority = false }: { product: Pro
             />
           </div>
         </div>
-        <div className="flex items-start justify-between gap-3 border-t border-graphite p-5">
+        <div className="flex items-start justify-between gap-3 border-t border-graphite p-4 sm:p-5">
           <div>
             {product.code && (
               <p className="text-[9px] tracking-[0.3em] text-steel">{product.code}</p>
@@ -84,7 +84,7 @@ export function ProductCard({ product, index, priority = false }: { product: Pro
           href={`/product/${product.slug}`}
           prefetch
           data-testid={`select-options-link-${product.id}`}
-          className="border-t border-graphite py-3 text-center text-[10px] font-bold uppercase tracking-[0.3em] text-bone transition-colors duration-200 hover:bg-bone hover:text-bg"
+          className="border-t border-graphite py-2.5 text-center text-[10px] font-bold uppercase tracking-[0.3em] text-bone transition-colors duration-200 hover:bg-bone hover:text-bg sm:py-3"
         >
           {action.label}
         </Link>
@@ -98,7 +98,7 @@ export function ProductCard({ product, index, priority = false }: { product: Pro
             try { await addItem(product, action.variant); }
             catch (cause) { toast.error(cartErrorMessage(cause)); }
           }}
-          className={`border-t border-graphite py-3 text-[10px] font-bold uppercase tracking-[0.3em] transition-colors duration-200 ${
+          className={`border-t border-graphite py-2.5 text-[10px] font-bold uppercase tracking-[0.3em] transition-colors duration-200 sm:py-3 ${
             canQuickAdd
               ? "text-bone hover:bg-bone hover:text-bg"
               : "cursor-not-allowed text-graphite"

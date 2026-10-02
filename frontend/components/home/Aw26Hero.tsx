@@ -5,7 +5,7 @@ import type { Product } from "@/lib/types";
 export function Aw26Hero({ product: _product }: { product?: Product }) {
   return (
     <section data-testid="aw26-hero" className="relative min-h-[100svh] overflow-hidden bg-bg">
-      <div className="absolute inset-y-12 right-[-12%] w-[112%] sm:inset-y-8 sm:right-[-6%] sm:w-[100%] lg:inset-y-0 lg:right-[-4%] lg:w-[72%]">
+      <div className="absolute right-[-12%] top-16 h-[112vw] w-[112%] sm:right-[-6%] sm:top-14 sm:h-[100vw] sm:w-[100%] lg:bottom-0 lg:right-[-4%] lg:top-0 lg:h-auto lg:w-[72%]">
         <Image
           src="/images/aw26-quarter-zip-cutout.png"
           alt="AW26 campaign garment"
@@ -14,7 +14,7 @@ export function Aw26Hero({ product: _product }: { product?: Product }) {
           fetchPriority="high"
           quality={88}
           sizes="(max-width: 1023px) 100vw, 72vw"
-          className="object-contain object-[center_18%] drop-shadow-[0_30px_60px_rgba(0,0,0,0.72)] lg:object-center"
+          className="object-contain object-center drop-shadow-[0_30px_60px_rgba(0,0,0,0.72)]"
         />
       </div>
       <div aria-hidden className="absolute inset-0 bg-[linear-gradient(90deg,#050505_0%,rgba(5,5,5,0.86)_32%,rgba(5,5,5,0.18)_72%,#050505_100%)]" />

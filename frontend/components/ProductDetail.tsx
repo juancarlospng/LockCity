@@ -311,10 +311,12 @@ export function ProductDetail({
               data-testid="add-to-bag-button"
               disabled={!canAdd || isAdding}
               onClick={onAdd}
-              className={`mt-10 w-full border py-5 text-xs font-bold uppercase tracking-[0.3em] transition-colors duration-300 ${
-                canAdd && !isAdding
-                  ? "border-bone bg-bone text-bg hover:bg-transparent hover:text-bone"
-                  : "cursor-not-allowed border-graphite text-graphite"
+              className={`mt-8 w-full border text-[10px] font-bold uppercase tracking-[0.3em] transition-colors duration-300 ${
+                product.previewOnly
+                  ? "cursor-default border-graphite bg-onyx py-3 text-steel"
+                  : canAdd && !isAdding
+                    ? "border-bone bg-bone py-4 text-bg hover:bg-transparent hover:text-bone"
+                    : "cursor-not-allowed border-graphite py-4 text-graphite"
               }`}
             >
               {isAdding ? "Adding…" : ctaLabel}

@@ -140,3 +140,21 @@ test('AW26 hero keeps the campaign label clear of the oversized title', () => {
   const hero = read('components/home/Aw26Hero.tsx');
   assert.match(hero, /mt-10[^\"]*sm:mt-12[^\"]*lg:mt-14/);
 });
+
+test('final visual polish keeps mobile commerce compact and inactive states restrained', () => {
+  const globals = read('app/globals.css');
+  const hero = read('components/home/Aw26Hero.tsx');
+  const card = read('components/ProductCard.tsx');
+  const detail = read('components/ProductDetail.tsx');
+  const checkout = read('components/CheckoutForm.tsx');
+  const navigation = read('components/Navigation.tsx');
+  const tailwind = read('tailwind.config.js');
+  assert.match(globals, /--steel: #888888/);
+  assert.match(tailwind, /steel: "#888888"/);
+  assert.match(hero, /h-\[112vw\]/);
+  assert.match(hero, /object-contain object-center/);
+  assert.match(card, /aspect-\[10\/11\][^\"]*sm:aspect-\[4\/5\]/);
+  assert.match(detail, /cursor-default border-graphite bg-onyx py-3 text-steel/);
+  assert.match(checkout, /font-display text-3xl uppercase text-bone sm:text-4xl/);
+  assert.match(navigation, /text-bone\/65 hover:text-bone/);
+});

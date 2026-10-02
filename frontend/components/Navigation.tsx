@@ -65,7 +65,7 @@ export function Navigation() {
                 href={link.href}
                 data-testid={`nav-${link.label.toLowerCase()}-link`}
                 className={`link-line text-[11px] uppercase tracking-[0.25em] transition-colors duration-200 ${
-                  pathname === link.href ? "text-bone" : "text-steel hover:text-bone"
+                  pathname === link.href ? "text-bone" : "text-bone/65 hover:text-bone"
                 }`}
               >
                 {link.label}

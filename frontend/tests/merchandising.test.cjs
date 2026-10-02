@@ -121,7 +121,7 @@ test('home keeps the approved Hero before the native-scroll Three.js city and Co
   assert.ok(home.indexOf('<CityExperience />') < home.indexOf('id="aw26-drop"'));
   assert.ok(home.indexOf('id="aw26-drop"') < home.indexOf('data-testid="core-reveal"'));
   assert.match(home, /data-testid="core-reveal"/);
-  assert.match(home, /HOME_AW26_VISIBLE \? "border-t border-graphite pt-12 sm:pt-16"/);
+  assert.match(home, /HOME_AW26_VISIBLE \? "border-t border-graphite pt-8 sm:pt-16"/);
   assert.ok(home.indexOf('-mt-[16svh]') < home.indexOf('data-testid="core-reveal"'));
   assert.match(home, /scene=\{HOME_AW26_VISIBLE \? "04 — Permanent pieces" : "03 — Permanent pieces"\}/);
   assert.match(city, /dynamic\(/);

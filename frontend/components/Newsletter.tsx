@@ -55,9 +55,9 @@ export function Newsletter() {
       id="join"
       data-testid="join-the-city-section"
       aria-labelledby="join-heading"
-      className="relative border-t border-graphite px-4 py-28 sm:px-8 lg:px-12 lg:py-40"
+      className="relative border-t border-graphite px-4 py-20 sm:px-8 sm:py-28 lg:px-12 lg:py-40"
     >
-      <div className="flex flex-col gap-12 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-9 sm:gap-12 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <Reveal>
             <p className="text-[10px] uppercase tracking-[0.3em] text-steel">
