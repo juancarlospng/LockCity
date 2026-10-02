@@ -107,7 +107,8 @@ test('product UI keeps media contained, thumbnails fixed and footer credit subtl
   const footer = read('components/Footer.tsx');
   assert.match(card, /object-contain/);
   assert.match(card, /bg-white/);
-  assert.match(card, /quality=\{86\}/);
+  assert.match(card, /quality=\{90\}/);
+  assert.match(card, /\(max-width: 1535px\) 50vw, 400px/);
   assert.match(card, /!text-neutral-950/);
   assert.match(card, /select-options-link/);
   assert.match(detail, /object-contain/);
@@ -127,9 +128,10 @@ test('AW26 image quality prioritizes hero and primary PDP without overfetching t
   const config = read('next.config.mjs');
   assert.match(hero, /quality=\{88\}/);
   assert.match(hero, /fetchPriority="high"/);
-  assert.match(hero, /sizes="\(max-width: 1023px\) 100vw, 70vw"/);
-  assert.match(config, /qualities: \[70, 75, 82, 86, 88\]/);
-  assert.match(hero, /mask-image:radial-gradient/);
+  assert.match(hero, /sizes="\(max-width: 1023px\) 100vw, 72vw"/);
+  assert.match(config, /qualities: \[70, 75, 82, 86, 88, 90\]/);
+  assert.match(hero, /\/images\/aw26-quarter-zip-cutout\.png/);
+  assert.doesNotMatch(hero, /mask-image:radial-gradient/);
   assert.match(hero, /drop-shadow/);
 });
 
