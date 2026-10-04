@@ -71,12 +71,19 @@ The database credential and all API credentials belong only in Render secrets.
 - `GET /api/operator/v1/printful/mockup-tasks/{id}`
 - `GET /api/operator/v1/printful/sync-products?limit=20&offset=0`
 - `GET /api/operator/v1/printful/sync-products/{id}`
+- `GET /api/operator/v1/printful/catalog-variants/{id}/prices`
 
 The Printful integration uses GET for product and task data. Only the dedicated
 mockup task route sends a POST upstream, generating temporary review images
 without creating or publishing a product. Generation is restricted to the 17
-IDs in `AW26_TEMPLATE_IDS` and requires an independently enabled flag. The
-dry-run endpoint works while generation is disabled. It reads the template,
+IDs in `AW26_TEMPLATE_IDS` and requires an independently enabled flag.
+
+The catalog-variant pricing route calls Printful v2 with `currency=USD` and
+`selling_region_name=worldwide`. It preserves the official variant/product price
+fields and itemizes returned placement and layer amounts. It does not combine
+retail price, production price, shipping, tax, or payment fees, and it performs
+no write upstream.
+The dry-run endpoint works while generation is disabled. It reads the template,
 catalog variants and supported styles; selects one representative variant per
 color (M, then S, then the first available size); uses the Product Template's
 placements as the source of truth; and records a single-use plan. Its response

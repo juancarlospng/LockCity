@@ -410,6 +410,76 @@ def normalize_catalog_variant(raw):
     }
 
 
+def _price(value):
+    """Keep Printful decimal amounts as strings without manufacturing a value."""
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    return None
+
+
+def _pricing_layers(raw_layers):
+    layers = []
+    for raw in _list(raw_layers):
+        if not isinstance(raw, dict):
+            continue
+        layers.append({
+            "type": _text(raw.get("type")),
+            "additionalPrice": _price(raw.get("additional_price")),
+            "layerOptions": _list(raw.get("layer_options")),
+        })
+    return layers
+
+
+def normalize_catalog_variant_prices(raw, requested_variant_id):
+    """Normalize only documented pricing fields from Printful v2."""
+    if not isinstance(raw, dict):
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    variant = raw.get("variant")
+    product = raw.get("product")
+    if not isinstance(variant, dict) or not isinstance(product, dict):
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    variant_id = variant.get("id")
+    if variant_id is not None and variant_id != requested_variant_id:
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+
+    placements = []
+    for placement in _list(product.get("placements")):
+        if not isinstance(placement, dict):
+            continue
+        placements.append({
+            "id": _text(placement.get("id")),
+            "title": _text(placement.get("title")),
+            "type": _text(placement.get("type")),
+            "techniqueKey": _text(placement.get("technique_key")),
+            "price": _price(placement.get("price")),
+            "discountedPrice": _price(placement.get("discounted_price")),
+            "placementOptions": _list(placement.get("placement_options")),
+            "layers": _pricing_layers(placement.get("layers")),
+        })
+
+    return {
+        "catalogVariantId": requested_variant_id,
+        "currency": _text(raw.get("currency")),
+        "productionCurrency": _text(raw.get("production_currency")),
+        "sellingRegionName": "worldwide",
+        "variant": {
+            "id": variant_id if isinstance(variant_id, int) else requested_variant_id,
+            "name": _text(variant.get("name")),
+            "price": _price(variant.get("price")),
+            "discountedPrice": _price(variant.get("discounted_price")),
+        },
+        "product": {
+            "id": product.get("id") if isinstance(product.get("id"), int) else None,
+            "name": _text(product.get("name")),
+            "price": _price(product.get("price")),
+            "discountedPrice": _price(product.get("discounted_price")),
+        },
+        "placements": placements,
+    }
+
+
 def select_representative_variants(available_variant_ids, catalog_variants):
     """Choose M, then S, then the first available size for each color."""
     allowed = set(available_variant_ids)
@@ -645,6 +715,13 @@ class PrintfulClient:
             if offset >= 1000:
                 raise OperatorError(502, "PRINTFUL_TOO_MANY_VARIANTS")
         return variants
+
+    async def catalog_variant_prices(self, catalog_variant_id):
+        payload = await self.get(
+            f"/v2/catalog-variants/{catalog_variant_id}/prices",
+            {"currency": "USD", "selling_region_name": "worldwide"},
+        )
+        return normalize_catalog_variant_prices(payload.get("data"), catalog_variant_id)
 
     async def mockup_plan(self, template_id, requested_variant_ids=None, requested_style_ids=None):
         template = await self.template(template_id)

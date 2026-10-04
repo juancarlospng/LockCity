@@ -60,6 +60,7 @@ def test_independent_app_exposes_only_requested_routes():
         ("/api/operator/v1/printful/mockup-tasks/{task_id}", "GET"),
         ("/api/operator/v1/printful/sync-products", "GET"),
         ("/api/operator/v1/printful/sync-products/{sync_product_id}", "GET"),
+        ("/api/operator/v1/printful/catalog-variants/{catalog_variant_id}/prices", "GET"),
     }
 
 

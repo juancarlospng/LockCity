@@ -243,6 +243,15 @@ class Printful:
     async def sync_product(self, product_id):
         return {"syncProductId": product_id}
 
+    async def catalog_variant_prices(self, variant_id):
+        return {"catalogVariantId": variant_id, "currency": "USD",
+                "productionCurrency": "USD", "sellingRegionName": "worldwide",
+                "variant": {"id": variant_id, "name": "Black / M",
+                            "price": "12.50", "discountedPrice": "11.25"},
+                "product": {"id": 71, "name": "Tee", "price": None,
+                            "discountedPrice": None},
+                "placements": []}
+
     async def mockup_styles(self, template_id):
         return {"templateId": template_id, "styles": [
             {"id": 3, "placement": "front", "category": "Ghost",
@@ -283,6 +292,7 @@ class Printful:
     "/api/operator/v1/printful/templates/12",
     "/api/operator/v1/printful/sync-products",
     "/api/operator/v1/printful/sync-products/99",
+    "/api/operator/v1/printful/catalog-variants/4016/prices",
     "/api/operator/v1/printful/templates/12/mockup-styles",
     "/api/operator/v1/printful/mockup-tasks/101",
 ])
@@ -319,7 +329,69 @@ def test_operator_routes_are_get_only_and_writes_stay_disabled(monkeypatch):
     assert run(request("POST", "/api/operator/v1/printful/templates")).status_code == 405
     assert run(request("PUT", "/api/operator/v1/printful/sync-products/1")).status_code == 405
     assert run(request("DELETE", "/api/operator/v1/printful/templates/1")).status_code == 405
+    assert run(request("POST", "/api/operator/v1/printful/catalog-variants/4016/prices")).status_code == 405
     assert os.getenv("OPERATOR_WRITES_ENABLED") == "false"
+
+
+def test_catalog_variant_prices_use_official_read_only_endpoint(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"data": {
+            "currency": "USD", "production_currency": "USD",
+            "variant": {"id": 4016, "name": "Black / M", "price": "14.50",
+                        "discounted_price": "13.05"},
+            "product": {"id": 71, "name": "Unisex tee", "placements": [{
+                "id": "front", "title": "Front", "type": "Printing",
+                "technique_key": "dtg", "price": "0.00", "discounted_price": "0.00",
+                "placement_options": [], "layers": [{
+                    "type": "file", "additional_price": "1.25", "layer_options": []}]}]},
+        }})
+
+    result = run(client_for(handler).catalog_variant_prices(4016))
+    assert len(requests) == 1
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/v2/catalog-variants/4016/prices"
+    assert dict(requests[0].url.params) == {
+        "currency": "USD", "selling_region_name": "worldwide"}
+    assert result == {
+        "catalogVariantId": 4016, "currency": "USD", "productionCurrency": "USD",
+        "sellingRegionName": "worldwide",
+        "variant": {"id": 4016, "name": "Black / M", "price": "14.50",
+                    "discountedPrice": "13.05"},
+        "product": {"id": 71, "name": "Unisex tee", "price": None,
+                    "discountedPrice": None},
+        "placements": [{"id": "front", "title": "Front", "type": "Printing",
+                        "techniqueKey": "dtg", "price": "0.00",
+                        "discountedPrice": "0.00", "placementOptions": [],
+                        "layers": [{"type": "file", "additionalPrice": "1.25",
+                                    "layerOptions": []}]}],
+    }
+
+
+def test_catalog_variant_price_route_is_authenticated_and_sanitizes_scope_failure(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("OPERATOR_API_TOKEN", "o" * 32)
+
+    def handler(_request):
+        return httpx.Response(403, json={"message": "missing scope " + TOKEN})
+
+    app = FastAPI()
+    app.include_router(create_router(Store(), printful=client_for(handler)))
+
+    async def request(headers=None):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://test") as client:
+            return await client.get(
+                "/api/operator/v1/printful/catalog-variants/4016/prices", headers=headers)
+
+    assert run(request()).status_code == 401
+    response = run(request({"Authorization": "Bearer " + "o" * 32}))
+    assert response.status_code == 502
+    assert response.json() == {"error": "PRINTFUL_FORBIDDEN"}
+    assert TOKEN not in response.text
 
 
 def test_aw26_allowlist_has_exactly_seventeen_templates():

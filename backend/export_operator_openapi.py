@@ -205,6 +205,15 @@ def contract():
             "items": {"type": "array", "items": {"$ref": "#/components/schemas/PrintfulSyncProduct"}},
             "limit": {"type": "integer"}, "offset": {"type": "integer"},
             "total": {"type": ["integer", "null"]}}},
+        "PrintfulCatalogVariantPrices": {"type": "object", "required": [
+            "catalogVariantId", "currency", "productionCurrency", "sellingRegionName",
+            "variant", "product", "placements"], "properties": {
+                "catalogVariantId": {"type": "integer"},
+                "currency": {"type": ["string", "null"]},
+                "productionCurrency": {"type": ["string", "null"]},
+                "sellingRegionName": {"type": "string"},
+                "variant": {"type": "object"}, "product": {"type": "object"},
+                "placements": {"type": "array", "items": {"type": "object"}}}},
     }
     pagination = [{"name": name, "in": "query", "schema": {
         "type": "integer", "minimum": 1, "maximum": maximum, "default": default}}
@@ -239,6 +248,8 @@ def contract():
          "PrintfulSyncProductList", printful_pagination),
         ("/printful/sync-products/{id}", "get", "getPrintfulSyncProduct",
          "PrintfulSyncProduct", identifier),
+        ("/printful/catalog-variants/{id}/prices", "get",
+         "getPrintfulCatalogVariantPrices", "PrintfulCatalogVariantPrices", identifier),
     ]:
         operation: dict[str, Any] = {
             "operationId": operation_id, "security": [{"OperatorBearer": []}],
