@@ -214,6 +214,16 @@ def contract():
                 "sellingRegionName": {"type": "string"},
                 "variant": {"type": "object"}, "product": {"type": "object"},
                 "placements": {"type": "array", "items": {"type": "object"}}}},
+        "PrintfulCatalogProductPrices": {"type": "object", "required": [
+            "catalogProductId", "currency", "productionCurrency", "sellingRegionName",
+            "product", "placements", "variants"], "properties": {
+                "catalogProductId": {"type": "integer"},
+                "currency": {"type": ["string", "null"]},
+                "productionCurrency": {"type": ["string", "null"]},
+                "sellingRegionName": {"type": "string"},
+                "product": {"type": "object"},
+                "placements": {"type": "array", "items": {"type": "object"}},
+                "variants": {"type": "array", "items": {"type": "object"}}}},
     }
     pagination = [{"name": name, "in": "query", "schema": {
         "type": "integer", "minimum": 1, "maximum": maximum, "default": default}}
@@ -250,6 +260,8 @@ def contract():
          "PrintfulSyncProduct", identifier),
         ("/printful/catalog-variants/{id}/prices", "get",
          "getPrintfulCatalogVariantPrices", "PrintfulCatalogVariantPrices", identifier),
+        ("/printful/catalog-products/{id}/prices", "get",
+         "getPrintfulCatalogProductPrices", "PrintfulCatalogProductPrices", identifier),
     ]:
         operation: dict[str, Any] = {
             "operationId": operation_id, "security": [{"OperatorBearer": []}],

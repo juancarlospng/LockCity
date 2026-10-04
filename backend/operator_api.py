@@ -1335,4 +1335,11 @@ def create_router(store, woo=None, printful=None):
                 valid_id(catalog_variant_id))
         return await dispatch(request, action)
 
+    @router.get("/printful/catalog-products/{catalog_product_id}/prices")
+    async def printful_catalog_product_prices(catalog_product_id: str, request: Request):
+        async def action():
+            return 200, await printful_client.catalog_product_prices(
+                valid_id(catalog_product_id))
+        return await dispatch(request, action)
+
     return router

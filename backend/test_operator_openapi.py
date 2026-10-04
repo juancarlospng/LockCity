@@ -15,7 +15,8 @@ def test_export_matches_routes_and_has_only_operator_endpoints():
                .replace("{template_id}", "{id}")
                .replace("{task_id}", "{id}")
                .replace("{sync_product_id}", "{id}")
-               .replace("{catalog_variant_id}", "{id}"), method.lower())
+               .replace("{catalog_variant_id}", "{id}")
+               .replace("{catalog_product_id}", "{id}"), method.lower())
               for route in app.routes if route.path.startswith("/api/operator/v1/")
               for method in route.methods}
     exported = {(path, method) for path, operations in document["paths"].items() for method in operations}
@@ -27,7 +28,7 @@ def test_export_matches_routes_and_has_only_operator_endpoints():
         "getPrintfulStatus", "getPrintfulTemplates", "getPrintfulTemplate",
         "getPrintfulSyncProducts", "getPrintfulSyncProduct", "getPrintfulMockupStyles",
         "createPrintfulMockupPlan", "createPrintfulMockupTask", "getPrintfulMockupTask",
-        "getPrintfulCatalogVariantPrices"}
+        "getPrintfulCatalogVariantPrices", "getPrintfulCatalogProductPrices"}
     assert document["components"]["securitySchemes"]["OperatorBearer"] == {"type": "http", "scheme": "bearer"}
     assert document["servers"] == [{"url": "https://lock-city-operator-api.onrender.com"}]
     assert all(op["security"] == [{"OperatorBearer": []}]

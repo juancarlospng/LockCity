@@ -489,6 +489,40 @@ def normalize_catalog_variant_prices(raw, requested_variant_id):
     }
 
 
+def normalize_catalog_product_prices(raw, requested_product_id):
+    """Normalize the paginated product pricing response for efficient audits."""
+    if not isinstance(raw, dict):
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    product = raw.get("product")
+    variants = raw.get("variants")
+    if not isinstance(product, dict) or not isinstance(variants, list):
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    product_id = product.get("id")
+    if product_id is not None and product_id != requested_product_id:
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    normalized_variants = []
+    for variant in variants:
+        if not isinstance(variant, dict) or not isinstance(variant.get("id"), int):
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+        normalized_variants.append({
+            "id": variant["id"],
+            "techniques": _pricing_techniques(variant.get("techniques")),
+        })
+    normalized = normalize_catalog_variant_prices({
+        **raw, "variant": {"id": normalized_variants[0]["id"], "techniques": []}},
+        normalized_variants[0]["id"] if normalized_variants else 1,
+    )
+    return {
+        "catalogProductId": requested_product_id,
+        "currency": normalized["currency"],
+        "productionCurrency": normalized["productionCurrency"],
+        "sellingRegionName": normalized["sellingRegionName"],
+        "product": normalized["product"],
+        "placements": normalized["placements"],
+        "variants": normalized_variants,
+    }
+
+
 def select_representative_variants(available_variant_ids, catalog_variants):
     """Choose M, then S, then the first available size for each color."""
     allowed = set(available_variant_ids)
@@ -731,6 +765,32 @@ class PrintfulClient:
             {"currency": "USD", "selling_region_name": "worldwide"},
         )
         return normalize_catalog_variant_prices(payload.get("data"), catalog_variant_id)
+
+    async def catalog_product_prices(self, catalog_product_id):
+        payload = await self.get(
+            f"/v2/catalog-products/{catalog_product_id}/prices",
+            {"currency": "USD", "selling_region_name": "worldwide",
+             "limit": 100, "offset": 0},
+        )
+        result = normalize_catalog_product_prices(payload.get("data"), catalog_product_id)
+        paging = payload.get("paging") if isinstance(payload.get("paging"), dict) else {}
+        total = paging.get("total")
+        offset = len(result["variants"])
+        while isinstance(total, int) and offset < total:
+            if offset >= 1000:
+                raise OperatorError(502, "PRINTFUL_TOO_MANY_VARIANTS")
+            page = await self.get(
+                f"/v2/catalog-products/{catalog_product_id}/prices",
+                {"currency": "USD", "selling_region_name": "worldwide",
+                 "limit": 100, "offset": offset},
+            )
+            normalized_page = normalize_catalog_product_prices(
+                page.get("data"), catalog_product_id)
+            result["variants"].extend(normalized_page["variants"])
+            if not normalized_page["variants"]:
+                break
+            offset += len(normalized_page["variants"])
+        return result
 
     async def mockup_plan(self, template_id, requested_variant_ids=None, requested_style_ids=None):
         template = await self.template(template_id)

@@ -252,6 +252,11 @@ class Printful:
                 "product": {"id": 71},
                 "placements": []}
 
+    async def catalog_product_prices(self, product_id):
+        return {"catalogProductId": product_id, "currency": "USD",
+                "productionCurrency": "USD", "sellingRegionName": "worldwide",
+                "product": {"id": product_id}, "placements": [], "variants": []}
+
     async def mockup_styles(self, template_id):
         return {"templateId": template_id, "styles": [
             {"id": 3, "placement": "front", "category": "Ghost",
@@ -293,6 +298,7 @@ class Printful:
     "/api/operator/v1/printful/sync-products",
     "/api/operator/v1/printful/sync-products/99",
     "/api/operator/v1/printful/catalog-variants/4016/prices",
+    "/api/operator/v1/printful/catalog-products/71/prices",
     "/api/operator/v1/printful/templates/12/mockup-styles",
     "/api/operator/v1/printful/mockup-tasks/101",
 ])
@@ -330,6 +336,7 @@ def test_operator_routes_are_get_only_and_writes_stay_disabled(monkeypatch):
     assert run(request("PUT", "/api/operator/v1/printful/sync-products/1")).status_code == 405
     assert run(request("DELETE", "/api/operator/v1/printful/templates/1")).status_code == 405
     assert run(request("POST", "/api/operator/v1/printful/catalog-variants/4016/prices")).status_code == 405
+    assert run(request("PATCH", "/api/operator/v1/printful/catalog-products/71/prices")).status_code == 405
     assert os.getenv("OPERATOR_WRITES_ENABLED") == "false"
 
 
@@ -393,6 +400,31 @@ def test_catalog_variant_price_route_is_authenticated_and_sanitizes_scope_failur
     assert response.status_code == 502
     assert response.json() == {"error": "PRINTFUL_FORBIDDEN"}
     assert TOKEN not in response.text
+
+
+def test_catalog_product_prices_batch_variants_in_one_get(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={
+            "data": {"currency": "USD", "product": {"id": 71, "placements": []},
+                     "variants": [
+                         {"id": 4016, "techniques": [{
+                             "technique_key": "dtg", "technique_display_name": "DTG",
+                             "price": "12.50", "discounted_price": "11.25"}]},
+                         {"id": 4017, "techniques": [{
+                             "technique_key": "dtg", "technique_display_name": "DTG",
+                             "price": "14.00", "discounted_price": "12.60"}]}]},
+            "paging": {"total": 2, "limit": 100, "offset": 0}})
+
+    result = run(client_for(handler).catalog_product_prices(71))
+    assert len(requests) == 1
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/v2/catalog-products/71/prices"
+    assert [variant["id"] for variant in result["variants"]] == [4016, 4017]
+    assert result["variants"][1]["techniques"][0]["price"] == "14.00"
 
 
 def test_aw26_allowlist_has_exactly_seventeen_templates():
