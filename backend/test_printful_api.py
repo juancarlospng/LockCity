@@ -246,10 +246,10 @@ class Printful:
     async def catalog_variant_prices(self, variant_id):
         return {"catalogVariantId": variant_id, "currency": "USD",
                 "productionCurrency": "USD", "sellingRegionName": "worldwide",
-                "variant": {"id": variant_id, "name": "Black / M",
-                            "price": "12.50", "discountedPrice": "11.25"},
-                "product": {"id": 71, "name": "Tee", "price": None,
-                            "discountedPrice": None},
+                "variant": {"id": variant_id, "techniques": [{
+                    "techniqueKey": "dtg", "techniqueDisplayName": "DTG printing",
+                    "price": "12.50", "discountedPrice": "11.25"}]},
+                "product": {"id": 71},
                 "placements": []}
 
     async def mockup_styles(self, template_id):
@@ -341,8 +341,9 @@ def test_catalog_variant_prices_use_official_read_only_endpoint(monkeypatch):
         requests.append(request)
         return httpx.Response(200, json={"data": {
             "currency": "USD", "production_currency": "USD",
-            "variant": {"id": 4016, "name": "Black / M", "price": "14.50",
-                        "discounted_price": "13.05"},
+            "variant": {"id": 4016, "techniques": [{
+                "technique_key": "dtg", "technique_display_name": "DTG printing",
+                "price": "14.50", "discounted_price": "13.05"}]},
             "product": {"id": 71, "name": "Unisex tee", "placements": [{
                 "id": "front", "title": "Front", "type": "Printing",
                 "technique_key": "dtg", "price": "0.00", "discounted_price": "0.00",
@@ -359,10 +360,10 @@ def test_catalog_variant_prices_use_official_read_only_endpoint(monkeypatch):
     assert result == {
         "catalogVariantId": 4016, "currency": "USD", "productionCurrency": "USD",
         "sellingRegionName": "worldwide",
-        "variant": {"id": 4016, "name": "Black / M", "price": "14.50",
-                    "discountedPrice": "13.05"},
-        "product": {"id": 71, "name": "Unisex tee", "price": None,
-                    "discountedPrice": None},
+        "variant": {"id": 4016, "techniques": [{
+            "techniqueKey": "dtg", "techniqueDisplayName": "DTG printing",
+            "price": "14.50", "discountedPrice": "13.05"}]},
+        "product": {"id": 71},
         "placements": [{"id": "front", "title": "Front", "type": "Printing",
                         "techniqueKey": "dtg", "price": "0.00",
                         "discountedPrice": "0.00", "placementOptions": [],

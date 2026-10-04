@@ -79,8 +79,8 @@ without creating or publishing a product. Generation is restricted to the 17
 IDs in `AW26_TEMPLATE_IDS` and requires an independently enabled flag.
 
 The catalog-variant pricing route calls Printful v2 with `currency=USD` and
-`selling_region_name=worldwide`. It preserves the official variant/product price
-fields and itemizes returned placement and layer amounts. It does not combine
+`selling_region_name=worldwide`. It preserves the official variant technique
+prices and itemizes returned placement and layer amounts. It does not combine
 retail price, production price, shipping, tax, or payment fees, and it performs
 no write upstream.
 The dry-run endpoint works while generation is disabled. It reads the template,

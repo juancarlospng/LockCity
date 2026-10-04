@@ -432,6 +432,20 @@ def _pricing_layers(raw_layers):
     return layers
 
 
+def _pricing_techniques(raw_techniques):
+    techniques = []
+    for raw in _list(raw_techniques):
+        if not isinstance(raw, dict):
+            continue
+        techniques.append({
+            "techniqueKey": _text(raw.get("technique_key")),
+            "techniqueDisplayName": _text(raw.get("technique_display_name")),
+            "price": _price(raw.get("price")),
+            "discountedPrice": _price(raw.get("discounted_price")),
+        })
+    return techniques
+
+
 def normalize_catalog_variant_prices(raw, requested_variant_id):
     """Normalize only documented pricing fields from Printful v2."""
     if not isinstance(raw, dict):
@@ -466,15 +480,10 @@ def normalize_catalog_variant_prices(raw, requested_variant_id):
         "sellingRegionName": "worldwide",
         "variant": {
             "id": variant_id if isinstance(variant_id, int) else requested_variant_id,
-            "name": _text(variant.get("name")),
-            "price": _price(variant.get("price")),
-            "discountedPrice": _price(variant.get("discounted_price")),
+            "techniques": _pricing_techniques(variant.get("techniques")),
         },
         "product": {
             "id": product.get("id") if isinstance(product.get("id"), int) else None,
-            "name": _text(product.get("name")),
-            "price": _price(product.get("price")),
-            "discountedPrice": _price(product.get("discounted_price")),
         },
         "placements": placements,
     }
