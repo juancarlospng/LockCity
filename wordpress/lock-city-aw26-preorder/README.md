@@ -26,7 +26,7 @@ matching server-side flag enabled, and the payment execution flag is enabled for
 the controlled test environment. Printful remains configured for manual order
 confirmation; this plugin does not call or modify Printful.
 
-Version 0.4.0 also provides the headless reCAPTCHA bridge used by V2. Google
+Version 0.4.1 also provides the headless reCAPTCHA bridge used by V2. Google
 runs on the WooCommerce origin, only a short-lived proof is sent to V2, and the
 v2/v3 secret keys remain inside WordPress. Override the allowed parent only when
 the production V2 origin changes:
@@ -35,8 +35,8 @@ the production V2 origin changes:
 define( 'LOCK_CITY_V2_ORIGIN', 'https://lock-city.vercel.app' );
 ```
 
-For authenticated, read-only operational checks, version 0.4.0 exposes
-`GET /wp-json/lock-city/v1/preorder/status`. It returns only the effective
+For authenticated, read-only operational checks, version 0.4.1 exposes
+`GET /wp-json/wc/v3/lock-city/preorder/status`. It returns only the effective
 pre-order switch, WordPress environment type and check time. The route requires
 the WooCommerce management capability and never returns configuration contents,
 paths or credentials.

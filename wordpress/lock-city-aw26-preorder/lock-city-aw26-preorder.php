@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Lock City AW26 Pre-order
  * Description: Applies the approved AW26 pre-order prices and persists trusted order metadata for Store API checkout.
- * Version: 0.4.0
+ * Version: 0.4.1
  * Requires PHP: 7.4
  * Requires Plugins: woocommerce
  */
@@ -92,8 +92,8 @@ function lc_aw26_preorder_sales_enabled(): bool {
  */
 function lc_aw26_register_observability_routes(): void {
 	register_rest_route(
-		'lock-city/v1',
-		'/preorder/status',
+		'wc/v3',
+		'/lock-city/preorder/status',
 		array(
 			'methods'             => WP_REST_Server::READABLE,
 			'permission_callback' => static function (): bool {

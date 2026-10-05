@@ -385,7 +385,7 @@ class WooClient:
     async def preorder_status(self):
         base, _, _ = self._configuration()
         raw, _ = await self._request(
-            "GET", base + "/wp-json/lock-city/v1/preorder/status",
+            "GET", base + "/wp-json/wc/v3/lock-city/preorder/status",
             not_found="PREORDER_STATUS_NOT_AVAILABLE")
         return preorder_status_view(raw)
 

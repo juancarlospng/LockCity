@@ -275,7 +275,7 @@ def test_observability_transport_is_get_only_and_uses_server_auth(monkeypatch):
 
     async def send(_self, method, url, **kwargs):
         captured.append((method, url, kwargs.get("auth")))
-        if url.endswith("/lock-city/v1/preorder/status"):
+        if url.endswith("/wc/v3/lock-city/preorder/status"):
             return httpx.Response(200, json={
                 "aw26_preorder_sales_enabled": False, "source": "wordpress_runtime",
                 "environment": "production", "checked_at": "2026-10-05T00:00:00Z"})
