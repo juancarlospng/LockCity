@@ -139,10 +139,23 @@ def _safe_order_note(raw):
     note = raw["note"].strip()
     if not note or not any(keyword in note.casefold() for keyword in ORDER_NOTE_KEYWORDS):
         return None
+    lowered = note.casefold()
+    if ("unpaid order cancelled" in lowered
+            or ("time limit" in lowered and "cancel" in lowered)):
+        source = "automatic_woo_timeout"
+    elif "paypal" in lowered:
+        source = "paypal"
+    elif "pre-order" in lowered or "preorder" in lowered or "lock city" in lowered:
+        source = "plugin"
+    elif raw.get("added_by_user") is True:
+        source = "manual_admin"
+    else:
+        source = "unknown"
     return {
         "date_created": raw.get("date_created") if isinstance(raw.get("date_created"), str) else None,
         "category": next((keyword for keyword in ORDER_NOTE_KEYWORDS
                           if keyword in note.casefold()), "order"),
+        "cancellation_source": source,
     }
 
 

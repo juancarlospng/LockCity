@@ -190,10 +190,25 @@ def test_order_normalization_allowlists_metadata_notes_and_redacts_pii():
     assert view["payment_captured"] is False
     assert view["metadata"] == {"lock_city_order_type": "PRE_ORDER"}
     assert view["order_notes"] == [{
-        "date_created": "2026-10-05T01:19:00", "category": "paypal"}]
+        "date_created": "2026-10-05T01:19:00", "category": "paypal",
+        "cancellation_source": "paypal"}]
     assert "secret-transaction" not in serialized
     assert "buyer@example" not in serialized
     assert "private_customer_note" not in serialized
+
+
+def test_order_note_classifies_woo_timeout_without_returning_free_text():
+    view = order_view({"id": 26, "line_items": []}, [{
+        "date_created": "2026-10-05T00:18:52",
+        "note": "Unpaid order cancelled - time limit reached. Pending payment to Cancelled.",
+        "added_by_user": False,
+    }])
+    assert view["order_notes"] == [{
+        "date_created": "2026-10-05T00:18:52",
+        "category": "payment",
+        "cancellation_source": "automatic_woo_timeout",
+    }]
+    assert "Unpaid order" not in str(view)
 
 
 @pytest.mark.parametrize("change", [{"price": "2"}, {"name": ""}, {"name": 5},

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Lock City AW26 Pre-order
  * Description: Applies the approved AW26 pre-order prices and persists trusted order metadata for Store API checkout.
- * Version: 0.4.1
+ * Version: 0.4.2
  * Requires PHP: 7.4
  * Requires Plugins: woocommerce
  */
@@ -340,7 +340,10 @@ add_action(
 			$order->update_meta_data( 'lock_city_preorder_price', reset( $prices ) );
 		}
 		$order->update_meta_data( 'lock_city_fulfillment_hold', true );
-		$order->update_meta_data( 'lock_city_allow_cancellation', false );
+		// WooCommerce serializes boolean false as an empty string. Persist the
+		// explicit policy value so operational reads cannot confuse false with
+		// missing metadata.
+		$order->update_meta_data( 'lock_city_allow_cancellation', 'false' );
 
 		$extensions  = $request->get_param( 'extensions' );
 		$attribution = is_array( $extensions ) && isset( $extensions['lock-city-preorder'] )
