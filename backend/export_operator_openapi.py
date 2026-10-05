@@ -126,6 +126,10 @@ def contract():
                 "ok": {"type": "boolean"}, "productTemplatesRead": {"type": "boolean"},
                 "syncProductsRead": {"type": "boolean"},
                 "errors": {"type": "object", "additionalProperties": {"type": "string"}}}},
+        "PrintfulScopes": {"type": "object", "required": ["scopes", "orders_read"],
+            "properties": {
+                "scopes": {"type": "array", "items": {"type": "string"}},
+                "orders_read": {"type": "boolean"}}},
         "PrintfulTemplate": {"type": "object", "required": [
             "id", "title", "catalogProductId", "externalProductId", "availableVariantIds",
             "colors", "sizes", "mockupUrl", "placements", "createdAt", "updatedAt"],
@@ -318,6 +322,7 @@ def contract():
         ("/aw26/categories/bootstrap", "post", "bootstrapAw26Categories", "Aw26Categories", []),
         ("/audit", "get", "getAudit", "Audit", pagination),
         ("/printful/status", "get", "getPrintfulStatus", "PrintfulStatus", []),
+        ("/printful/scopes", "get", "getPrintfulScopes", "PrintfulScopes", []),
         ("/printful/templates", "get", "getPrintfulTemplates", "PrintfulTemplateList", printful_pagination),
         ("/printful/templates/{id}", "get", "getPrintfulTemplate", "PrintfulTemplateDetail", identifier),
         ("/printful/orders", "get", "getPrintfulOrders", "PrintfulOrders", printful_order_filters),

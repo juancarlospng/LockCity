@@ -1443,6 +1443,12 @@ def create_router(store, woo=None, printful=None):
             return 200, result
         return await dispatch(request, action)
 
+    @router.get("/printful/scopes")
+    async def printful_scopes(request: Request):
+        async def action():
+            return 200, await printful_client.scopes()
+        return await dispatch(request, action)
+
     @router.get("/printful/templates")
     async def printful_templates(request: Request):
         async def action():

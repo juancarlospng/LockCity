@@ -27,7 +27,7 @@ def test_export_matches_routes_and_has_only_operator_endpoints():
         "getAw26Products", "getAw26Product", "updateAw26Product", "hardHideAw26Product",
         "getAw26Categories", "bootstrapAw26Categories",
         "getPrintfulStatus", "getPrintfulTemplates", "getPrintfulTemplate",
-        "getPrintfulOrders", "getPrintfulOrder",
+        "getPrintfulOrders", "getPrintfulOrder", "getPrintfulScopes",
         "getPrintfulSyncProducts", "getPrintfulSyncProduct", "getPrintfulMockupStyles",
         "createPrintfulMockupPlan", "createPrintfulMockupTask", "getPrintfulMockupTask",
         "getPrintfulCatalogVariantPrices", "getPrintfulCatalogProductPrices"}

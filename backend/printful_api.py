@@ -719,6 +719,19 @@ class PrintfulClient:
     async def store_headers(self):
         return {"X-PF-Store-Id": str(await self.store_id())}
 
+    async def scopes(self):
+        payload = await self.get("/oauth/scopes")
+        result = payload.get("result")
+        scopes = result.get("scopes") if isinstance(result, dict) else None
+        if not isinstance(scopes, list):
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+        names = []
+        for item in scopes:
+            name = item.get("scope") if isinstance(item, dict) else None
+            if isinstance(name, str) and name and name not in names:
+                names.append(name)
+        return {"scopes": sorted(names), "orders_read": "orders/read" in names or "orders" in names}
+
     async def templates(self, limit, offset):
         payload = await self.get("/product-templates", {"limit": limit, "offset": offset})
         result = payload.get("result")

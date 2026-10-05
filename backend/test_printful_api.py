@@ -235,6 +235,9 @@ class Printful:
     async def templates(self, _limit, _offset):
         return {"items": [], "limit": 1, "offset": 0, "total": 0}
 
+    async def scopes(self):
+        return {"scopes": ["orders/read"], "orders_read": True}
+
     async def sync_products(self, _limit, _offset):
         return {"items": [], "limit": 1, "offset": 0, "total": 0}
 
@@ -301,6 +304,7 @@ class Printful:
 
 @pytest.mark.parametrize("path", [
     "/api/operator/v1/printful/status",
+    "/api/operator/v1/printful/scopes",
     "/api/operator/v1/printful/templates",
     "/api/operator/v1/printful/templates/12",
     "/api/operator/v1/printful/sync-products",
@@ -373,6 +377,22 @@ def test_printful_order_normalization_excludes_recipient_and_tracks_hold_state()
     assert "Private Buyer" not in serialized
     assert "private@example" not in serialized
     assert "Private street" not in serialized
+
+
+def test_printful_scope_names_are_read_only_and_do_not_expose_token(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+
+    def handler(request):
+        assert request.method == "GET"
+        assert request.url.path == "/oauth/scopes"
+        return httpx.Response(200, json={"code": 200, "result": {"scopes": [
+            {"scope": "orders/read", "display_name": "View all orders"},
+            {"scope": "sync_products/read", "display_name": "View products"},
+        ]}})
+
+    result = run(client_for(handler).scopes())
+    assert result == {"scopes": ["orders/read", "sync_products/read"], "orders_read": True}
+    assert TOKEN not in str(result)
 
 
 def test_printful_orders_use_get_store_scope_and_support_external_lookup(monkeypatch):

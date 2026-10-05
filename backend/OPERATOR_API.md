@@ -67,6 +67,7 @@ The database credential and all API credentials belong only in Render secrets.
 - `PATCH /api/operator/v1/aw26/products/{id}`
 - `GET /api/operator/v1/audit?page=1&per_page=20`
 - `GET /api/operator/v1/printful/status`
+- `GET /api/operator/v1/printful/scopes`
 - `GET /api/operator/v1/printful/templates?limit=20&offset=0`
 - `GET /api/operator/v1/printful/templates/{id}`
 - `GET /api/operator/v1/printful/orders?status=&external_id=&limit=&offset=`
