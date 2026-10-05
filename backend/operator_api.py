@@ -139,13 +139,10 @@ def _safe_order_note(raw):
     note = raw["note"].strip()
     if not note or not any(keyword in note.casefold() for keyword in ORDER_NOTE_KEYWORDS):
         return None
-    note = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "[REDACTED]", note)
-    note = re.sub(r"https?://\S+", "[REDACTED URL]", note)
     return {
         "date_created": raw.get("date_created") if isinstance(raw.get("date_created"), str) else None,
         "category": next((keyword for keyword in ORDER_NOTE_KEYWORDS
                           if keyword in note.casefold()), "order"),
-        "note": note[:500],
     }
 
 

@@ -189,7 +189,8 @@ def test_order_normalization_allowlists_metadata_notes_and_redacts_pii():
     assert view["transaction_id_present"] is True
     assert view["payment_captured"] is False
     assert view["metadata"] == {"lock_city_order_type": "PRE_ORDER"}
-    assert view["order_notes"][0]["note"] == "PayPal request for [REDACTED] [REDACTED URL]"
+    assert view["order_notes"] == [{
+        "date_created": "2026-10-05T01:19:00", "category": "paypal"}]
     assert "secret-transaction" not in serialized
     assert "buyer@example" not in serialized
     assert "private_customer_note" not in serialized

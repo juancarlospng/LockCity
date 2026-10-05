@@ -30,8 +30,9 @@ The database credential and all API credentials belong only in Render secrets.
 - `WC_REST_URL` — WooCommerce origin; configuration rather than a credential.
 - `WC_REST_CONSUMER_KEY` — secret.
 - `WC_REST_CONSUMER_SECRET` — secret.
-- `PRINTFUL_API_TOKEN` — secret server-side token with `product_templates/read` and
-  `sync_products/read`; it is never returned, logged, or stored by Operator API.
+- `PRINTFUL_API_TOKEN` — secret server-side token with `product_templates/read`,
+  `sync_products/read` and `orders/read`; it is never returned, logged, or stored
+  by Operator API.
 - `PRINTFUL_STORE_ID` — optional server-side Printful store identifier. It is only
   required when an account-level token can access more than one WooCommerce store;
   a single WooCommerce store is selected automatically through the read-only Stores API.
