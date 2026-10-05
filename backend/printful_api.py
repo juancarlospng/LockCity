@@ -773,7 +773,7 @@ class PrintfulClient:
         params = {"limit": limit, "offset": offset}
         if status is not None:
             params["status"] = status
-        payload = await self.get("/orders", params, await self.store_headers())
+        payload = await self._store_get("/orders", params)
         result = payload.get("result")
         if not isinstance(result, list):
             raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
@@ -787,9 +787,21 @@ class PrintfulClient:
 
     async def order(self, order_id):
         encoded = quote(str(order_id), safe="@")
-        payload = await self.get(f"/orders/{encoded}", extra_headers=await self.store_headers())
+        payload = await self._store_get(f"/orders/{encoded}")
         result = payload.get("result")
         return normalize_printful_order(result)
+
+    async def _store_get(self, path, params=None):
+        """Support both account tokens and tokens already limited to one store."""
+        try:
+            return await self.get(path, params, await self.store_headers())
+        except OperatorError as exc:
+            if exc.code != "PRINTFUL_FORBIDDEN":
+                raise
+        # Printful documents X-PF-Store-Id for account-level tokens only. A
+        # single-store token may reject that context header, so retry this GET
+        # once without it. Missing scopes remain a sanitized 403.
+        return await self.get(path, params)
 
     async def mockup_styles(self, template_id, template=None):
         template = template or await self.template(template_id)

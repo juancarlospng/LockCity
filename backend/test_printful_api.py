@@ -403,6 +403,27 @@ def test_printful_orders_use_get_store_scope_and_support_external_lookup(monkeyp
     assert TOKEN not in str(listed) + str(found) + str(detail)
 
 
+def test_printful_orders_retry_without_store_header_for_single_store_token(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("PRINTFUL_STORE_ID", "321")
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        assert request.method == "GET"
+        if request.headers.get("X-PF-Store-Id"):
+            return httpx.Response(403, json={"error": {"message": TOKEN}})
+        return httpx.Response(200, json={"code": 200, "result": [],
+                                         "paging": {"total": 0, "limit": 1, "offset": 0}})
+
+    result = run(client_for(handler).orders(1, 0))
+    assert result["total"] == 0
+    assert len(requests) == 2
+    assert requests[0].headers["X-PF-Store-Id"] == "321"
+    assert "X-PF-Store-Id" not in requests[1].headers
+    assert TOKEN not in str(result)
+
+
 def test_catalog_variant_prices_use_official_read_only_endpoint(monkeypatch):
     monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
     requests = []
