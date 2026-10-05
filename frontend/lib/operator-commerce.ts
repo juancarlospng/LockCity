@@ -76,15 +76,50 @@ const AW26_IMAGE_COLOR_SLUGS: Readonly<Partial<Record<number, readonly string[]>
   4143: ["black", "navy-blazer"],
 };
 
+const PRINTFUL_VIEW_SUFFIXES = [
+  ["front", "left"], ["front", "right"], ["back", "left"], ["back", "right"],
+  ["zoomed", "in"], ["front"], ["back"], ["left"], ["right"],
+] as const;
+
+function imageStemTokens(image: ProductImage): string[] {
+  const pathname = (() => {
+    try { return new URL(image.src).pathname; }
+    catch { return image.src; }
+  })();
+  const filename = decodeURIComponent(pathname.split("/").pop() ?? pathname)
+    .toLowerCase().replace(/\.[a-z0-9]+$/i, "");
+  const tokens = filename.split(/[^a-z0-9]+/).filter(Boolean);
+  if (/^[a-f0-9]{8,}$/.test(tokens.at(-1) ?? "")) tokens.pop();
+  const view = PRINTFUL_VIEW_SUFFIXES.find((suffix) => (
+    suffix.every((token, index) => tokens[tokens.length - suffix.length + index] === token)
+  ));
+  if (view) tokens.splice(tokens.length - view.length, view.length);
+  return tokens;
+}
+
+function exactImageColors(images: ProductImage[]): Map<string, string | undefined> {
+  const stems = images.map(imageStemTokens);
+  let commonLength = stems[0]?.length ?? 0;
+  for (const tokens of stems.slice(1)) {
+    commonLength = Math.min(commonLength, tokens.length);
+    let index = 0;
+    while (index < commonLength && tokens[index] === stems[0][index]) index += 1;
+    commonLength = index;
+  }
+  return new Map(images.map((image, index) => {
+    const color = stems[index].slice(commonLength).join("-");
+    return [image.src, color || undefined];
+  }));
+}
+
 function storefrontImages(productId: number, images: ProductImage[]): ProductImage[] {
   const colors = AW26_IMAGE_COLOR_SLUGS[productId];
   if (!colors?.length) return images;
+  const allowed = new Set(colors.map((color) => slug(color)));
+  const inferredColors = exactImageColors(images);
   const filtered = images.filter((image) => {
-    const pathname = (() => {
-      try { return new URL(image.src).pathname.toLowerCase(); }
-      catch { return image.src.toLowerCase(); }
-    })();
-    return colors.some((color) => pathname.includes(`-${color}-`));
+    const color = inferredColors.get(image.src);
+    return color !== undefined && allowed.has(color);
   });
   return filtered.length > 0 ? filtered : images;
 }

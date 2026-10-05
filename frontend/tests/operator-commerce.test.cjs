@@ -90,6 +90,47 @@ test('AW26 galleries expose only colors confirmed by sellable variants and Print
   assert.deepEqual(product.sourceImages.map((image) => image.id), [1, 3, 4]);
 });
 
+test('exact color matching keeps black distinct from vintage-black', () => {
+  const product = mapOperatorProduct(hiddenProduct({
+    id: 4067,
+    name: 'LC ICE DAY Sweatshirt',
+    slug: 'lc-ice-day-sweatshirt',
+    images: [
+      { id: 1, src: 'https://lockcityclothes.com/uploads/unisex-sweatshirt-athletic-heather-front-11111111.jpg' },
+      { id: 2, src: 'https://lockcityclothes.com/uploads/unisex-sweatshirt-black-front-22222222.jpg' },
+      { id: 3, src: 'https://lockcityclothes.com/uploads/unisex-sweatshirt-vintage-black-front-33333333.jpg' },
+      { id: 4, src: 'https://lockcityclothes.com/uploads/unisex-sweatshirt-black-back-44444444.jpg' },
+    ],
+  }));
+  assert.deepEqual(product.sourceImages.map((image) => image.id), [2, 4]);
+});
+
+test('exact matching preserves all 27 sellable color images across AW26 color products', () => {
+  const productColors = new Map([
+    [3823, ['black', 'navy', 'smoke']],
+    [3854, ['black', 'dust', 'forest', 'maroon', 'navy', 'vintage-brown']],
+    [3950, ['black', 'ivory', 'peachy']],
+    [3979, ['black', 'french-navy']],
+    [4022, ['black', 'french-navy']],
+    [4040, ['black', 'dark-olive', 'oxford-navy']],
+    [4048, ['black', 'forest-green', 'navy']],
+    [4093, ['black', 'dark-olive', 'oxford-navy']],
+    [4143, ['black', 'navy-blazer']],
+  ]);
+  let retained = 0;
+  for (const [id, colors] of productColors) {
+    const images = colors.map((color, index) => ({
+      id: index + 1,
+      src: `https://lockcityclothes.com/uploads/product-${id}-${color}-front-${String(index + 1).repeat(8)}.jpg`,
+    }));
+    images.push({ id: 99, src: `https://lockcityclothes.com/uploads/product-${id}-vintage-black-front-abcdef12.jpg` });
+    const product = mapOperatorProduct(hiddenProduct({ id, images }));
+    assert.deepEqual(product.sourceImages.map((image) => image.id), images.slice(0, colors.length).map((image) => image.id));
+    retained += product.sourceImages.length;
+  }
+  assert.equal(retained, 27);
+});
+
 test('a missing expected filename token never creates an empty gallery', () => {
   const product = mapOperatorProduct(hiddenProduct({
     id: 3915,
