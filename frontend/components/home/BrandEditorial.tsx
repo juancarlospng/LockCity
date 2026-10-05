@@ -13,9 +13,9 @@ export function BrandEditorial({ products }: { products: Product[] }) {
     <section
       data-testid="brand-editorial-section"
       aria-labelledby="brand-editorial-heading"
-      className="border-t border-graphite px-4 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32"
+      className="border-t border-graphite px-4 py-16 sm:px-8 sm:py-24 lg:px-12 lg:py-32"
     >
-      <div className="mx-auto grid max-w-[1800px] gap-12 lg:grid-cols-12 lg:items-center lg:gap-8">
+      <div className="mx-auto grid max-w-[1800px] gap-9 sm:gap-12 lg:grid-cols-12 lg:items-center lg:gap-8">
         <div className="lg:col-span-5 lg:pr-10">
           <Reveal>
             <p className="text-[10px] uppercase tracking-[0.3em] text-steel">05 — The City</p>

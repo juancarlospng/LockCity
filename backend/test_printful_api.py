@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 
 import httpx
@@ -6,10 +7,13 @@ import pytest
 from fastapi import FastAPI
 
 from operator_api import OperatorError, create_router
-from printful_api import (AW26_TEMPLATE_IDS, PrintfulClient, group_styles_by_placement,
+from printful_api import (AW26_TEMPLATE_IDS, PrintfulClient, build_mockup_request_body,
+                          group_styles_by_placement,
                           normalize_mockup_task_result, normalize_template_detail,
+                          normalize_printful_order,
                           plan_mockup_batches,
-                          recommend_styles_by_placement, select_representative_variants)
+                          recommend_styles_by_placement, sanitize_printful_validation,
+                          select_representative_variants)
 
 
 TOKEN = "printful-test-token-that-must-never-leak"
@@ -231,6 +235,9 @@ class Printful:
     async def templates(self, _limit, _offset):
         return {"items": [], "limit": 1, "offset": 0, "total": 0}
 
+    async def scopes(self):
+        return {"scopes": ["orders/read"], "orders_read": True}
+
     async def sync_products(self, _limit, _offset):
         return {"items": [], "limit": 1, "offset": 0, "total": 0}
 
@@ -239,6 +246,27 @@ class Printful:
 
     async def sync_product(self, product_id):
         return {"syncProductId": product_id}
+
+    async def orders(self, limit, offset, status=None, external_id=None):
+        return {"items": [], "limit": limit, "offset": offset, "total": 0,
+                "status": status, "external_id": external_id}
+
+    async def order(self, order_id):
+        return {"printful_order_id": int(str(order_id).lstrip("@") or "0")}
+
+    async def catalog_variant_prices(self, variant_id):
+        return {"catalogVariantId": variant_id, "currency": "USD",
+                "productionCurrency": "USD", "sellingRegionName": "worldwide",
+                "variant": {"id": variant_id, "techniques": [{
+                    "techniqueKey": "dtg", "techniqueDisplayName": "DTG printing",
+                    "price": "12.50", "discountedPrice": "11.25"}]},
+                "product": {"id": 71},
+                "placements": []}
+
+    async def catalog_product_prices(self, product_id):
+        return {"catalogProductId": product_id, "currency": "USD",
+                "productionCurrency": "USD", "sellingRegionName": "worldwide",
+                "product": {"id": product_id}, "placements": [], "variants": []}
 
     async def mockup_styles(self, template_id):
         return {"templateId": template_id, "styles": [
@@ -276,10 +304,15 @@ class Printful:
 
 @pytest.mark.parametrize("path", [
     "/api/operator/v1/printful/status",
+    "/api/operator/v1/printful/scopes",
     "/api/operator/v1/printful/templates",
     "/api/operator/v1/printful/templates/12",
     "/api/operator/v1/printful/sync-products",
     "/api/operator/v1/printful/sync-products/99",
+    "/api/operator/v1/printful/orders",
+    "/api/operator/v1/printful/orders/99",
+    "/api/operator/v1/printful/catalog-variants/4016/prices",
+    "/api/operator/v1/printful/catalog-products/71/prices",
     "/api/operator/v1/printful/templates/12/mockup-styles",
     "/api/operator/v1/printful/mockup-tasks/101",
 ])
@@ -316,15 +349,194 @@ def test_operator_routes_are_get_only_and_writes_stay_disabled(monkeypatch):
     assert run(request("POST", "/api/operator/v1/printful/templates")).status_code == 405
     assert run(request("PUT", "/api/operator/v1/printful/sync-products/1")).status_code == 405
     assert run(request("DELETE", "/api/operator/v1/printful/templates/1")).status_code == 405
+    assert run(request("POST", "/api/operator/v1/printful/orders")).status_code == 405
+    assert run(request("PATCH", "/api/operator/v1/printful/orders/1")).status_code == 405
+    assert run(request("POST", "/api/operator/v1/printful/catalog-variants/4016/prices")).status_code == 405
+    assert run(request("PATCH", "/api/operator/v1/printful/catalog-products/71/prices")).status_code == 405
     assert os.getenv("OPERATOR_WRITES_ENABLED") == "false"
 
 
+def test_printful_order_normalization_excludes_recipient_and_tracks_hold_state():
+    raw = {
+        "id": 900, "external_id": "4180", "status": "draft",
+        "created": 1791155888, "updated": 1791155900,
+        "recipient": {"name": "Private Buyer", "email": "private@example.test",
+                      "address1": "Private street"},
+        "retail_costs": {"currency": "USD", "subtotal": "32.00",
+                         "shipping": "4.69", "total": "36.69"},
+        "items": [{"id": 1, "external_id": "line-1", "variant_id": 16178,
+                   "external_variant_id": "3915", "quantity": 1,
+                   "name": "Lockmark Ribbed Beanie", "files": [{"url": "private"}]}],
+        "shipments": [],
+    }
+    result = normalize_printful_order(raw)
+    serialized = str(result)
+    assert result["manual_confirm_required"] is True
+    assert result["production_started"] is False
+    assert result["fulfillment_confirmed"] is False
+    assert "Private Buyer" not in serialized
+    assert "private@example" not in serialized
+    assert "Private street" not in serialized
+
+
+def test_printful_scope_names_are_read_only_and_do_not_expose_token(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+
+    def handler(request):
+        assert request.method == "GET"
+        assert request.url.path == "/oauth/scopes"
+        return httpx.Response(200, json={"code": 200, "result": {"scopes": [
+            {"scope": "orders/read", "display_name": "View all orders"},
+            {"scope": "sync_products/read", "display_name": "View products"},
+        ]}})
+
+    result = run(client_for(handler).scopes())
+    assert result == {"scopes": ["orders/read", "sync_products/read"], "orders_read": True}
+    assert TOKEN not in str(result)
+
+
+def test_printful_orders_use_get_store_scope_and_support_external_lookup(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("PRINTFUL_STORE_ID", "321")
+    requests = []
+    order = {"id": 900, "external_id": "4180", "status": "draft",
+             "items": [], "shipments": [], "retail_costs": {"currency": "USD"}}
+
+    def handler(request):
+        requests.append(request)
+        assert request.method == "GET"
+        assert request.headers["X-PF-Store-Id"] == "321"
+        if request.url.path == "/orders":
+            return httpx.Response(200, json={"code": 200, "result": [order],
+                                             "paging": {"total": 1, "limit": 20, "offset": 0}})
+        assert request.url.path == "/orders/@4180"
+        return httpx.Response(200, json={"code": 200, "result": order})
+
+    client = client_for(handler)
+    listed = run(client.orders(20, 0, "draft"))
+    found = run(client.orders(20, 0, external_id="4180"))
+    detail = run(client.order("@4180"))
+    assert listed["items"][0]["printful_order_id"] == 900
+    assert found["total"] == 1
+    assert detail["external_id"] == "4180"
+    assert requests[0].url.params["status"] == "draft"
+    assert TOKEN not in str(listed) + str(found) + str(detail)
+
+
+def test_printful_orders_retry_without_store_header_for_single_store_token(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("PRINTFUL_STORE_ID", "321")
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        assert request.method == "GET"
+        if request.headers.get("X-PF-Store-Id"):
+            return httpx.Response(403, json={"error": {"message": TOKEN}})
+        return httpx.Response(200, json={"code": 200, "result": [],
+                                         "paging": {"total": 0, "limit": 1, "offset": 0}})
+
+    result = run(client_for(handler).orders(1, 0))
+    assert result["total"] == 0
+    assert len(requests) == 2
+    assert requests[0].headers["X-PF-Store-Id"] == "321"
+    assert "X-PF-Store-Id" not in requests[1].headers
+    assert TOKEN not in str(result)
+
+
+def test_catalog_variant_prices_use_official_read_only_endpoint(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"data": {
+            "currency": "USD", "production_currency": "USD",
+            "variant": {"id": 4016, "techniques": [{
+                "technique_key": "dtg", "technique_display_name": "DTG printing",
+                "price": "14.50", "discounted_price": "13.05"}]},
+            "product": {"id": 71, "name": "Unisex tee", "placements": [{
+                "id": "front", "title": "Front", "type": "Printing",
+                "technique_key": "dtg", "price": "0.00", "discounted_price": "0.00",
+                "placement_options": [], "layers": [{
+                    "type": "file", "additional_price": "1.25", "layer_options": []}]}]},
+        }})
+
+    result = run(client_for(handler).catalog_variant_prices(4016))
+    assert len(requests) == 1
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/v2/catalog-variants/4016/prices"
+    assert dict(requests[0].url.params) == {
+        "currency": "USD", "selling_region_name": "worldwide"}
+    assert result == {
+        "catalogVariantId": 4016, "currency": "USD", "productionCurrency": "USD",
+        "sellingRegionName": "worldwide",
+        "variant": {"id": 4016, "techniques": [{
+            "techniqueKey": "dtg", "techniqueDisplayName": "DTG printing",
+            "price": "14.50", "discountedPrice": "13.05"}]},
+        "product": {"id": 71},
+        "placements": [{"id": "front", "title": "Front", "type": "Printing",
+                        "techniqueKey": "dtg", "price": "0.00",
+                        "discountedPrice": "0.00", "placementOptions": [],
+                        "layers": [{"type": "file", "additionalPrice": "1.25",
+                                    "layerOptions": []}]}],
+    }
+
+
+def test_catalog_variant_price_route_is_authenticated_and_sanitizes_scope_failure(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("OPERATOR_API_TOKEN", "o" * 32)
+
+    def handler(_request):
+        return httpx.Response(403, json={"message": "missing scope " + TOKEN})
+
+    app = FastAPI()
+    app.include_router(create_router(Store(), printful=client_for(handler)))
+
+    async def request(headers=None):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://test") as client:
+            return await client.get(
+                "/api/operator/v1/printful/catalog-variants/4016/prices", headers=headers)
+
+    assert run(request()).status_code == 401
+    response = run(request({"Authorization": "Bearer " + "o" * 32}))
+    assert response.status_code == 502
+    assert response.json() == {"error": "PRINTFUL_FORBIDDEN"}
+    assert TOKEN not in response.text
+
+
+def test_catalog_product_prices_batch_variants_in_one_get(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={
+            "data": {"currency": "USD", "product": {"id": 71, "placements": []},
+                     "variants": [
+                         {"id": 4016, "techniques": [{
+                             "technique_key": "dtg", "technique_display_name": "DTG",
+                             "price": "12.50", "discounted_price": "11.25"}]},
+                         {"id": 4017, "techniques": [{
+                             "technique_key": "dtg", "technique_display_name": "DTG",
+                             "price": "14.00", "discounted_price": "12.60"}]}]},
+            "paging": {"total": 2, "limit": 100, "offset": 0}})
+
+    result = run(client_for(handler).catalog_product_prices(71))
+    assert len(requests) == 1
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/v2/catalog-products/71/prices"
+    assert [variant["id"] for variant in result["variants"]] == [4016, 4017]
+    assert result["variants"][1]["techniques"][0]["price"] == "14.00"
+
+
 def test_aw26_allowlist_has_exactly_seventeen_templates():
-    assert len(AW26_TEMPLATE_IDS) == 17
-    assert 105623495 in AW26_TEMPLATE_IDS
-    assert 106766446 in AW26_TEMPLATE_IDS
-    assert 107531332 not in AW26_TEMPLATE_IDS
-    assert 107691146 not in AW26_TEMPLATE_IDS
+    assert AW26_TEMPLATE_IDS == frozenset({
+        79403270, 100892117, 105623495, 105624073, 106094567, 106357278,
+        106357334, 106766446, 106767107, 107221423, 107530836, 107563422,
+        107563824, 107564276, 107658409, 107660830, 107660910,
+    })
     assert all(type(template_id) is int and template_id > 0
                for template_id in AW26_TEMPLATE_IDS)
 
@@ -593,7 +805,15 @@ def test_printful_task_generation_and_result(monkeypatch):
                      "restricted_to_variants": [4016]}]}], "paging": {"total": 1}})
         if request.method == "POST":
             assert request.headers["X-PF-Store-Id"] == "321"
-            assert request.content and b'"source": "product_template"' in request.content
+            assert json.loads(request.content) == {
+                "format": "jpg",
+                "products": [{
+                    "source": "product_template",
+                    "product_template_id": 12,
+                    "catalog_variant_ids": [4016],
+                    "mockup_style_ids": [3],
+                }],
+            }
             return httpx.Response(200, json={"data": [{"id": 987, "status": "pending"}]})
         assert request.headers["X-PF-Store-Id"] == "321"
         return httpx.Response(200, json={"data": [{
@@ -742,6 +962,81 @@ def test_mockup_generation_errors_are_sanitized(monkeypatch, upstream, status, c
         run(client_for(handler).create_mockup_task(12, [4016], [3]))
     assert (error.value.status, error.value.code) == (status, code)
     assert TOKEN not in error.value.code
+
+
+def test_printful_validation_details_are_allowlisted_and_secrets_redacted(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    response = httpx.Response(400, json={"error": {"errors": [{
+        "type": "validation_error",
+        "title": "Invalid request",
+        "detail": "Unsupported style",
+        "source": {"pointer": "/products/0/mockup_style_ids", "secret": TOKEN},
+        "valid_values": [1, 2],
+        "debug": TOKEN,
+    }, {
+        "detail": "Bearer " + TOKEN,
+    }]}})
+    assert sanitize_printful_validation(response) == [{
+        "type": "validation_error",
+        "title": "Invalid request",
+        "detail": "Unsupported style",
+        "source": {"pointer": "/products/0/mockup_style_ids"},
+        "valid_values": [1, 2],
+    }, {"detail": "[REDACTED]"}]
+
+
+def test_exact_product_template_mockup_request_body():
+    assert build_mockup_request_body(106357278, [23054], [27318]) == {
+        "format": "jpg",
+        "products": [{
+            "source": "product_template",
+            "product_template_id": 106357278,
+            "catalog_variant_ids": [23054],
+            "mockup_style_ids": [27318],
+        }],
+    }
+
+
+def test_mockup_generation_validation_details_are_sanitized(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("PRINTFUL_STORE_ID", "321")
+
+    def handler(request):
+        if request.url.path == "/product-templates/12":
+            return httpx.Response(200, json={"code": 200, "result": template_payload()})
+        if request.url.path.endswith("/mockup-styles"):
+            return httpx.Response(200, json={
+                "data": [{"placement": "front", "mockup_styles": [
+                    {"id": 3, "restricted_to_variants": [4016]}]}],
+                "paging": {"total": 1}})
+        return httpx.Response(400, json={"error": {"errors": [{
+            "type": "validation_error",
+            "title": "Invalid request",
+            "detail": "The selected mockup style is not compatible",
+            "source": {"pointer": "/products/0/mockup_style_ids"},
+        }]}})
+
+    with pytest.raises(OperatorError) as error:
+        run(client_for(handler).create_mockup_task(12, [4016], [3]))
+
+    assert error.value.details == {
+        "status": 400,
+        "outboundBody": {
+            "format": "jpg",
+            "products": [{
+                "source": "product_template",
+                "product_template_id": 12,
+                "catalog_variant_ids": [4016],
+                "mockup_style_ids": [3],
+            }],
+        },
+        "issues": [{
+            "type": "validation_error",
+            "title": "Invalid request",
+            "detail": "The selected mockup style is not compatible",
+            "source": {"pointer": "/products/0/mockup_style_ids"},
+        }],
+    }
 
 
 def test_secret_never_appears_in_operator_response(monkeypatch):

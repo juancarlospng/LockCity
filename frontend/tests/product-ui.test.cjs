@@ -42,7 +42,7 @@ test('color accents cover launch colors and use a neutral future-safe fallback',
 });
 
 test('image ordering prefers mockup and model imagery while preserving single images', () => {
-  const { orderedProductImages, mainProductImage } = load('lib/product-media.ts');
+  const { orderedProductImages, mainProductImage, productImagesForColor } = load('lib/product-media.ts');
   const gallery = {
     images: ['/flat', '/back', '/mockup'],
     sourceImages: [
@@ -53,6 +53,37 @@ test('image ordering prefers mockup and model imagery while preserving single im
   };
   assert.deepEqual(orderedProductImages(gallery), ['/mockup', '/back', '/flat']);
   assert.equal(mainProductImage({ images: ['/only'], sourceImages: [{ src: 'only.jpg' }] }), '/only');
+
+  const colorGallery = {
+    images: ['/black-front', '/navy-front', '/black-back', '/navy-back'],
+    sourceImages: [
+      { src: 'https://store.test/cap-black-front.jpg' },
+      { src: 'https://store.test/cap-oxford-navy-front.jpg' },
+      { src: 'https://store.test/cap-black-back.jpg' },
+      { src: 'https://store.test/cap-oxford-navy-back.jpg' },
+    ],
+  };
+  assert.deepEqual(productImagesForColor(colorGallery, 'Oxford Navy').slice(0, 2), ['/navy-front', '/navy-back']);
+  assert.deepEqual(productImagesForColor(colorGallery, 'Missing Color'), orderedProductImages(colorGallery));
+
+  const topGallery = {
+    images: ['/black-top', '/navy-top', '/smoke-top'],
+    sourceImages: [
+      { src: 'https://store.test/quarter-zip-black-front.jpg' },
+      { src: 'https://store.test/quarter-zip-navy-front.jpg' },
+      { src: 'https://store.test/quarter-zip-smoke-front.jpg' },
+    ],
+  };
+  assert.equal(productImagesForColor(topGallery, 'Navy')[0], '/navy-top');
+
+  const bottomGallery = {
+    images: ['/black-bottom', '/navy-bottom'],
+    sourceImages: [
+      { src: 'https://store.test/sweatpants-black-front.jpg' },
+      { src: 'https://store.test/sweatpants-navy-blazer-front.jpg' },
+    ],
+  };
+  assert.equal(productImagesForColor(bottomGallery, 'Navy Blazer')[0], '/navy-bottom');
 });
 
 test('card action exposes priced quick add, active variable options and honest sold-out states', () => {
@@ -64,6 +95,8 @@ test('card action exposes priced quick add, active variable options and honest s
 
   const variable = getProductCardAction(product({ type: 'variable', variants: [{ id: 'unresolved', status: 'UNKNOWN', detailsState: 'unresolved' }] }));
   assert.deepEqual(variable, { kind: 'select-options', label: 'Select options' });
+  const preview = getProductCardAction(product({ previewOnly: true, availability: { is_in_stock: true, is_purchasable: false } }));
+  assert.deepEqual(preview, { kind: 'select-options', label: 'Select options' });
   assert.equal(getProductCardAction(product({ status: 'SOLD_OUT', availability: { is_in_stock: false, is_purchasable: false } })).kind, 'sold-out');
   assert.equal(getProductCardAction(product({ price: 0, variants: [resolvedVariant({ price: 0 })] })).kind, 'unavailable');
 });
@@ -74,13 +107,54 @@ test('product UI keeps media contained, thumbnails fixed and footer credit subtl
   const footer = read('components/Footer.tsx');
   assert.match(card, /object-contain/);
   assert.match(card, /bg-white/);
+  assert.match(card, /quality=\{90\}/);
+  assert.match(card, /\(max-width: 1535px\) 50vw, 400px/);
+  assert.match(card, /!text-neutral-950/);
   assert.match(card, /select-options-link/);
   assert.match(detail, /object-contain/);
   assert.match(detail, /bg-white/);
+  assert.match(detail, /quality=\{88\}/);
+  assert.match(detail, /quality=\{70\}/);
   assert.match(detail, /h-20 w-20 shrink-0 snap-start/);
   assert.match(detail, /overflow-x-auto/);
   assert.match(detail, /Previous product images/);
   assert.match(detail, /Next product images/);
   assert.match(detail, /getColorAccent/);
   assert.match(footer, /Powered by Blueether/);
+});
+
+test('AW26 image quality prioritizes hero and primary PDP without overfetching thumbnails', () => {
+  const hero = read('components/home/Aw26Hero.tsx');
+  const config = read('next.config.mjs');
+  assert.match(hero, /quality=\{88\}/);
+  assert.match(hero, /fetchPriority="high"/);
+  assert.match(hero, /sizes="\(max-width: 1023px\) 100vw, 72vw"/);
+  assert.match(config, /qualities: \[70, 75, 82, 86, 88, 90\]/);
+  assert.match(config, /pathname: "\/images\/\*\*"/);
+  assert.match(hero, /\/images\/aw26-quarter-zip-cutout\.png/);
+  assert.doesNotMatch(hero, /mask-image:radial-gradient/);
+  assert.match(hero, /drop-shadow/);
+});
+
+test('AW26 hero keeps the campaign label clear of the oversized title', () => {
+  const hero = read('components/home/Aw26Hero.tsx');
+  assert.match(hero, /mt-10[^\"]*sm:mt-12[^\"]*lg:mt-14/);
+});
+
+test('final visual polish keeps mobile commerce compact and inactive states restrained', () => {
+  const globals = read('app/globals.css');
+  const hero = read('components/home/Aw26Hero.tsx');
+  const card = read('components/ProductCard.tsx');
+  const detail = read('components/ProductDetail.tsx');
+  const checkout = read('components/CheckoutForm.tsx');
+  const navigation = read('components/Navigation.tsx');
+  const tailwind = read('tailwind.config.js');
+  assert.match(globals, /--steel: #888888/);
+  assert.match(tailwind, /steel: "#888888"/);
+  assert.match(hero, /h-\[112vw\]/);
+  assert.match(hero, /object-contain object-center/);
+  assert.match(card, /aspect-\[10\/11\][^\"]*sm:aspect-\[4\/5\]/);
+  assert.match(detail, /cursor-default border-graphite bg-onyx py-3 text-steel/);
+  assert.match(checkout, /font-display text-3xl uppercase text-bone sm:text-4xl/);
+  assert.match(navigation, /text-bone\/65 hover:text-bone/);
 });
