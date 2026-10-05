@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -48,6 +49,21 @@ AW26_CATEGORY_POLICY_BY_TEMPLATE_ID = {
     106766446: "accessories", 106357334: "hats",
 }
 
+ORDER_META_ALLOWLIST = frozenset({
+    "lock_city_order_type",
+    "lock_city_campaign",
+    "lock_city_preorder_start",
+    "lock_city_preorder_end",
+    "lock_city_preorder_price",
+    "lock_city_fulfillment_hold",
+    "lock_city_allow_cancellation",
+    "lock_city_affiliate_id",
+    "lock_city_affiliate_code",
+    "lock_city_referral_source",
+    "lock_city_attributed_at",
+})
+ORDER_NOTE_KEYWORDS = ("paypal", "payment", "printful", "pre-order", "preorder")
+
 
 class Aw26ProductPatch(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -82,6 +98,95 @@ def product_view(raw):
     return {"id": raw["id"], "name": raw.get("name", ""),
             "slug": raw.get("slug", ""), "status": raw.get("status", ""),
             "type": raw.get("type", ""), "version": digest(raw)}
+
+
+def preorder_status_view(raw):
+    if (not isinstance(raw, dict)
+            or not isinstance(raw.get("aw26_preorder_sales_enabled"), bool)
+            or raw.get("source") != "wordpress_runtime"
+            or not isinstance(raw.get("environment"), str)
+            or not isinstance(raw.get("checked_at"), str)):
+        raise OperatorError(502, "INVALID_WORDPRESS_RESPONSE")
+    try:
+        checked_at = datetime.fromisoformat(raw["checked_at"].replace("Z", "+00:00"))
+    except ValueError:
+        raise OperatorError(502, "INVALID_WORDPRESS_RESPONSE") from None
+    if checked_at.tzinfo is None:
+        raise OperatorError(502, "INVALID_WORDPRESS_RESPONSE")
+    return {
+        "aw26_preorder_sales_enabled": raw["aw26_preorder_sales_enabled"],
+        "source": "wordpress_runtime",
+        "environment": raw["environment"][:40],
+        "checked_at": raw["checked_at"],
+    }
+
+
+def _safe_order_meta(items):
+    result = {}
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict) or item.get("key") not in ORDER_META_ALLOWLIST:
+            continue
+        value = item.get("value")
+        if ((isinstance(value, (int, float, bool)) and not isinstance(value, str))
+                or (isinstance(value, str) and len(value) <= 500)):
+            result[item["key"]] = value
+    return result
+
+
+def _safe_order_note(raw):
+    if not isinstance(raw, dict) or not isinstance(raw.get("note"), str):
+        return None
+    note = raw["note"].strip()
+    if not note or not any(keyword in note.casefold() for keyword in ORDER_NOTE_KEYWORDS):
+        return None
+    note = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "[REDACTED]", note)
+    note = re.sub(r"https?://\S+", "[REDACTED URL]", note)
+    return {
+        "date_created": raw.get("date_created") if isinstance(raw.get("date_created"), str) else None,
+        "category": next((keyword for keyword in ORDER_NOTE_KEYWORDS
+                          if keyword in note.casefold()), "order"),
+        "note": note[:500],
+    }
+
+
+def order_view(raw, notes=None):
+    if not isinstance(raw, dict) or not isinstance(raw.get("id"), int):
+        raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+    line_items = []
+    for item in raw.get("line_items", []) if isinstance(raw.get("line_items"), list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("product_id"), int):
+            continue
+        line_items.append({
+            "product_id": item["product_id"],
+            "variation_id": item.get("variation_id")
+            if isinstance(item.get("variation_id"), int) else 0,
+            "quantity": item.get("quantity")
+            if isinstance(item.get("quantity"), (int, float)) else 0,
+            "subtotal": _canonical_price(item.get("subtotal")),
+            "total": _canonical_price(item.get("total")),
+        })
+    transaction_id = raw.get("transaction_id")
+    safe_notes = []
+    for note in notes if isinstance(notes, list) else []:
+        normalized = _safe_order_note(note)
+        if normalized:
+            safe_notes.append(normalized)
+    return {
+        "order_id": raw["id"],
+        "date_created": raw.get("date_created")
+        if isinstance(raw.get("date_created"), str) else None,
+        "status": raw.get("status") if isinstance(raw.get("status"), str) else "",
+        "currency": raw.get("currency") if isinstance(raw.get("currency"), str) else "",
+        "total": _canonical_price(raw.get("total")),
+        "shipping_total": _canonical_price(raw.get("shipping_total")),
+        "payment_method": raw.get("payment_method")
+        if isinstance(raw.get("payment_method"), str) else "",
+        "transaction_id_present": isinstance(transaction_id, str) and bool(transaction_id.strip()),
+        "payment_captured": isinstance(raw.get("date_paid"), str) and bool(raw.get("date_paid")),
+        "line_items": line_items,
+        "metadata": _safe_order_meta(raw.get("meta_data")),
+        "order_notes": safe_notes,
+    }
 
 
 def _safe_printful_metadata(items):
@@ -248,7 +353,7 @@ def aw26_product_view(raw, variations):
 
 
 class WooClient:
-    async def call(self, method, path, params=None, payload=None):
+    def _configuration(self):
         base = os.getenv("WC_REST_URL", "").rstrip("/")
         key = os.getenv("WC_REST_CONSUMER_KEY", "")
         secret = os.getenv("WC_REST_CONSUMER_SECRET", "")
@@ -257,19 +362,82 @@ class WooClient:
                 or parsed.password or parsed.query or parsed.fragment
                 or not key or not secret):
             raise OperatorError(503, "WOOCOMMERCE_NOT_CONFIGURED")
+        return base, key, secret
+
+    async def _request(self, method, url, params=None, payload=None, not_found="PRODUCT_NOT_FOUND"):
+        _, key, secret = self._configuration()
         try:
             async with httpx.AsyncClient(timeout=20, follow_redirects=False) as client:
                 response = await client.request(
-                    method, base + "/wp-json/wc/v3/" + path,
+                    method, url,
                     auth=(key, secret), params=params, json=payload,
                     headers={"Cache-Control": "no-cache"})
             if response.status_code == 404:
-                raise OperatorError(404, "PRODUCT_NOT_FOUND")
+                raise OperatorError(404, not_found)
             if not 200 <= response.status_code < 300:
                 raise OperatorError(502, "WOOCOMMERCE_ERROR")
             return response.json(), response.headers
         except (httpx.HTTPError, ValueError):
             raise OperatorError(502, "WOOCOMMERCE_UNAVAILABLE") from None
+
+    async def call(self, method, path, params=None, payload=None, not_found="PRODUCT_NOT_FOUND"):
+        base, _, _ = self._configuration()
+        return await self._request(method, base + "/wp-json/wc/v3/" + path,
+                                   params, payload, not_found)
+
+    async def preorder_status(self):
+        base, _, _ = self._configuration()
+        raw, _ = await self._request(
+            "GET", base + "/wp-json/lock-city/v1/preorder/status",
+            not_found="PREORDER_STATUS_NOT_AVAILABLE")
+        return preorder_status_view(raw)
+
+    async def orders(self, filters):
+        limit = filters["limit"]
+        collected = []
+        page = 1
+        scanned = 0
+        while page <= 5 and len(collected) < limit:
+            params = {"context": "edit", "orderby": "date", "order": "desc",
+                      "page": page, "per_page": 100}
+            for name in ("status", "after", "before"):
+                if filters.get(name) is not None:
+                    params[name] = filters[name]
+            batch, headers = await self.call(
+                "GET", "orders", params=params, not_found="ORDER_NOT_FOUND")
+            if not isinstance(batch, list):
+                raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+            scanned += len(batch)
+            for raw in batch:
+                view = order_view(raw)
+                if (filters.get("product_id") is not None
+                        and not any(item["product_id"] == filters["product_id"]
+                                    for item in view["line_items"])):
+                    continue
+                if (filters.get("payment_method") is not None
+                        and view["payment_method"] != filters["payment_method"]):
+                    continue
+                collected.append(view)
+                if len(collected) >= limit:
+                    break
+            try:
+                pages = int(headers.get("X-WP-TotalPages", "1"))
+            except (TypeError, ValueError):
+                raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE") from None
+            if page >= pages:
+                break
+            page += 1
+        return {"items": collected, "count": len(collected), "scanned": scanned,
+                "scan_limited": page >= 5 and len(collected) < limit}
+
+    async def order(self, order_id):
+        raw, _ = await self.call(
+            "GET", f"orders/{order_id}", params={"context": "edit"},
+            not_found="ORDER_NOT_FOUND")
+        notes, _ = await self.call(
+            "GET", f"orders/{order_id}/notes", params={"per_page": 100},
+            not_found="ORDER_NOT_FOUND")
+        return order_view(raw, notes)
 
     async def get(self, product_id):
         raw, _ = await self.call("GET", f"products/{product_id}")
@@ -1045,6 +1213,62 @@ def create_router(store, woo=None, printful=None):
         except ValueError:
             raise OperatorError(400, "INVALID_PAGINATION") from None
 
+    def order_filters(request):
+        allowed = {"status", "product_id", "after", "before", "payment_method", "limit"}
+        if any(key not in allowed for key in request.query_params.keys()):
+            raise OperatorError(400, "INVALID_ORDER_FILTER")
+        result = {"limit": 20}
+        try:
+            if "limit" in request.query_params:
+                result["limit"] = int(request.query_params["limit"])
+            if not 1 <= result["limit"] <= 100:
+                raise ValueError()
+            if "product_id" in request.query_params:
+                result["product_id"] = valid_id(request.query_params["product_id"])
+            status_value = request.query_params.get("status")
+            valid_statuses = {
+                "any", "pending", "processing", "on-hold", "completed", "cancelled",
+                "refunded", "failed", "trash", "checkout-draft",
+            }
+            if status_value is not None:
+                if status_value not in valid_statuses:
+                    raise ValueError()
+                result["status"] = status_value
+            payment_method = request.query_params.get("payment_method")
+            if payment_method is not None:
+                if not re.fullmatch(r"[a-z0-9_-]{1,80}", payment_method):
+                    raise ValueError()
+                result["payment_method"] = payment_method
+            for name in ("after", "before"):
+                value = request.query_params.get(name)
+                if value is None:
+                    continue
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    raise ValueError()
+                result[name] = value
+            if result.get("after") and result.get("before"):
+                after = datetime.fromisoformat(result["after"].replace("Z", "+00:00"))
+                before = datetime.fromisoformat(result["before"].replace("Z", "+00:00"))
+                if after >= before:
+                    raise ValueError()
+        except (ValueError, TypeError, OverflowError):
+            raise OperatorError(400, "INVALID_ORDER_FILTER") from None
+        return result
+
+    def printful_order_filters(request):
+        allowed = {"limit", "offset", "status", "external_id"}
+        if any(key not in allowed for key in request.query_params.keys()):
+            raise OperatorError(400, "INVALID_PRINTFUL_ORDER_FILTER")
+        limit, offset = printful_pagination(request)
+        status_value = request.query_params.get("status")
+        external_id = request.query_params.get("external_id")
+        if status_value is not None and not re.fullmatch(r"[a-z0-9_-]{1,40}", status_value):
+            raise OperatorError(400, "INVALID_PRINTFUL_ORDER_FILTER")
+        if external_id is not None and not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", external_id):
+            raise OperatorError(400, "INVALID_PRINTFUL_ORDER_FILTER")
+        return limit, offset, status_value, external_id
+
     @router.get("/status")
     async def status(request: Request):
         async def action():
@@ -1072,6 +1296,24 @@ def create_router(store, woo=None, printful=None):
     async def product(product_id: str, request: Request):
         async def action():
             return 200, await service.woo.get(valid_id(product_id))
+        return await dispatch(request, action)
+
+    @router.get("/preorder/status")
+    async def preorder_status(request: Request):
+        async def action():
+            return 200, await service.woo.preorder_status()
+        return await dispatch(request, action)
+
+    @router.get("/orders")
+    async def orders(request: Request):
+        async def action():
+            return 200, await service.woo.orders(order_filters(request))
+        return await dispatch(request, action)
+
+    @router.get("/orders/{id}")
+    async def order(id: str, request: Request):
+        async def action():
+            return 200, await service.woo.order(valid_id(id))
         return await dispatch(request, action)
 
     @router.patch("/products/{product_id}")
@@ -1208,6 +1450,23 @@ def create_router(store, woo=None, printful=None):
     async def printful_templates(request: Request):
         async def action():
             return 200, await printful_client.templates(*printful_pagination(request))
+        return await dispatch(request, action)
+
+    @router.get("/printful/orders")
+    async def printful_orders(request: Request):
+        async def action():
+            return 200, await printful_client.orders(*printful_order_filters(request))
+        return await dispatch(request, action)
+
+    @router.get("/printful/orders/{id}")
+    async def printful_order(id: str, request: Request):
+        async def action():
+            if not (id.isascii() and (
+                    id.isdecimal() or (
+                        id.startswith("@")
+                        and re.fullmatch(r"@[A-Za-z0-9_-]{1,100}", id)))):
+                raise OperatorError(400, "INVALID_PRINTFUL_ORDER_ID")
+            return 200, await printful_client.order(id)
         return await dispatch(request, action)
 
     @router.get("/printful/templates/{template_id}")

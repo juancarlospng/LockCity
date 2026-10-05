@@ -59,12 +59,17 @@ The database credential and all API credentials belong only in Render secrets.
 - `GET /api/operator/v1/products?page=1&per_page=20`
 - `GET /api/operator/v1/products/{id}`
 - `PATCH /api/operator/v1/products/{id}`
+- `GET /api/operator/v1/preorder/status`
+- `GET /api/operator/v1/orders?status=&product_id=&after=&before=&payment_method=&limit=`
+- `GET /api/operator/v1/orders/{id}`
 - `GET /api/operator/v1/aw26/products/{id}`
 - `PATCH /api/operator/v1/aw26/products/{id}`
 - `GET /api/operator/v1/audit?page=1&per_page=20`
 - `GET /api/operator/v1/printful/status`
 - `GET /api/operator/v1/printful/templates?limit=20&offset=0`
 - `GET /api/operator/v1/printful/templates/{id}`
+- `GET /api/operator/v1/printful/orders?status=&external_id=&limit=&offset=`
+- `GET /api/operator/v1/printful/orders/{id}`
 - `GET /api/operator/v1/printful/templates/{id}/mockup-styles`
 - `POST /api/operator/v1/printful/templates/{id}/mockup-tasks/dry-run`
 - `POST /api/operator/v1/printful/templates/{id}/mockup-tasks`
@@ -78,6 +83,16 @@ The Printful integration uses GET for product and task data. Only the dedicated
 mockup task route sends a POST upstream, generating temporary review images
 without creating or publishing a product. Generation is restricted to the 17
 IDs in `AW26_TEMPLATE_IDS` and requires an independently enabled flag.
+
+The pre-order status route reads the effective WordPress runtime switch through
+an authenticated plugin route; it does not read or return `wp-config.php`. The
+WooCommerce order routes expose only operational IDs, status, totals, payment
+method, payment/transaction presence, product/variation quantities, allowlisted
+Lock City pre-order metadata, and sanitized relevant notes. They exclude customer,
+billing and shipping data. Printful order routes use official GET endpoints and
+remove recipient, address, email, phone, tracking identifiers and file data. A
+Printful `draft` order is reported as requiring manual confirmation; no endpoint
+in this observability group can confirm or mutate it.
 
 The catalog-variant pricing route calls Printful v2 with `currency=USD` and
 `selling_region_name=worldwide`. It preserves the official variant technique

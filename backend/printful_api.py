@@ -1,6 +1,7 @@
 """Printful client for product reviews and isolated mockup generation."""
 import os
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 import httpx
 
@@ -74,6 +75,70 @@ def normalize_template(raw):
 
 def _text(value):
     return value if isinstance(value, str) and value else None
+
+
+def normalize_printful_order(raw):
+    """Return operational order state without recipient, address, email or phone."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("id"), int):
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    status = raw.get("status") if isinstance(raw.get("status"), str) else ""
+    costs = raw.get("retail_costs") if isinstance(raw.get("retail_costs"), dict) else {}
+    safe_costs = {}
+    for name in ("currency", "subtotal", "discount", "shipping", "tax", "vat", "total"):
+        value = costs.get(name)
+        if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+            safe_costs[name] = value
+    items = []
+    for item in _list(raw.get("items")):
+        if not isinstance(item, dict):
+            continue
+        items.append({
+            "item_id": item.get("id") if isinstance(item.get("id"), int) else None,
+            "external_id": _text(item.get("external_id")),
+            "variant_id": item.get("variant_id")
+            if isinstance(item.get("variant_id"), int) else None,
+            "external_variant_id": _text(item.get("external_variant_id")),
+            "quantity": item.get("quantity")
+            if isinstance(item.get("quantity"), int) and not isinstance(item.get("quantity"), bool)
+            else None,
+            "name": _text(item.get("name")),
+        })
+    shipments = []
+    for shipment in _list(raw.get("shipments")):
+        if not isinstance(shipment, dict):
+            continue
+        shipments.append({
+            "shipment_id": shipment.get("id")
+            if isinstance(shipment.get("id"), int) else None,
+            "status": _text(shipment.get("status")),
+            "carrier": _text(shipment.get("carrier")),
+            "service": _text(shipment.get("service")),
+            "shipped_at": _timestamp(shipment.get("shipped_at")),
+            "estimated_delivery": _timestamp(shipment.get("estimated_delivery")),
+        })
+    if status == "draft":
+        manual_confirm, production_started, fulfillment_confirmed = True, False, False
+    elif status in {"pending", "onhold", "inreview", "failed"}:
+        manual_confirm, production_started, fulfillment_confirmed = False, False, True
+    elif status in {"inprocess", "partial", "fulfilled"}:
+        manual_confirm, production_started, fulfillment_confirmed = False, True, True
+    elif status in {"canceled", "cancelled"}:
+        manual_confirm, production_started, fulfillment_confirmed = False, False, False
+    else:
+        manual_confirm = production_started = fulfillment_confirmed = None
+    return {
+        "printful_order_id": raw["id"],
+        "external_id": _text(raw.get("external_id")),
+        "status": status,
+        "created_at": _timestamp(raw.get("created")),
+        "updated_at": _timestamp(raw.get("updated")),
+        "retail_costs": safe_costs,
+        "items": items,
+        "shipments": shipments,
+        "manual_confirm_required": manual_confirm,
+        "production_started": production_started,
+        "fulfillment_confirmed": fulfillment_confirmed,
+    }
 
 
 def _safe_validation_text(value):
@@ -695,6 +760,36 @@ class PrintfulClient:
         if not isinstance(result, dict):
             raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
         return normalize_sync_product(result.get("sync_product"), result.get("sync_variants"))
+
+    async def orders(self, limit, offset, status=None, external_id=None):
+        if external_id is not None:
+            try:
+                item = await self.order("@" + external_id)
+            except OperatorError as exc:
+                if exc.code == "PRINTFUL_NOT_FOUND":
+                    return {"items": [], "limit": limit, "offset": offset, "total": 0}
+                raise
+            return {"items": [item], "limit": limit, "offset": offset, "total": 1}
+        params = {"limit": limit, "offset": offset}
+        if status is not None:
+            params["status"] = status
+        payload = await self.get("/orders", params, await self.store_headers())
+        result = payload.get("result")
+        if not isinstance(result, list):
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+        paging = payload.get("paging") if isinstance(payload.get("paging"), dict) else {}
+        return {
+            "items": [normalize_printful_order(item) for item in result],
+            "limit": paging.get("limit", limit),
+            "offset": paging.get("offset", offset),
+            "total": paging.get("total") if isinstance(paging.get("total"), int) else None,
+        }
+
+    async def order(self, order_id):
+        encoded = quote(str(order_id), safe="@")
+        payload = await self.get(f"/orders/{encoded}", extra_headers=await self.store_headers())
+        result = payload.get("result")
+        return normalize_printful_order(result)
 
     async def mockup_styles(self, template_id, template=None):
         template = template or await self.template(template_id)

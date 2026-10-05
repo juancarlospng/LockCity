@@ -10,7 +10,7 @@ from operator_api import (AW26_ACTIVE_WOO_PRODUCT_IDS,
                           AW26_MERCHANDISING_WRITE_PRODUCT_IDS,
                           AW26_WOO_PRODUCT_IDS, OperatorError, WooClient,
                           aw26_commercial_version, create_router, digest,
-                          product_view)
+                          order_view, preorder_status_view, product_view)
 
 
 class Store:
@@ -75,6 +75,23 @@ class Woo:
     async def call(self, method, path, params=None):
         return [self.raw], {"X-WP-Total": "205", "X-WP-TotalPages": "11"}
 
+    async def preorder_status(self):
+        return preorder_status_view({
+            "aw26_preorder_sales_enabled": False,
+            "source": "wordpress_runtime",
+            "environment": "production",
+            "checked_at": "2026-10-05T00:00:00Z",
+        })
+
+    async def orders(self, filters):
+        return {"items": [], "count": 0, "scanned": 0, "scan_limited": False,
+                "filters": filters}
+
+    async def order(self, order_id):
+        if order_id != 25:
+            raise OperatorError(404, "ORDER_NOT_FOUND")
+        return order_view({"id": 25, "status": "pending", "line_items": []})
+
 
 @pytest.fixture
 def setup(monkeypatch):
@@ -101,7 +118,10 @@ def body(setup):
             "expected_version": product_view(setup[2].raw)["version"]}
 
 
-@pytest.mark.parametrize("path", ["/status", "/products", "/products/1", "/audit"])
+@pytest.mark.parametrize("path", [
+    "/status", "/products", "/products/1", "/audit", "/preorder/status",
+    "/orders", "/orders/25", "/printful/orders", "/printful/orders/1",
+])
 def test_auth(setup, path):
     assert request(setup, "GET", path, headers={}).status_code == 401
 
@@ -120,6 +140,59 @@ def test_reads_and_pagination(setup):
     assert "hidden" not in str(r)
     assert request(setup, "GET", "/products/2").status_code == 404
     assert request(setup, "GET", "/products?per_page=101").status_code == 400
+
+
+def test_preorder_status_is_effective_runtime_value_only(setup):
+    response = request(setup, "GET", "/preorder/status")
+    assert response.status_code == 200
+    assert response.json() == {
+        "aw26_preorder_sales_enabled": False,
+        "source": "wordpress_runtime",
+        "environment": "production",
+        "checked_at": "2026-10-05T00:00:00Z",
+    }
+
+
+def test_order_filters_and_detail_are_read_only_and_pii_free(setup):
+    response = request(
+        setup, "GET",
+        "/orders?status=pending&product_id=3915&payment_method=ppcp-gateway"
+        "&after=2026-10-04T23:00:00Z&before=2026-10-05T00:00:00Z&limit=10")
+    assert response.status_code == 200
+    assert response.json()["filters"]["product_id"] == 3915
+    assert request(setup, "GET", "/orders?unknown=1").status_code == 400
+    assert request(setup, "GET", "/orders?limit=101").status_code == 400
+    assert request(setup, "GET", "/orders/25").status_code == 200
+    assert request(setup, "GET", "/orders/26").status_code == 404
+
+
+def test_order_normalization_allowlists_metadata_notes_and_redacts_pii():
+    raw = {
+        "id": 25, "date_created": "2026-10-05T01:18:08", "status": "pending",
+        "currency": "USD", "total": "36.69", "shipping_total": "4.69",
+        "payment_method": "ppcp-gateway", "transaction_id": "secret-transaction",
+        "date_paid": None,
+        "billing": {"email": "buyer@example.test", "phone": "+123456"},
+        "line_items": [{"product_id": 3915, "variation_id": 0, "quantity": 1,
+                        "subtotal": "32.00", "total": "32.00",
+                        "name": "Lockmark Ribbed Beanie"}],
+        "meta_data": [
+            {"key": "lock_city_order_type", "value": "PRE_ORDER"},
+            {"key": "private_customer_note", "value": "do not expose"},
+        ],
+    }
+    view = order_view(raw, [{
+        "date_created": "2026-10-05T01:19:00",
+        "note": "PayPal request for buyer@example.test https://private.invalid/x",
+    }, {"note": "Customer address changed"}])
+    serialized = str(view)
+    assert view["transaction_id_present"] is True
+    assert view["payment_captured"] is False
+    assert view["metadata"] == {"lock_city_order_type": "PRE_ORDER"}
+    assert view["order_notes"][0]["note"] == "PayPal request for [REDACTED] [REDACTED URL]"
+    assert "secret-transaction" not in serialized
+    assert "buyer@example" not in serialized
+    assert "private_customer_note" not in serialized
 
 
 @pytest.mark.parametrize("change", [{"price": "2"}, {"name": ""}, {"name": 5},
@@ -191,6 +264,30 @@ def test_transport_allowlist_and_sanitization(monkeypatch):
         asyncio.run(WooClient().rename(1, "Only name"))
     assert error.value.code == "WOOCOMMERCE_ERROR"
     assert captured == [{"name": "Only name"}]
+
+
+def test_observability_transport_is_get_only_and_uses_server_auth(monkeypatch):
+    monkeypatch.setenv("WC_REST_URL", "https://store.invalid")
+    monkeypatch.setenv("WC_REST_CONSUMER_KEY", "private-key")
+    monkeypatch.setenv("WC_REST_CONSUMER_SECRET", "private-secret")
+    captured = []
+
+    async def send(_self, method, url, **kwargs):
+        captured.append((method, url, kwargs.get("auth")))
+        if url.endswith("/lock-city/v1/preorder/status"):
+            return httpx.Response(200, json={
+                "aw26_preorder_sales_enabled": False, "source": "wordpress_runtime",
+                "environment": "production", "checked_at": "2026-10-05T00:00:00Z"})
+        if url.endswith("/orders/25/notes"):
+            return httpx.Response(200, json=[])
+        return httpx.Response(200, json={"id": 25, "status": "pending", "line_items": []})
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", send)
+    client = WooClient()
+    assert asyncio.run(client.preorder_status())["aw26_preorder_sales_enabled"] is False
+    assert asyncio.run(client.order(25))["order_id"] == 25
+    assert all(method == "GET" for method, _url, _auth in captured)
+    assert all(auth == ("private-key", "private-secret") for _method, _url, auth in captured)
 
 
 def test_simultaneous_idempotent_requests(setup):

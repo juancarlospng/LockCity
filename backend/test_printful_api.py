@@ -10,6 +10,7 @@ from operator_api import OperatorError, create_router
 from printful_api import (AW26_TEMPLATE_IDS, PrintfulClient, build_mockup_request_body,
                           group_styles_by_placement,
                           normalize_mockup_task_result, normalize_template_detail,
+                          normalize_printful_order,
                           plan_mockup_batches,
                           recommend_styles_by_placement, sanitize_printful_validation,
                           select_representative_variants)
@@ -243,6 +244,13 @@ class Printful:
     async def sync_product(self, product_id):
         return {"syncProductId": product_id}
 
+    async def orders(self, limit, offset, status=None, external_id=None):
+        return {"items": [], "limit": limit, "offset": offset, "total": 0,
+                "status": status, "external_id": external_id}
+
+    async def order(self, order_id):
+        return {"printful_order_id": int(str(order_id).lstrip("@") or "0")}
+
     async def catalog_variant_prices(self, variant_id):
         return {"catalogVariantId": variant_id, "currency": "USD",
                 "productionCurrency": "USD", "sellingRegionName": "worldwide",
@@ -297,6 +305,8 @@ class Printful:
     "/api/operator/v1/printful/templates/12",
     "/api/operator/v1/printful/sync-products",
     "/api/operator/v1/printful/sync-products/99",
+    "/api/operator/v1/printful/orders",
+    "/api/operator/v1/printful/orders/99",
     "/api/operator/v1/printful/catalog-variants/4016/prices",
     "/api/operator/v1/printful/catalog-products/71/prices",
     "/api/operator/v1/printful/templates/12/mockup-styles",
@@ -335,9 +345,62 @@ def test_operator_routes_are_get_only_and_writes_stay_disabled(monkeypatch):
     assert run(request("POST", "/api/operator/v1/printful/templates")).status_code == 405
     assert run(request("PUT", "/api/operator/v1/printful/sync-products/1")).status_code == 405
     assert run(request("DELETE", "/api/operator/v1/printful/templates/1")).status_code == 405
+    assert run(request("POST", "/api/operator/v1/printful/orders")).status_code == 405
+    assert run(request("PATCH", "/api/operator/v1/printful/orders/1")).status_code == 405
     assert run(request("POST", "/api/operator/v1/printful/catalog-variants/4016/prices")).status_code == 405
     assert run(request("PATCH", "/api/operator/v1/printful/catalog-products/71/prices")).status_code == 405
     assert os.getenv("OPERATOR_WRITES_ENABLED") == "false"
+
+
+def test_printful_order_normalization_excludes_recipient_and_tracks_hold_state():
+    raw = {
+        "id": 900, "external_id": "4180", "status": "draft",
+        "created": 1791155888, "updated": 1791155900,
+        "recipient": {"name": "Private Buyer", "email": "private@example.test",
+                      "address1": "Private street"},
+        "retail_costs": {"currency": "USD", "subtotal": "32.00",
+                         "shipping": "4.69", "total": "36.69"},
+        "items": [{"id": 1, "external_id": "line-1", "variant_id": 16178,
+                   "external_variant_id": "3915", "quantity": 1,
+                   "name": "Lockmark Ribbed Beanie", "files": [{"url": "private"}]}],
+        "shipments": [],
+    }
+    result = normalize_printful_order(raw)
+    serialized = str(result)
+    assert result["manual_confirm_required"] is True
+    assert result["production_started"] is False
+    assert result["fulfillment_confirmed"] is False
+    assert "Private Buyer" not in serialized
+    assert "private@example" not in serialized
+    assert "Private street" not in serialized
+
+
+def test_printful_orders_use_get_store_scope_and_support_external_lookup(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("PRINTFUL_STORE_ID", "321")
+    requests = []
+    order = {"id": 900, "external_id": "4180", "status": "draft",
+             "items": [], "shipments": [], "retail_costs": {"currency": "USD"}}
+
+    def handler(request):
+        requests.append(request)
+        assert request.method == "GET"
+        assert request.headers["X-PF-Store-Id"] == "321"
+        if request.url.path == "/orders":
+            return httpx.Response(200, json={"code": 200, "result": [order],
+                                             "paging": {"total": 1, "limit": 20, "offset": 0}})
+        assert request.url.path == "/orders/@4180"
+        return httpx.Response(200, json={"code": 200, "result": order})
+
+    client = client_for(handler)
+    listed = run(client.orders(20, 0, "draft"))
+    found = run(client.orders(20, 0, external_id="4180"))
+    detail = run(client.order("@4180"))
+    assert listed["items"][0]["printful_order_id"] == 900
+    assert found["total"] == 1
+    assert detail["external_id"] == "4180"
+    assert requests[0].url.params["status"] == "draft"
+    assert TOKEN not in str(listed) + str(found) + str(detail)
 
 
 def test_catalog_variant_prices_use_official_read_only_endpoint(monkeypatch):
