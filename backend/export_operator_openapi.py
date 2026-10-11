@@ -76,9 +76,20 @@ def contract():
         "Aw26Categories": {"type": "object", "required": ["categories"], "properties": {
             "categories": {"type": "array", "items": {
                 "$ref": "#/components/schemas/Aw26Category"}}}},
-        "Status": {"type": "object", "required": ["status", "audit", "woocommerce", "writes_enabled"],
+        "Status": {"type": "object", "required": ["status", "audit", "woocommerce", "environment",
+                                                       "woo_target", "wordpress_target", "paypal_environment",
+                                                       "printful_context", "writes_enabled"],
                    "properties": {"status": {"type": "string"}, "audit": {"type": "string"},
                                   "woocommerce": {"type": "string"}, "writes_enabled": {"type": "boolean"},
+                                  "environment": {"type": "string", "enum": ["production", "staging"]},
+                                  "woo_target": {"type": ["string", "null"]},
+                                  "wordpress_target": {"type": ["string", "null"]},
+                                  "paypal_environment": {"type": "string"},
+                                  "printful_context": {"type": "object",
+                                                       "properties": {
+                                                           "store_configured": {"type": "boolean"},
+                                                           "access": {"type": "string"}},
+                                                       "required": ["store_configured", "access"]},
                                   "aw26_product_writes_enabled": {"type": "boolean"},
                                   "aw26_publish_enabled": {"type": "boolean"}}},
         "PreorderStatus": {"type": "object", "required": [

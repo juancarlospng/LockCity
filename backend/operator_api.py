@@ -16,6 +16,8 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, ValidationError
 from starlette.responses import JSONResponse
 
+from operator_environment import runtime_status
+
 
 class OperatorError(Exception):
     def __init__(self, status, code, details=None):
@@ -1285,6 +1287,7 @@ def create_router(store, woo=None, printful=None):
             await store.ping()
             await service.woo.call("GET", "products", params={"per_page": 1})
             return 200, {"status": "ok", "audit": "ok", "woocommerce": "ok",
+                         **runtime_status(),
                          "writes_enabled": os.getenv("OPERATOR_WRITES_ENABLED") == "true",
                          "aw26_product_writes_enabled":
                              os.getenv("AW26_PRODUCT_WRITE_ENABLED") == "true",

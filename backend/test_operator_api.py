@@ -142,6 +142,22 @@ def test_reads_and_pagination(setup):
     assert request(setup, "GET", "/products?per_page=101").status_code == 400
 
 
+def test_status_reports_non_secret_runtime_identity(setup, monkeypatch):
+    monkeypatch.setenv("APP_ENV", "staging")
+    monkeypatch.setenv("WC_REST_URL", "https://pruebasv2.lockcityclothes.com")
+    monkeypatch.setenv("PAYPAL_MODE", "sandbox")
+    monkeypatch.setenv("PRINTFUL_STORE_ID", "secret-store-id")
+    monkeypatch.setenv("PRINTFUL_MOCKUP_GENERATION_ENABLED", "false")
+    payload = request(setup, "GET", "/status").json()
+    assert payload["environment"] == "staging"
+    assert payload["woo_target"] == "pruebasv2.lockcityclothes.com"
+    assert payload["wordpress_target"] == "pruebasv2.lockcityclothes.com"
+    assert payload["paypal_environment"] == "sandbox"
+    assert payload["printful_context"] == {
+        "store_configured": True, "access": "read_only"}
+    assert "secret-store-id" not in str(payload)
+
+
 def test_preorder_status_is_effective_runtime_value_only(setup):
     response = request(setup, "GET", "/preorder/status")
     assert response.status_code == 200

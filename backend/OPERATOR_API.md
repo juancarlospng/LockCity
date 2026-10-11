@@ -26,6 +26,9 @@ The database credential and all API credentials belong only in Render secrets.
 
 ## Render environment (names only)
 
+- `APP_ENV` — deployment identity: `production` or `staging`. A staging instance
+  fails to start unless `WC_REST_URL` resolves to `pruebasv2.lockcityclothes.com`
+  and `PAYPAL_MODE=sandbox`.
 - `DATABASE_URL` — secret server-side Supabase/Postgres connection string.
 - `WC_REST_URL` — WooCommerce origin; configuration rather than a credential.
 - `WC_REST_CONSUMER_KEY` — secret.
@@ -36,6 +39,9 @@ The database credential and all API credentials belong only in Render secrets.
 - `PRINTFUL_STORE_ID` — optional server-side Printful store identifier. It is only
   required when an account-level token can access more than one WooCommerce store;
   a single WooCommerce store is selected automatically through the read-only Stores API.
+- `PAYPAL_MODE` — non-secret environment marker. It must be `sandbox` in staging.
+  PayPal credentials and connection state remain owned by the target WordPress site;
+  this marker does not claim that onboarding or webhooks are ready.
 - `PRINTFUL_MOCKUP_GENERATION_ENABLED` — set to `true` only on the Operator API when
   generating review mockups. This permits only Printful mockup task creation;
   `OPERATOR_WRITES_ENABLED` stays `false` and WooCommerce writes remain blocked.
@@ -46,6 +52,17 @@ The database credential and all API credentials belong only in Render secrets.
 - `AW26_PUBLISH_ENABLED` — forced to `false` by `start.py`; the AW26 endpoint never
   accepts a status field and refuses to run under an unsafe publish configuration.
 - `PORT` — provided by Render.
+
+For the isolated staging instance use a separate `OPERATOR_API_TOKEN`, staging-only
+WooCommerce consumer credentials, and preferably a separate `PRINTFUL_STORE_ID` and
+token. If Printful cannot be separated, grant only `orders/read`,
+`product_templates/read`, and `sync_products/read`; keep
+`PRINTFUL_MOCKUP_GENERATION_ENABLED=false`. The launcher forces every available
+write switch off on every start.
+
+The authenticated `GET /api/operator/v1/status` response includes `environment`,
+`woo_target`, `wordpress_target`, `paypal_environment`, and a redacted
+`printful_context`. It never returns credentials or the Printful store identifier.
 
 `MONGO_URL` and `DB_NAME` are not used by this service. They remain documented in
 `legacy.env.example` for the separate legacy backend.

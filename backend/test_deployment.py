@@ -3,8 +3,10 @@ import os
 from pathlib import Path
 
 import httpx
+import pytest
 
 from operator_server import app  # noqa: E402
+from operator_server import create_app  # noqa: E402
 from start import production_settings  # noqa: E402
 
 
@@ -76,11 +78,29 @@ def test_production_launcher_binds_provider_port_and_forces_read_only(monkeypatc
     monkeypatch.setenv("OPERATOR_WRITES_ENABLED", "true")
     monkeypatch.setenv("AW26_PUBLISH_ENABLED", "true")
     monkeypatch.delenv("AW26_PRODUCT_WRITE_ENABLED", raising=False)
+    monkeypatch.setenv("PRINTFUL_MOCKUP_GENERATION_ENABLED", "true")
     settings = production_settings()
     assert settings == {"app": "operator_server:app", "host": "0.0.0.0", "port": 9123}
     assert os.environ["OPERATOR_WRITES_ENABLED"] == "false"
     assert os.environ["AW26_PUBLISH_ENABLED"] == "false"
     assert os.environ["AW26_PRODUCT_WRITE_ENABLED"] == "false"
+    assert os.environ["PRINTFUL_MOCKUP_GENERATION_ENABLED"] == "false"
+
+
+def test_staging_refuses_production_woo_target(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "staging")
+    monkeypatch.setenv("PAYPAL_MODE", "sandbox")
+    monkeypatch.setenv("WC_REST_URL", "https://commerce.lockcityclothes.com")
+    with pytest.raises(RuntimeError, match="staging Operator must target"):
+        create_app(store=object())
+
+
+def test_staging_requires_sandbox_paypal_marker(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "staging")
+    monkeypatch.setenv("WC_REST_URL", "https://pruebasv2.lockcityclothes.com")
+    monkeypatch.setenv("PAYPAL_MODE", "live")
+    with pytest.raises(RuntimeError, match="PAYPAL_MODE=sandbox"):
+        create_app(store=object())
 
 
 def test_production_launcher_rejects_invalid_port(monkeypatch):
