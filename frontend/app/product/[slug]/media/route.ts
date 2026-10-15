@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { commerce } from "@/lib/commerce";
+import { fetchWooMedia } from "@/lib/media-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,34 +20,10 @@ export async function GET(
   const configuredStore = process.env.WC_STORE_URL;
   if (!source || !configuredStore) return NextResponse.json({ error: "image_not_found" }, { status: 404 });
 
-  let imageUrl: URL;
-  let storeUrl: URL;
   try {
-    imageUrl = new URL(source);
-    storeUrl = new URL(configuredStore);
-  } catch {
-    return NextResponse.json({ error: "image_not_found" }, { status: 404 });
-  }
-  if (
-    imageUrl.origin !== storeUrl.origin ||
-    !imageUrl.pathname.startsWith("/wp-content/uploads/") ||
-    imageUrl.username ||
-    imageUrl.password
-  ) {
-    return NextResponse.json({ error: "image_not_found" }, { status: 404 });
-  }
-
-  try {
-    const response = await fetch(imageUrl, {
-      redirect: "error",
-      cache: "no-store",
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!response.ok) return NextResponse.json({ error: "image_unavailable" }, { status: 502 });
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!/^image\/(jpeg|png|webp|gif|avif)(;|$)/i.test(contentType)) {
-      return NextResponse.json({ error: "image_unavailable" }, { status: 415 });
-    }
+    const response = await fetchWooMedia(source, configuredStore);
+    if (!response) return NextResponse.json({ error: "image_unavailable" }, { status: 502 });
+    const contentType = response.headers.get("content-type") ?? "image/jpeg";
     return new NextResponse(response.body, {
       headers: {
         "Content-Type": contentType,

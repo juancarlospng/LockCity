@@ -213,9 +213,9 @@ export function CheckoutForm() {
   if (!checkout && !error) return <p className="mt-16 text-xs uppercase tracking-[0.2em] text-steel">Loading checkout…</p>;
   if (!checkout) return <p className="mt-16 text-sm text-bone" role="alert">{error}</p>;
   if (checkout.items.length === 0) return (
-    <div className="mt-16 border border-graphite bg-onyx p-8">
-      <p className="font-display text-4xl uppercase text-bone">Your bag is empty</p>
-      <Link href="/shop" className="mt-6 inline-block border border-bone px-6 py-3 text-[10px] uppercase tracking-[0.24em]">Shop products</Link>
+    <div className="mt-12 border border-graphite bg-onyx p-6 sm:mt-16 sm:p-8">
+      <p className="font-display text-3xl uppercase text-bone sm:text-4xl">Your bag is empty</p>
+      <Link href="/shop" className="mt-5 inline-block border border-bone px-6 py-3 text-[10px] uppercase tracking-[0.24em] sm:mt-6">Shop products</Link>
     </div>
   );
 

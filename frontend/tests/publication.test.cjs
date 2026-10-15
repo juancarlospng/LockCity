@@ -42,6 +42,9 @@ test('legal pages retain seller identity, consumer rights and the published priv
   assert.match(privacy, /Your privacy rights/i);
   assert.match(privacy, /OpenAI/);
   assert.match(privacy, /Presidente Meriño, La Vega/);
+  const policy = read('components/PolicyPage.tsx');
+  assert.match(policy, /max-w-\[46rem\] text-\[15px\] leading-8 text-steel/);
+  assert.match(policy, /mt-6 space-y-5/);
 });
 
 test('order confirmation and bag avoid technical infrastructure copy', () => {

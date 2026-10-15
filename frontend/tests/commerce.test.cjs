@@ -14,6 +14,17 @@ compiled._compile(ts.transpileModule(readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, filename);
 const { WooCommerceAdapter, mapProduct } = compiled.exports;
+
+function loadTs(path) {
+  const target = join(__dirname, '..', path);
+  const loaded = new Module(target, module);
+  loaded.filename = target;
+  loaded.paths = module.paths;
+  loaded._compile(ts.transpileModule(readFileSync(target, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText, target);
+  return loaded.exports;
+}
 const product = (id) => ({ id, slug: `product-${id}`, name: `Product ${id}`, type: 'simple',
   is_in_stock: true, is_purchasable: true,
   prices: { price: '2709', currency_code: 'USD', currency_minor_unit: 2 },
@@ -75,6 +86,31 @@ test('preserves IDs, USD, original image metadata and every category', async () 
   assert.deepEqual(mapped.categories, raw.categories);
   const adapter = new WooCommerceAdapter('https://store.test', async () => json([raw]));
   assert.equal((await adapter.getProductsByCollection('summer')).length, 1);
+});
+
+test('image candidates safely bridge the commerce host while rejecting arbitrary origins', async () => {
+  const { wooMediaCandidates, fetchWooMedia } = loadTs('lib/media-core.ts');
+  const path = '/wp-content/uploads/2026/09/product.jpg';
+  assert.deepEqual(
+    wooMediaCandidates(`https://commerce.lockcityclothes.com${path}`, 'https://commerce.lockcityclothes.com').map((url) => url.hostname),
+    ['commerce.lockcityclothes.com', 'lockcityclothes.com'],
+  );
+  assert.throws(() => wooMediaCandidates(`https://evil.example${path}`, 'https://commerce.lockcityclothes.com'));
+  assert.throws(() => wooMediaCandidates('https://commerce.lockcityclothes.com/private/file.jpg', 'https://commerce.lockcityclothes.com'));
+
+  const calls = [];
+  const response = await fetchWooMedia(
+    `https://commerce.lockcityclothes.com${path}`,
+    'https://commerce.lockcityclothes.com',
+    async (url) => {
+      calls.push(url.hostname);
+      return url.hostname === 'commerce.lockcityclothes.com'
+        ? new Response('missing', { status: 404, headers: { 'content-type': 'text/html' } })
+        : new Response('image', { status: 200, headers: { 'content-type': 'image/jpeg' } });
+    },
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, ['commerce.lockcityclothes.com', 'lockcityclothes.com']);
 });
 test('parent stock and price are never copied to unresolved variations', () => {
   const raw = { ...product(1), type: 'variable', has_options: true,

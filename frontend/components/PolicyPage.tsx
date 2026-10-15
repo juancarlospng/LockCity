@@ -18,9 +18,9 @@ export function PolicyPage({
         <h1 className="mt-4 max-w-6xl font-display text-6xl uppercase leading-[0.88] text-bone sm:text-8xl lg:text-9xl">
           {title}
         </h1>
-        {intro ? <p className="mt-7 max-w-2xl text-sm leading-7 text-steel">{intro}</p> : null}
+        {intro ? <p className="mt-7 max-w-2xl text-sm leading-8 text-steel">{intro}</p> : null}
       </header>
-      <div className="legal-copy mx-auto mt-12 max-w-3xl text-sm leading-7 text-steel sm:mt-16">
+      <div className="legal-copy mx-auto mt-12 max-w-[46rem] text-[15px] leading-8 text-steel sm:mt-16">
         {children}
       </div>
     </article>
@@ -29,9 +29,9 @@ export function PolicyPage({
 
 export function PolicySection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="border-t border-graphite py-8 first:border-t-0 first:pt-0 sm:py-10">
+    <section className="border-t border-graphite py-9 first:border-t-0 first:pt-0 sm:py-11">
       <h2 className="font-display text-3xl uppercase leading-none text-bone sm:text-4xl">{title}</h2>
-      <div className="mt-5 space-y-4">{children}</div>
+      <div className="mt-6 space-y-5">{children}</div>
     </section>
   );
 }

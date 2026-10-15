@@ -5,7 +5,7 @@ import { ProductDetail } from "@/components/ProductDetail";
 import { commerce } from "@/lib/commerce";
 import { CatalogError } from "@/components/CatalogError";
 import type { Product } from "@/lib/types";
-import { isPublicStoreProduct, relatedStoreProducts } from "@/lib/merchandising";
+import { isPublicStoreProduct } from "@/lib/merchandising";
 import { pageMetadata, plainText, productImagePath, serializeJsonLd } from "@/lib/seo";
 import { productBreadcrumbData, productStructuredData } from "@/lib/structured-data";
 
@@ -55,12 +55,11 @@ export default async function ProductPage({
   let product;
   try { product = await getProduct(slug); }
   catch (error) { return <CatalogError error={error} />; }
-  if (!product) notFound();
-  let all: Product[] = [];
+  if (!product || !isPublicStoreProduct(product.wooProductId)) notFound();
+  let related: Product[] = [];
   let relatedError: unknown;
-  try { all = await commerce.getProducts(); }
+  try { related = await commerce.getRelatedProducts(product); }
   catch (error) { relatedError = error; }
-  const related = relatedStoreProducts(product, all);
 
   return <>
     <script

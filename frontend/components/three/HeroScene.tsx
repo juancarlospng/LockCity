@@ -9,8 +9,12 @@ import { seededRandom } from "@/lib/utils";
 import { SceneCanvas, useQuality, useReducedMotionPref } from "./SceneCanvas";
 
 export const CITY_CAMERA_START = [0, 1.7, 10] as const;
-export const CITY_CAMERA_MID = [0, 1.65, 8.45] as const;
-export const CITY_CAMERA_END = [0, 1.58, 7.05] as const;
+export const CITY_CAMERA_MID = [0.18, 1.64, 7.15] as const;
+export const CITY_CAMERA_END = [0.36, 1.55, 5.05] as const;
+export const CITY_CAMERA_MID_MOBILE = [0.12, 1.64, 7.7] as const;
+export const CITY_CAMERA_END_MOBILE = [0.22, 1.58, 5.85] as const;
+export const CITY_CAMERA_TARGET_START = [0, 1.5, 0] as const;
+export const CITY_CAMERA_TARGET_END = [0, 1.5, -4] as const;
 
 function smoothstep(value: number) {
   const clamped = THREE.MathUtils.clamp(value, 0, 1);
@@ -18,37 +22,48 @@ function smoothstep(value: number) {
 }
 
 function cityTravel(progress: number) {
-  if (progress <= 0.12) return smoothstep(progress / 0.12) * 0.04;
-  if (progress <= 0.72) return 0.04 + smoothstep((progress - 0.12) / 0.6) * 0.86;
-  if (progress <= 0.82) return 0.9 + smoothstep((progress - 0.72) / 0.1) * 0.1;
+  if (progress <= 0.12) return smoothstep(progress / 0.12) * 0.02;
+  if (progress <= 0.2) return 0.02 + smoothstep((progress - 0.12) / 0.08) * 0.08;
+  if (progress <= 0.68) return 0.1 + smoothstep((progress - 0.2) / 0.48) * 0.8;
+  if (progress <= 0.82) return 0.9 + smoothstep((progress - 0.68) / 0.14) * 0.1;
   return 1;
 }
 
 function CameraRig({ progress }: { progress?: MotionValue<number> }) {
-  const { camera, pointer } = useThree();
+  const { camera, pointer, size } = useThree();
   useFrame(() => {
     const p = progress?.get() ?? 0;
     const travel = cityTravel(p);
-    const firstLeg = smoothstep(Math.min(travel / 0.62, 1));
-    const secondLeg = smoothstep(Math.max((travel - 0.62) / 0.38, 0));
-    const pathX = THREE.MathUtils.lerp(CITY_CAMERA_START[0], CITY_CAMERA_MID[0], firstLeg);
+    const firstLeg = Math.min(travel / 0.58, 1);
+    const secondLeg = Math.max((travel - 0.58) / 0.42, 0);
+    const mid = size.width < 768 ? CITY_CAMERA_MID_MOBILE : CITY_CAMERA_MID;
+    const end = size.width < 768 ? CITY_CAMERA_END_MOBILE : CITY_CAMERA_END;
+    const pathX = THREE.MathUtils.lerp(
+      THREE.MathUtils.lerp(CITY_CAMERA_START[0], mid[0], firstLeg),
+      end[0],
+      secondLeg,
+    );
     const pathY = THREE.MathUtils.lerp(
-      THREE.MathUtils.lerp(CITY_CAMERA_START[1], CITY_CAMERA_MID[1], firstLeg),
-      CITY_CAMERA_END[1],
+      THREE.MathUtils.lerp(CITY_CAMERA_START[1], mid[1], firstLeg),
+      end[1],
       secondLeg,
     );
     const pathZ = THREE.MathUtils.lerp(
-      THREE.MathUtils.lerp(CITY_CAMERA_START[2], CITY_CAMERA_MID[2], firstLeg),
-      CITY_CAMERA_END[2],
+      THREE.MathUtils.lerp(CITY_CAMERA_START[2], mid[2], firstLeg),
+      end[2],
       secondLeg,
     );
     const pointerStrength = 1 - travel * 0.45;
     const targetX = pathX + pointer.x * 0.55 * pointerStrength;
     const targetY = pathY + pointer.y * 0.24 * pointerStrength;
-    camera.position.x += (targetX - camera.position.x) * 0.045;
-    camera.position.y += (targetY - camera.position.y) * 0.045;
-    camera.position.z += (pathZ - camera.position.z) * 0.07;
-    camera.lookAt(0, 1.5, 0);
+    camera.position.x += (targetX - camera.position.x) * 0.08;
+    camera.position.y += (targetY - camera.position.y) * 0.08;
+    camera.position.z += (pathZ - camera.position.z) * 0.12;
+    camera.lookAt(
+      THREE.MathUtils.lerp(CITY_CAMERA_TARGET_START[0], CITY_CAMERA_TARGET_END[0], travel),
+      THREE.MathUtils.lerp(CITY_CAMERA_TARGET_START[1], CITY_CAMERA_TARGET_END[1], travel),
+      THREE.MathUtils.lerp(CITY_CAMERA_TARGET_START[2], CITY_CAMERA_TARGET_END[2], travel),
+    );
   });
   return null;
 }

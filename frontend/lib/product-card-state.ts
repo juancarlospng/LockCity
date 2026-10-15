@@ -12,6 +12,10 @@ export function getProductCardAction(product: Product): ProductCardAction {
   const soldOut = product.status === "SOLD_OUT" || product.availability?.is_in_stock === false;
   if (soldOut) return { kind: "sold-out", label: "Sold out" };
 
+  if (product.previewOnly) {
+    return { kind: "select-options", label: "Select options" };
+  }
+
   if (product.type === "variable") {
     return product.availability?.is_in_stock === true && product.availability?.is_purchasable === true
       ? { kind: "select-options", label: "Select options" }
