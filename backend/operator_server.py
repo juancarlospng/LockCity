@@ -1,4 +1,5 @@
 """Independent deployment application for LOCK CITY Operator API."""
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -6,6 +7,7 @@ from fastapi import FastAPI
 
 from operator_api import PostgresStore, create_router
 from operator_environment import validate_runtime_isolation
+from render_network_diagnostic import run_network_diagnostic
 
 
 def create_app(store=None, woo=None, printful=None):
@@ -14,10 +16,18 @@ def create_app(store=None, woo=None, printful=None):
 
     @asynccontextmanager
     async def lifespan(_app):
-        yield
-        close = getattr(operator_store, "close", None)
-        if close is not None:
-            await close()
+        diagnostic_task = None
+        if os.getenv("RENDER"):
+            diagnostic_task = asyncio.create_task(run_network_diagnostic())
+        try:
+            yield
+        finally:
+            if diagnostic_task is not None and not diagnostic_task.done():
+                diagnostic_task.cancel()
+                await asyncio.gather(diagnostic_task, return_exceptions=True)
+            close = getattr(operator_store, "close", None)
+            if close is not None:
+                await close()
 
     application = FastAPI(
         title="LOCK CITY Operator API",
