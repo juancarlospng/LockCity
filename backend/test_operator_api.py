@@ -518,7 +518,7 @@ def test_aw26_catalog_read_is_authenticated(aw26_setup):
     assert response.json()["products"][0]["id"] == 3823
 
 
-def test_aw26_single_read_uses_include_strategy_and_45_second_timeout(monkeypatch):
+def test_aw26_single_read_uses_include_strategy_and_bounded_timeouts(monkeypatch):
     product = copy.deepcopy(Aw26Woo().product)
     variations = copy.deepcopy(product.pop("variations"))
     product["variations"] = product.pop("variation_ids")
@@ -543,8 +543,10 @@ def test_aw26_single_read_uses_include_strategy_and_45_second_timeout(monkeypatc
     assert calls[0][1] == {
         "context": "edit", "include": "3823", "orderby": "include", "per_page": 2,
     }
-    assert calls[0][2].read == 45.0 and calls[0][3] == "product"
-    assert calls[1][2].read == 45.0 and calls[1][3] == "variations"
+    assert calls[0][2].connect == 30.0 and calls[0][2].read == 45.0
+    assert calls[0][3] == "product"
+    assert calls[1][2].connect == 30.0 and calls[1][2].read == 45.0
+    assert calls[1][3] == "variations"
 
 
 @pytest.mark.parametrize("products,status,code", [
@@ -564,19 +566,21 @@ def test_aw26_single_read_rejects_missing_or_mismatched_product(
     assert (error.value.status, error.value.code) == (status, code)
 
 
-def test_aw26_single_read_logs_safe_product_timeout(monkeypatch, caplog):
+def test_aw26_single_read_logs_safe_connect_timeout(monkeypatch, caplog):
     monkeypatch.setenv("WC_REST_URL", "https://store.invalid")
     monkeypatch.setenv("WC_REST_CONSUMER_KEY", "private-key")
     monkeypatch.setenv("WC_REST_CONSUMER_SECRET", "private-secret")
 
     async def send(*_args, **_kwargs):
-        raise httpx.ReadTimeout("sensitive upstream detail")
+        raise httpx.ConnectTimeout("sensitive upstream detail")
 
     monkeypatch.setattr(httpx.AsyncClient, "request", send)
     with pytest.raises(OperatorError) as error:
         asyncio.run(WooClient().get_aw26(3823))
     assert error.value.code == "WOOCOMMERCE_UNAVAILABLE"
-    assert "stage=product" in caplog.text and "result=timeout" in caplog.text
+    assert "stage=product" in caplog.text
+    assert "timeout_subtype=connect" in caplog.text
+    assert "error_class=ConnectTimeout" in caplog.text
     assert "sensitive upstream detail" not in caplog.text
     assert "private-secret" not in caplog.text
 
@@ -598,7 +602,9 @@ def test_aw26_single_read_logs_safe_variation_timeout(monkeypatch, caplog):
     with pytest.raises(OperatorError) as error:
         asyncio.run(WooClient().get_aw26(3823))
     assert error.value.code == "WOOCOMMERCE_UNAVAILABLE"
-    assert "stage=variations" in caplog.text and "result=timeout" in caplog.text
+    assert "stage=variations" in caplog.text
+    assert "timeout_subtype=read" in caplog.text
+    assert "error_class=ReadTimeout" in caplog.text
     assert "sensitive variation detail" not in caplog.text
 
 

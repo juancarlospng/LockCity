@@ -23,7 +23,7 @@ from operator_environment import runtime_status
 
 LOGGER = logging.getLogger(__name__)
 AW26_SINGLE_WOO_TIMEOUT = httpx.Timeout(
-    connect=10.0, read=45.0, write=10.0, pool=10.0)
+    connect=30.0, read=45.0, write=10.0, pool=10.0)
 
 
 class OperatorError(Exception):
@@ -408,8 +408,8 @@ class WooClient:
             return result, response.headers
         except OperatorError:
             raise
-        except httpx.TimeoutException:
-            self._log_read_stage(stage, started, None, "timeout")
+        except httpx.TimeoutException as error:
+            self._log_timeout(stage, started, error)
             raise OperatorError(502, "WOOCOMMERCE_UNAVAILABLE") from None
         except httpx.HTTPError:
             status = response.status_code if response is not None else None
@@ -429,6 +429,23 @@ class WooClient:
             "woo_read stage=%s elapsed_ms=%d upstream_status=%s result=%s",
             stage, round((time.monotonic() - started) * 1000),
             upstream_status if upstream_status is not None else "unavailable", result)
+
+    @staticmethod
+    def _log_timeout(stage, started, error):
+        if stage is None:
+            return
+        if isinstance(error, httpx.ConnectTimeout):
+            subtype = "connect"
+        elif isinstance(error, httpx.ReadTimeout):
+            subtype = "read"
+        elif isinstance(error, httpx.PoolTimeout):
+            subtype = "pool"
+        else:
+            subtype = "other"
+        LOGGER.warning(
+            "woo_read stage=%s timeout_subtype=%s elapsed_ms=%d error_class=%s",
+            stage, subtype, round((time.monotonic() - started) * 1000),
+            error.__class__.__name__)
 
     async def call(
             self, method, path, params=None, payload=None,
