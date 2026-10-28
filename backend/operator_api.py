@@ -3,8 +3,10 @@ import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -17,6 +19,11 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, Validat
 from starlette.responses import JSONResponse
 
 from operator_environment import runtime_status
+
+
+LOGGER = logging.getLogger(__name__)
+AW26_SINGLE_WOO_TIMEOUT = httpx.Timeout(
+    connect=10.0, read=45.0, write=10.0, pool=10.0)
 
 
 class OperatorError(Exception):
@@ -376,26 +383,59 @@ class WooClient:
             raise OperatorError(503, "WOOCOMMERCE_NOT_CONFIGURED")
         return base, key, secret
 
-    async def _request(self, method, url, params=None, payload=None, not_found="PRODUCT_NOT_FOUND"):
+    async def _request(
+            self, method, url, params=None, payload=None,
+            not_found="PRODUCT_NOT_FOUND", timeout=None, stage=None):
         _, key, secret = self._configuration()
+        started = time.monotonic()
+        response = None
         try:
-            async with httpx.AsyncClient(timeout=20, follow_redirects=False) as client:
+            async with httpx.AsyncClient(
+                    timeout=timeout or 20, follow_redirects=False) as client:
                 response = await client.request(
                     method, url,
                     auth=(key, secret), params=params, json=payload,
                     headers={"Cache-Control": "no-cache"})
             if response.status_code == 404:
+                self._log_read_stage(stage, started, response.status_code, not_found)
                 raise OperatorError(404, not_found)
             if not 200 <= response.status_code < 300:
+                self._log_read_stage(
+                    stage, started, response.status_code, "WOOCOMMERCE_ERROR")
                 raise OperatorError(502, "WOOCOMMERCE_ERROR")
-            return response.json(), response.headers
-        except (httpx.HTTPError, ValueError):
+            result = response.json()
+            self._log_read_stage(stage, started, response.status_code, "ok", False)
+            return result, response.headers
+        except OperatorError:
+            raise
+        except httpx.TimeoutException:
+            self._log_read_stage(stage, started, None, "timeout")
+            raise OperatorError(502, "WOOCOMMERCE_UNAVAILABLE") from None
+        except httpx.HTTPError:
+            status = response.status_code if response is not None else None
+            self._log_read_stage(stage, started, status, "http_error")
+            raise OperatorError(502, "WOOCOMMERCE_UNAVAILABLE") from None
+        except ValueError:
+            status = response.status_code if response is not None else None
+            self._log_read_stage(stage, started, status, "invalid_json")
             raise OperatorError(502, "WOOCOMMERCE_UNAVAILABLE") from None
 
-    async def call(self, method, path, params=None, payload=None, not_found="PRODUCT_NOT_FOUND"):
+    @staticmethod
+    def _log_read_stage(stage, started, upstream_status, result, warning=True):
+        if stage is None:
+            return
+        log = LOGGER.warning if warning else LOGGER.info
+        log(
+            "woo_read stage=%s elapsed_ms=%d upstream_status=%s result=%s",
+            stage, round((time.monotonic() - started) * 1000),
+            upstream_status if upstream_status is not None else "unavailable", result)
+
+    async def call(
+            self, method, path, params=None, payload=None,
+            not_found="PRODUCT_NOT_FOUND", timeout=None, stage=None):
         base, _, _ = self._configuration()
         return await self._request(method, base + "/wp-json/wc/v3/" + path,
-                                   params, payload, not_found)
+                                   params, payload, not_found, timeout, stage)
 
     async def preorder_status(self):
         base, _, _ = self._configuration()
@@ -462,13 +502,29 @@ class WooClient:
         await self.call("PUT", f"products/{product_id}", payload={"name": name})
 
     async def get_aw26(self, product_id):
-        raw, _ = await self.call("GET", f"products/{product_id}", params={"context": "edit"})
+        raw_products, _ = await self.call(
+            "GET", "products", params={
+                "context": "edit", "include": str(product_id),
+                "orderby": "include", "per_page": 2,
+            }, timeout=AW26_SINGLE_WOO_TIMEOUT, stage="product")
+        if not isinstance(raw_products, list):
+            raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+        if not raw_products:
+            raise OperatorError(404, "PRODUCT_NOT_FOUND")
+        matching = [
+            item for item in raw_products
+            if isinstance(item, dict) and item.get("id") == product_id
+        ]
+        if len(raw_products) != 1 or len(matching) != 1:
+            raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+        raw = matching[0]
         variations = []
         page = 1
         while True:
             batch, headers = await self.call(
                 "GET", f"products/{product_id}/variations",
-                params={"context": "edit", "page": page, "per_page": 100})
+                params={"context": "edit", "page": page, "per_page": 100},
+                timeout=AW26_SINGLE_WOO_TIMEOUT, stage="variations")
             if not isinstance(batch, list):
                 raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
             variations.extend(batch)

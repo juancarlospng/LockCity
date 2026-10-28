@@ -518,6 +518,112 @@ def test_aw26_catalog_read_is_authenticated(aw26_setup):
     assert response.json()["products"][0]["id"] == 3823
 
 
+def test_aw26_single_read_uses_include_strategy_and_45_second_timeout(monkeypatch):
+    product = copy.deepcopy(Aw26Woo().product)
+    variations = copy.deepcopy(product.pop("variations"))
+    product["variations"] = product.pop("variation_ids")
+    calls = []
+
+    async def call(_method, path, params=None, payload=None, not_found=None,
+                   timeout=None, stage=None):
+        calls.append((path, params, timeout, stage))
+        if path == "products":
+            return [product], {}
+        if path == "products/3823/variations":
+            return variations, {"X-WP-TotalPages": "1"}
+        raise AssertionError(path)
+
+    client = WooClient()
+    monkeypatch.setattr(client, "call", call)
+    result = asyncio.run(client.get_aw26(3823))
+
+    assert result["id"] == 3823
+    assert result["variation_ids"] == [401, 402]
+    assert calls[0][0] == "products"
+    assert calls[0][1] == {
+        "context": "edit", "include": "3823", "orderby": "include", "per_page": 2,
+    }
+    assert calls[0][2].read == 45.0 and calls[0][3] == "product"
+    assert calls[1][2].read == 45.0 and calls[1][3] == "variations"
+
+
+@pytest.mark.parametrize("products,status,code", [
+    ([], 404, "PRODUCT_NOT_FOUND"),
+    ([{"id": 3854}], 502, "INVALID_UPSTREAM_RESPONSE"),
+    ([{"id": 3823}, {"id": 3854}], 502, "INVALID_UPSTREAM_RESPONSE"),
+])
+def test_aw26_single_read_rejects_missing_or_mismatched_product(
+        monkeypatch, products, status, code):
+    async def call(*_args, **_kwargs):
+        return products, {}
+
+    client = WooClient()
+    monkeypatch.setattr(client, "call", call)
+    with pytest.raises(OperatorError) as error:
+        asyncio.run(client.get_aw26(3823))
+    assert (error.value.status, error.value.code) == (status, code)
+
+
+def test_aw26_single_read_logs_safe_product_timeout(monkeypatch, caplog):
+    monkeypatch.setenv("WC_REST_URL", "https://store.invalid")
+    monkeypatch.setenv("WC_REST_CONSUMER_KEY", "private-key")
+    monkeypatch.setenv("WC_REST_CONSUMER_SECRET", "private-secret")
+
+    async def send(*_args, **_kwargs):
+        raise httpx.ReadTimeout("sensitive upstream detail")
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", send)
+    with pytest.raises(OperatorError) as error:
+        asyncio.run(WooClient().get_aw26(3823))
+    assert error.value.code == "WOOCOMMERCE_UNAVAILABLE"
+    assert "stage=product" in caplog.text and "result=timeout" in caplog.text
+    assert "sensitive upstream detail" not in caplog.text
+    assert "private-secret" not in caplog.text
+
+
+def test_aw26_single_read_logs_safe_variation_timeout(monkeypatch, caplog):
+    monkeypatch.setenv("WC_REST_URL", "https://store.invalid")
+    monkeypatch.setenv("WC_REST_CONSUMER_KEY", "private-key")
+    monkeypatch.setenv("WC_REST_CONSUMER_SECRET", "private-secret")
+    product = copy.deepcopy(Aw26Woo().product)
+    product.pop("variations")
+    product["variations"] = product.pop("variation_ids")
+
+    async def send(_self, _method, url, **_kwargs):
+        if url.endswith("/wc/v3/products"):
+            return httpx.Response(200, json=[product])
+        raise httpx.ReadTimeout("sensitive variation detail")
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", send)
+    with pytest.raises(OperatorError) as error:
+        asyncio.run(WooClient().get_aw26(3823))
+    assert error.value.code == "WOOCOMMERCE_UNAVAILABLE"
+    assert "stage=variations" in caplog.text and "result=timeout" in caplog.text
+    assert "sensitive variation detail" not in caplog.text
+
+
+def test_aw26_catalog_read_transport_is_unchanged(monkeypatch):
+    product = copy.deepcopy(Aw26Woo().product)
+    variations = copy.deepcopy(product.pop("variations"))
+    product["variations"] = product.pop("variation_ids")
+    calls = []
+
+    async def call(_method, path, params=None, payload=None, not_found=None,
+                   timeout=None, stage=None):
+        calls.append((path, params, timeout, stage))
+        if path == "products":
+            return [product], {}
+        return variations, {"X-WP-TotalPages": "1"}
+
+    client = WooClient()
+    monkeypatch.setattr(client, "call", call)
+    result = asyncio.run(client.get_aw26_catalog([3823]))
+    assert result[0]["id"] == 3823
+    assert calls[0][0] == "products"
+    assert calls[0][1]["include"] == "3823"
+    assert all(timeout is None and stage is None for _path, _params, timeout, stage in calls)
+
+
 def test_aw26_category_bootstrap_is_authenticated_flagged_and_idempotent(aw26_setup, monkeypatch):
     assert request(aw26_setup, "GET", "/aw26/categories", headers={}).status_code == 401
     assert request(aw26_setup, "POST", "/aw26/categories/bootstrap").status_code == 403
