@@ -11,7 +11,7 @@ module.exports = {
         bg: "#050505",
         bone: "#F1EFE9",
         graphite: "#222222",
-        steel: "#747474",
+        steel: "#888888",
         onyx: "#101010",
         card: "#0D0D0D",
       },

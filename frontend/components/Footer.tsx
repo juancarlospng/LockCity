@@ -31,20 +31,20 @@ export function Footer() {
       data-testid="site-footer"
       className="relative overflow-hidden border-t border-graphite bg-bg"
     >
-      <div className="px-4 pt-20 sm:px-8 lg:px-12">
-        <div className="flex flex-col justify-between gap-16 lg:flex-row">
+      <div className="px-4 pt-14 sm:px-8 sm:pt-20 lg:px-12">
+        <div className="flex flex-col justify-between gap-10 sm:gap-16 lg:flex-row">
           <div className="max-w-sm">
             <p className="flex items-center gap-2 font-display text-2xl uppercase text-bone">
               <span aria-hidden className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-bone" />
               Lock City<sup className="text-[10px]">®</sup>
             </p>
-            <p className="mt-4 text-xs leading-relaxed text-steel">
+            <p className="mt-4 text-xs leading-6 text-steel">
               A digital place. Collections are districts. Products are objects.
               Locked in with your purpose, your craft, your people, your city.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-x-10 gap-y-12 sm:grid-cols-3 sm:gap-12">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-8 sm:grid-cols-3 sm:gap-12">
             {COLUMNS.map((col) => (
               <div key={col.title}>
                 <h3 className="text-[10px] uppercase tracking-[0.3em] text-steel">
@@ -69,13 +69,13 @@ export function Footer() {
         </div>
       </div>
 
-      <div className="select-none px-2 pt-16" aria-hidden>
+      <div className="select-none px-2 pt-10 sm:pt-16" aria-hidden>
         <p className="whitespace-nowrap text-center font-display text-[16vw] uppercase leading-[0.85] tracking-tight text-graphite/60">
           Locked in
         </p>
       </div>
 
-      <div className="flex flex-col items-start justify-between gap-2 border-t border-graphite px-4 py-6 text-[9px] uppercase tracking-[0.25em] text-steel sm:flex-row sm:items-center sm:px-8 lg:px-12">
+      <div className="flex flex-col items-start justify-between gap-2 border-t border-graphite px-4 py-4 text-[9px] uppercase tracking-[0.25em] text-steel sm:flex-row sm:items-center sm:px-8 sm:py-6 lg:px-12">
         <span>© 2026 Lock City</span>
         <span className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
           <span>The city is alive</span>

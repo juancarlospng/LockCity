@@ -5,10 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useCart } from "@/lib/cart";
+import { DROP_VISIBLE } from "@/lib/merchandising";
 import { MobileMenu } from "./MobileMenu";
 
 export const NAV_LINKS = [
   { href: "/shop", label: "SHOP" },
+  ...(DROP_VISIBLE ? [{ href: "/collections/drop", label: "DROP" }] : []),
   { href: "/collections/core", label: "CORE" },
   { href: "/contact", label: "CONTACT" },
 ];
@@ -63,7 +65,7 @@ export function Navigation() {
                 href={link.href}
                 data-testid={`nav-${link.label.toLowerCase()}-link`}
                 className={`link-line text-[11px] uppercase tracking-[0.25em] transition-colors duration-200 ${
-                  pathname === link.href ? "text-bone" : "text-steel hover:text-bone"
+                  pathname === link.href ? "text-bone" : "text-bone/65 hover:text-bone"
                 }`}
               >
                 {link.label}

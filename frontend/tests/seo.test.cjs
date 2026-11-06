@@ -33,8 +33,10 @@ test('transactional and confirmation pages are explicitly noindex', () => {
   }
 });
 
-test('robots permits crawling for noindex discovery and protects technical routes', () => {
+test('robots blocks the entire QA storefront while indexing is disabled', () => {
   const robots = read('app/robots.ts');
+  assert.match(robots, /if \(!seoIndexingEnabled\(\)\)/);
+  assert.match(robots, /disallow: "\/"/);
   assert.match(robots, /allow: "\/"/);
   for (const route of ['/checkout', '/order-confirmation', '/join/confirmed', '/store/']) {
     assert.match(robots, new RegExp(route.replaceAll('/', '\\/')));
@@ -42,8 +44,9 @@ test('robots permits crawling for noindex discovery and protects technical route
   assert.match(robots, /sitemap: absoluteUrl\("\/sitemap\.xml"\)/);
 });
 
-test('sitemap includes public content and products but excludes private routes', () => {
+test('sitemap is empty in QA and retains launch entries for future indexing', () => {
   const sitemap = read('app/sitemap.ts');
+  assert.match(sitemap, /if \(!seoIndexingEnabled\(\)\) return \[\]/);
   for (const route of ['/shop', '/shipping', '/returns', '/contact', '/privacy', '/terms']) {
     assert.match(sitemap, new RegExp(`"${route}"`));
   }

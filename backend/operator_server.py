@@ -5,9 +5,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from operator_api import PostgresStore, create_router
+from operator_environment import validate_runtime_isolation
 
 
 def create_app(store=None, woo=None, printful=None):
+    validate_runtime_isolation()
     operator_store = store or PostgresStore(os.getenv("DATABASE_URL"))
 
     @asynccontextmanager

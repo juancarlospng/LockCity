@@ -55,9 +55,9 @@ export function Newsletter() {
       id="join"
       data-testid="join-the-city-section"
       aria-labelledby="join-heading"
-      className="relative border-t border-graphite px-4 py-28 sm:px-8 lg:px-12 lg:py-40"
+      className="relative border-t border-graphite px-4 py-20 sm:px-8 sm:py-28 lg:px-12 lg:py-40"
     >
-      <div className="flex flex-col gap-12 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-9 sm:gap-12 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <Reveal>
             <p className="text-[10px] uppercase tracking-[0.3em] text-steel">
@@ -86,7 +86,7 @@ export function Newsletter() {
               </p>
             </div>
           ) : (
-            <form onSubmit={onSubmit} className="border-b border-graphite pb-2">
+            <form onSubmit={onSubmit} className="border-b border-steel pb-2 transition-colors focus-within:border-bone">
               <div hidden aria-hidden="true">
                 <label htmlFor="newsletter-website">Website</label>
                 <input id="newsletter-website" name="website" tabIndex={-1} autoComplete="off"
@@ -94,11 +94,11 @@ export function Newsletter() {
               </div>
               <label
                 htmlFor="newsletter-email"
-                className="text-[10px] uppercase tracking-[0.3em] text-steel"
+                className="text-[11px] uppercase tracking-[0.3em] text-bone"
               >
                 Email
               </label>
-              <div className="mt-3 flex items-center gap-4">
+              <div className="mt-2 flex min-h-14 items-center gap-4">
                 <input
                   id="newsletter-email"
                   data-testid="newsletter-email-input"
@@ -108,13 +108,13 @@ export function Newsletter() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="YOU@THECITY.COM"
-                  className="w-full bg-transparent py-3 text-sm uppercase tracking-[0.15em] text-bone placeholder:text-graphite focus:outline-none"
+                  className="min-h-12 w-full bg-transparent py-3 text-base uppercase tracking-[0.12em] text-bone placeholder:text-steel focus:outline-none sm:text-sm sm:tracking-[0.15em]"
                 />
                 <button
                   type="submit"
                   data-testid="newsletter-submit-button"
                   disabled={state === "loading" || !consent}
-                  className="shrink-0 text-xs font-bold uppercase tracking-[0.3em] text-bone transition-colors duration-200 hover:text-steel disabled:text-graphite"
+                  className="min-h-12 shrink-0 px-2 text-xs font-bold uppercase tracking-[0.3em] text-bone transition-colors duration-200 hover:text-white disabled:text-graphite"
                 >
                   {state === "loading" ? "…" : "Enter →"}
                 </button>

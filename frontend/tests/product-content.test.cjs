@@ -18,9 +18,10 @@ const load = (path) => require(join(__dirname, '..', path));
 
 test('all 11 launch products have centralized editorial content', () => {
   const { PRODUCT_CONTENT, PRODUCT_CONTENT_IDS } = load('lib/product-content.ts');
-  const { PUBLIC_STORE_PRODUCT_IDS } = load('lib/merchandising.ts');
+  const { CORE_PRODUCT_IDS, SHOP_EXTRA_PRODUCT_IDS } = load('lib/merchandising.ts');
+  const editorialIds = [...CORE_PRODUCT_IDS, ...SHOP_EXTRA_PRODUCT_IDS];
   assert.equal(PRODUCT_CONTENT_IDS.length, 11);
-  assert.deepEqual([...PRODUCT_CONTENT_IDS].sort((a, b) => a - b), [...PUBLIC_STORE_PRODUCT_IDS].sort((a, b) => a - b));
+  assert.deepEqual([...PRODUCT_CONTENT_IDS].sort((a, b) => a - b), editorialIds.sort((a, b) => a - b));
   for (const content of Object.values(PRODUCT_CONTENT)) {
     assert.ok(content.displayName);
     assert.ok(content.shortDescription);

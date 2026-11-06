@@ -3,8 +3,10 @@ import os
 from pathlib import Path
 
 import httpx
+import pytest
 
 from operator_server import app  # noqa: E402
+from operator_server import create_app  # noqa: E402
 from start import production_settings  # noqa: E402
 
 
@@ -44,25 +46,61 @@ def test_independent_app_exposes_only_requested_routes():
         ("/api/operator/v1/products", "GET"),
         ("/api/operator/v1/products/{product_id}", "GET"),
         ("/api/operator/v1/products/{product_id}", "PATCH"),
+        ("/api/operator/v1/preorder/status", "GET"),
+        ("/api/operator/v1/orders", "GET"),
+        ("/api/operator/v1/orders/{id}", "GET"),
+        ("/api/operator/v1/aw26/products/{product_id}", "GET"),
+        ("/api/operator/v1/aw26/products", "GET"),
+        ("/api/operator/v1/aw26/products/{product_id}", "PATCH"),
+        ("/api/operator/v1/aw26/products/{product_id}/hard-hide", "PATCH"),
+        ("/api/operator/v1/aw26/categories", "GET"),
+        ("/api/operator/v1/aw26/categories/bootstrap", "POST"),
         ("/api/operator/v1/audit", "GET"),
         ("/api/operator/v1/printful/status", "GET"),
+        ("/api/operator/v1/printful/scopes", "GET"),
         ("/api/operator/v1/printful/templates", "GET"),
         ("/api/operator/v1/printful/templates/{template_id}", "GET"),
+        ("/api/operator/v1/printful/orders", "GET"),
+        ("/api/operator/v1/printful/orders/{id}", "GET"),
         ("/api/operator/v1/printful/templates/{template_id}/mockup-styles", "GET"),
         ("/api/operator/v1/printful/templates/{template_id}/mockup-tasks/dry-run", "POST"),
         ("/api/operator/v1/printful/templates/{template_id}/mockup-tasks", "POST"),
         ("/api/operator/v1/printful/mockup-tasks/{task_id}", "GET"),
         ("/api/operator/v1/printful/sync-products", "GET"),
         ("/api/operator/v1/printful/sync-products/{sync_product_id}", "GET"),
+        ("/api/operator/v1/printful/catalog-variants/{catalog_variant_id}/prices", "GET"),
+        ("/api/operator/v1/printful/catalog-products/{catalog_product_id}/prices", "GET"),
     }
 
 
 def test_production_launcher_binds_provider_port_and_forces_read_only(monkeypatch):
     monkeypatch.setenv("PORT", "9123")
     monkeypatch.setenv("OPERATOR_WRITES_ENABLED", "true")
+    monkeypatch.setenv("AW26_PUBLISH_ENABLED", "true")
+    monkeypatch.delenv("AW26_PRODUCT_WRITE_ENABLED", raising=False)
+    monkeypatch.setenv("PRINTFUL_MOCKUP_GENERATION_ENABLED", "true")
     settings = production_settings()
     assert settings == {"app": "operator_server:app", "host": "0.0.0.0", "port": 9123}
     assert os.environ["OPERATOR_WRITES_ENABLED"] == "false"
+    assert os.environ["AW26_PUBLISH_ENABLED"] == "false"
+    assert os.environ["AW26_PRODUCT_WRITE_ENABLED"] == "false"
+    assert os.environ["PRINTFUL_MOCKUP_GENERATION_ENABLED"] == "false"
+
+
+def test_staging_refuses_production_woo_target(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "staging")
+    monkeypatch.setenv("PAYPAL_MODE", "sandbox")
+    monkeypatch.setenv("WC_REST_URL", "https://commerce.lockcityclothes.com")
+    with pytest.raises(RuntimeError, match="staging Operator must target"):
+        create_app(store=object())
+
+
+def test_staging_requires_sandbox_paypal_marker(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "staging")
+    monkeypatch.setenv("WC_REST_URL", "https://pruebasv2.lockcityclothes.com")
+    monkeypatch.setenv("PAYPAL_MODE", "live")
+    with pytest.raises(RuntimeError, match="PAYPAL_MODE=sandbox"):
+        create_app(store=object())
 
 
 def test_production_launcher_rejects_invalid_port(monkeypatch):

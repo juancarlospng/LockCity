@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useCart } from "@/lib/cart";
@@ -11,7 +12,7 @@ import { formatPrice } from "@/lib/utils";
 import { Media } from "./Media";
 import { StatusBadge } from "./StatusBadge";
 
-export function ProductCard({ product, index }: { product: Product; index: number }) {
+export function ProductCard({ product, index, priority = false }: { product: Product; index: number; priority?: boolean }) {
   const { addItem, isMutating } = useCart();
   const mainImage = mainProductImage(product);
   const action = getProductCardAction(product);
@@ -24,6 +25,7 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
     >
       <Link
         href={`/product/${product.slug}`}
+        prefetch
         data-testid={`product-link-${product.id}`}
         data-cursor="view"
         className="block"
@@ -32,13 +34,15 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
         <div className="relative overflow-hidden">
           <div className="transition-transform duration-700 ease-out group-hover:scale-[1.04]">
             {mainImage ? (
-              <div className="aspect-[4/5] w-full bg-white p-4 sm:p-6">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+              <div className="relative aspect-[10/11] w-full bg-white sm:aspect-[4/5]">
+                <Image
                   src={mainImage}
                   alt={product.name}
-                  className="h-full w-full object-contain"
-                  loading="lazy"
+                  fill
+                  quality={90}
+                  sizes="(max-width: 639px) 100vw, (max-width: 1023px) 55vw, (max-width: 1535px) 50vw, 400px"
+                  className="object-contain p-3 sm:p-6"
+                  {...(priority ? { priority: true } : { loading: "lazy" as const })}
                 />
               </div>
             ) : (
@@ -46,13 +50,16 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
             )}
           </div>
           <div className="absolute left-3 top-3 flex items-center gap-3">
-            <span className="text-[9px] tracking-[0.3em] text-steel">
+            <span className={`text-[9px] tracking-[0.3em] ${product.previewOnly ? "text-neutral-950" : "text-steel"}`}>
               {String(index + 1).padStart(2, "0")}
             </span>
-            <StatusBadge status={product.status} />
+            <StatusBadge
+              status={product.status}
+              className={product.previewOnly ? "!text-neutral-950 [&>span]:!bg-neutral-950" : ""}
+            />
           </div>
         </div>
-        <div className="flex items-start justify-between gap-3 border-t border-graphite p-5">
+        <div className="flex items-start justify-between gap-3 border-t border-graphite p-4 sm:p-5">
           <div>
             {product.code && (
               <p className="text-[9px] tracking-[0.3em] text-steel">{product.code}</p>
@@ -75,8 +82,9 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
       {action.kind === "select-options" ? (
         <Link
           href={`/product/${product.slug}`}
+          prefetch
           data-testid={`select-options-link-${product.id}`}
-          className="border-t border-graphite py-3 text-center text-[10px] font-bold uppercase tracking-[0.3em] text-bone transition-colors duration-200 hover:bg-bone hover:text-bg"
+          className="border-t border-graphite py-2.5 text-center text-[10px] font-bold uppercase tracking-[0.3em] text-bone transition-colors duration-200 hover:bg-bone hover:text-bg sm:py-3"
         >
           {action.label}
         </Link>
@@ -90,7 +98,7 @@ export function ProductCard({ product, index }: { product: Product; index: numbe
             try { await addItem(product, action.variant); }
             catch (cause) { toast.error(cartErrorMessage(cause)); }
           }}
-          className={`border-t border-graphite py-3 text-[10px] font-bold uppercase tracking-[0.3em] transition-colors duration-200 ${
+          className={`border-t border-graphite py-2.5 text-[10px] font-bold uppercase tracking-[0.3em] transition-colors duration-200 sm:py-3 ${
             canQuickAdd
               ? "text-bone hover:bg-bone hover:text-bg"
               : "cursor-not-allowed text-graphite"

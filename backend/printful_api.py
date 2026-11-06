@@ -1,6 +1,7 @@
 """Printful client for product reviews and isolated mockup generation."""
 import os
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 import httpx
 
@@ -9,6 +10,8 @@ from operator_api import OperatorError
 
 PRINTFUL_BASE_URL = "https://api.printful.com"
 AW26_TEMPLATE_IDS = frozenset({
+    79403270,
+    100892117,
     105623495,
     105624073,
     106094567,
@@ -17,8 +20,6 @@ AW26_TEMPLATE_IDS = frozenset({
     106766446,
     106767107,
     107221423,
-    107365805,
-    107366128,
     107530836,
     107563422,
     107563824,
@@ -74,6 +75,155 @@ def normalize_template(raw):
 
 def _text(value):
     return value if isinstance(value, str) and value else None
+
+
+def normalize_printful_order(raw):
+    """Return operational order state without recipient, address, email or phone."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("id"), int):
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    status = raw.get("status") if isinstance(raw.get("status"), str) else ""
+    costs = raw.get("retail_costs") if isinstance(raw.get("retail_costs"), dict) else {}
+    safe_costs = {}
+    for name in ("currency", "subtotal", "discount", "shipping", "tax", "vat", "total"):
+        value = costs.get(name)
+        if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+            safe_costs[name] = value
+    items = []
+    for item in _list(raw.get("items")):
+        if not isinstance(item, dict):
+            continue
+        items.append({
+            "item_id": item.get("id") if isinstance(item.get("id"), int) else None,
+            "external_id": _text(item.get("external_id")),
+            "variant_id": item.get("variant_id")
+            if isinstance(item.get("variant_id"), int) else None,
+            "external_variant_id": _text(item.get("external_variant_id")),
+            "quantity": item.get("quantity")
+            if isinstance(item.get("quantity"), int) and not isinstance(item.get("quantity"), bool)
+            else None,
+            "name": _text(item.get("name")),
+        })
+    shipments = []
+    for shipment in _list(raw.get("shipments")):
+        if not isinstance(shipment, dict):
+            continue
+        shipments.append({
+            "shipment_id": shipment.get("id")
+            if isinstance(shipment.get("id"), int) else None,
+            "status": _text(shipment.get("status")),
+            "carrier": _text(shipment.get("carrier")),
+            "service": _text(shipment.get("service")),
+            "shipped_at": _timestamp(shipment.get("shipped_at")),
+            "estimated_delivery": _timestamp(shipment.get("estimated_delivery")),
+        })
+    if status == "draft":
+        manual_confirm, production_started, fulfillment_confirmed = True, False, False
+    elif status in {"pending", "onhold", "inreview", "failed"}:
+        manual_confirm, production_started, fulfillment_confirmed = False, False, True
+    elif status in {"inprocess", "partial", "fulfilled"}:
+        manual_confirm, production_started, fulfillment_confirmed = False, True, True
+    elif status in {"canceled", "cancelled"}:
+        manual_confirm, production_started, fulfillment_confirmed = False, False, False
+    else:
+        manual_confirm = production_started = fulfillment_confirmed = None
+    return {
+        "printful_order_id": raw["id"],
+        "external_id": _text(raw.get("external_id")),
+        "status": status,
+        "created_at": _timestamp(raw.get("created")),
+        "updated_at": _timestamp(raw.get("updated")),
+        "retail_costs": safe_costs,
+        "items": items,
+        "shipments": shipments,
+        "manual_confirm_required": manual_confirm,
+        "production_started": production_started,
+        "fulfillment_confirmed": fulfillment_confirmed,
+    }
+
+
+def _safe_validation_text(value):
+    if not isinstance(value, str):
+        return None
+    text = value[:300]
+    secrets = [os.getenv(name, "") for name in (
+        "PRINTFUL_API_TOKEN", "OPERATOR_API_TOKEN", "DATABASE_URL")]
+    if any(secret and secret in text for secret in secrets):
+        return "[REDACTED]"
+    if "authorization" in text.casefold() or "bearer" in text.casefold():
+        return "[REDACTED]"
+    return text
+
+
+def sanitize_printful_validation(response):
+    """Return a small allowlisted view of Printful validation errors."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    root = payload.get("error", payload) if isinstance(payload, dict) else None
+    if not isinstance(root, dict):
+        return None
+    raw_issues = root.get("errors")
+    issues = raw_issues if isinstance(raw_issues, list) else [root]
+    sanitized = []
+    for issue in issues[:10]:
+        if not isinstance(issue, dict):
+            continue
+        item = {}
+        for key in ("type", "title", "detail"):
+            value = _safe_validation_text(issue.get(key))
+            if value:
+                item[key] = value
+        if "detail" not in item:
+            message = _safe_validation_text(issue.get("message"))
+            if message:
+                item["detail"] = message
+        source = issue.get("source")
+        if isinstance(source, dict):
+            clean_source = {}
+            for key in ("pointer", "parameter", "header"):
+                value = _safe_validation_text(source.get(key))
+                if value:
+                    clean_source[key] = value
+            if clean_source:
+                item["source"] = clean_source
+        valid_values = issue.get("valid_values")
+        if isinstance(valid_values, list):
+            item["valid_values"] = [value for value in valid_values[:20]
+                                    if isinstance(value, (str, int, float, bool))]
+        if item:
+            sanitized.append(item)
+    return sanitized or None
+
+
+def build_mockup_request_body(template_id, variant_ids, style_ids):
+    """Build the exact non-secret Printful v2 Product Template request."""
+    return {
+        "format": "jpg",
+        "products": [{
+            "source": "product_template",
+            "product_template_id": template_id,
+            "catalog_variant_ids": list(variant_ids),
+            "mockup_style_ids": list(style_ids),
+        }],
+    }
+
+
+def sanitize_printful_generation_error(response, outbound_body):
+    """Expose only safe validation metadata and the non-secret request body."""
+    details = {
+        "status": response.status_code,
+        "outboundBody": outbound_body,
+    }
+    issues = sanitize_printful_validation(response)
+    if issues:
+        details["issues"] = issues
+    for header in ("x-request-id", "x-correlation-id", "request-id"):
+        request_id = _safe_validation_text(response.headers.get(header))
+        if request_id:
+            details["requestId"] = request_id
+            break
+    return details
 
 
 def _variant_ids(raw):
@@ -325,6 +475,119 @@ def normalize_catalog_variant(raw):
     }
 
 
+def _price(value):
+    """Keep Printful decimal amounts as strings without manufacturing a value."""
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    return None
+
+
+def _pricing_layers(raw_layers):
+    layers = []
+    for raw in _list(raw_layers):
+        if not isinstance(raw, dict):
+            continue
+        layers.append({
+            "type": _text(raw.get("type")),
+            "additionalPrice": _price(raw.get("additional_price")),
+            "layerOptions": _list(raw.get("layer_options")),
+        })
+    return layers
+
+
+def _pricing_techniques(raw_techniques):
+    techniques = []
+    for raw in _list(raw_techniques):
+        if not isinstance(raw, dict):
+            continue
+        techniques.append({
+            "techniqueKey": _text(raw.get("technique_key")),
+            "techniqueDisplayName": _text(raw.get("technique_display_name")),
+            "price": _price(raw.get("price")),
+            "discountedPrice": _price(raw.get("discounted_price")),
+        })
+    return techniques
+
+
+def normalize_catalog_variant_prices(raw, requested_variant_id):
+    """Normalize only documented pricing fields from Printful v2."""
+    if not isinstance(raw, dict):
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    variant = raw.get("variant")
+    product = raw.get("product")
+    if not isinstance(variant, dict) or not isinstance(product, dict):
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    variant_id = variant.get("id")
+    if variant_id is not None and variant_id != requested_variant_id:
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+
+    placements = []
+    for placement in _list(product.get("placements")):
+        if not isinstance(placement, dict):
+            continue
+        placements.append({
+            "id": _text(placement.get("id")),
+            "title": _text(placement.get("title")),
+            "type": _text(placement.get("type")),
+            "techniqueKey": _text(placement.get("technique_key")),
+            "price": _price(placement.get("price")),
+            "discountedPrice": _price(placement.get("discounted_price")),
+            "placementOptions": _list(placement.get("placement_options")),
+            "layers": _pricing_layers(placement.get("layers")),
+        })
+
+    return {
+        "catalogVariantId": requested_variant_id,
+        "currency": _text(raw.get("currency")),
+        "productionCurrency": _text(raw.get("production_currency")),
+        "sellingRegionName": "worldwide",
+        "variant": {
+            "id": variant_id if isinstance(variant_id, int) else requested_variant_id,
+            "techniques": _pricing_techniques(variant.get("techniques")),
+        },
+        "product": {
+            "id": product.get("id") if isinstance(product.get("id"), int) else None,
+        },
+        "placements": placements,
+    }
+
+
+def normalize_catalog_product_prices(raw, requested_product_id):
+    """Normalize the paginated product pricing response for efficient audits."""
+    if not isinstance(raw, dict):
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    product = raw.get("product")
+    variants = raw.get("variants")
+    if not isinstance(product, dict) or not isinstance(variants, list):
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    product_id = product.get("id")
+    if product_id is not None and product_id != requested_product_id:
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    normalized_variants = []
+    for variant in variants:
+        if not isinstance(variant, dict) or not isinstance(variant.get("id"), int):
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+        normalized_variants.append({
+            "id": variant["id"],
+            "techniques": _pricing_techniques(variant.get("techniques")),
+        })
+    normalized = normalize_catalog_variant_prices({
+        **raw, "variant": {"id": normalized_variants[0]["id"], "techniques": []}},
+        normalized_variants[0]["id"] if normalized_variants else 1,
+    )
+    return {
+        "catalogProductId": requested_product_id,
+        "currency": normalized["currency"],
+        "productionCurrency": normalized["productionCurrency"],
+        "sellingRegionName": normalized["sellingRegionName"],
+        "product": normalized["product"],
+        "placements": normalized["placements"],
+        "variants": normalized_variants,
+    }
+
+
 def select_representative_variants(available_variant_ids, catalog_variants):
     """Choose M, then S, then the first available size for each color."""
     allowed = set(available_variant_ids)
@@ -420,7 +683,8 @@ class PrintfulClient:
         }
         if response.status_code in errors:
             status, code = errors[response.status_code]
-            raise OperatorError(status, code)
+            details = sanitize_printful_validation(response) if response.status_code == 400 else None
+            raise OperatorError(status, code, details)
         if response.status_code >= 500:
             raise OperatorError(502, "PRINTFUL_UNAVAILABLE")
         if not 200 <= response.status_code < 300:
@@ -454,6 +718,19 @@ class PrintfulClient:
 
     async def store_headers(self):
         return {"X-PF-Store-Id": str(await self.store_id())}
+
+    async def scopes(self):
+        payload = await self.get("/oauth/scopes")
+        result = payload.get("result")
+        scopes = result.get("scopes") if isinstance(result, dict) else None
+        if not isinstance(scopes, list):
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+        names = []
+        for item in scopes:
+            name = item.get("scope") if isinstance(item, dict) else None
+            if isinstance(name, str) and name and name not in names:
+                names.append(name)
+        return {"scopes": sorted(names), "orders_read": "orders/read" in names or "orders" in names}
 
     async def templates(self, limit, offset):
         payload = await self.get("/product-templates", {"limit": limit, "offset": offset})
@@ -496,6 +773,48 @@ class PrintfulClient:
         if not isinstance(result, dict):
             raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
         return normalize_sync_product(result.get("sync_product"), result.get("sync_variants"))
+
+    async def orders(self, limit, offset, status=None, external_id=None):
+        if external_id is not None:
+            try:
+                item = await self.order("@" + external_id)
+            except OperatorError as exc:
+                if exc.code == "PRINTFUL_NOT_FOUND":
+                    return {"items": [], "limit": limit, "offset": offset, "total": 0}
+                raise
+            return {"items": [item], "limit": limit, "offset": offset, "total": 1}
+        params = {"limit": limit, "offset": offset}
+        if status is not None:
+            params["status"] = status
+        payload = await self._store_get("/orders", params)
+        result = payload.get("result")
+        if not isinstance(result, list):
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+        paging = payload.get("paging") if isinstance(payload.get("paging"), dict) else {}
+        return {
+            "items": [normalize_printful_order(item) for item in result],
+            "limit": paging.get("limit", limit),
+            "offset": paging.get("offset", offset),
+            "total": paging.get("total") if isinstance(paging.get("total"), int) else None,
+        }
+
+    async def order(self, order_id):
+        encoded = quote(str(order_id), safe="@")
+        payload = await self._store_get(f"/orders/{encoded}")
+        result = payload.get("result")
+        return normalize_printful_order(result)
+
+    async def _store_get(self, path, params=None):
+        """Support both account tokens and tokens already limited to one store."""
+        try:
+            return await self.get(path, params, await self.store_headers())
+        except OperatorError as exc:
+            if exc.code != "PRINTFUL_FORBIDDEN":
+                raise
+        # Printful documents X-PF-Store-Id for account-level tokens only. A
+        # single-store token may reject that context header, so retry this GET
+        # once without it. Missing scopes remain a sanitized 403.
+        return await self.get(path, params)
 
     async def mockup_styles(self, template_id, template=None):
         template = template or await self.template(template_id)
@@ -559,6 +878,39 @@ class PrintfulClient:
             if offset >= 1000:
                 raise OperatorError(502, "PRINTFUL_TOO_MANY_VARIANTS")
         return variants
+
+    async def catalog_variant_prices(self, catalog_variant_id):
+        payload = await self.get(
+            f"/v2/catalog-variants/{catalog_variant_id}/prices",
+            {"currency": "USD", "selling_region_name": "worldwide"},
+        )
+        return normalize_catalog_variant_prices(payload.get("data"), catalog_variant_id)
+
+    async def catalog_product_prices(self, catalog_product_id):
+        payload = await self.get(
+            f"/v2/catalog-products/{catalog_product_id}/prices",
+            {"currency": "USD", "selling_region_name": "worldwide",
+             "limit": 100, "offset": 0},
+        )
+        result = normalize_catalog_product_prices(payload.get("data"), catalog_product_id)
+        paging = payload.get("paging") if isinstance(payload.get("paging"), dict) else {}
+        total = paging.get("total")
+        offset = len(result["variants"])
+        while isinstance(total, int) and offset < total:
+            if offset >= 1000:
+                raise OperatorError(502, "PRINTFUL_TOO_MANY_VARIANTS")
+            page = await self.get(
+                f"/v2/catalog-products/{catalog_product_id}/prices",
+                {"currency": "USD", "selling_region_name": "worldwide",
+                 "limit": 100, "offset": offset},
+            )
+            normalized_page = normalize_catalog_product_prices(
+                page.get("data"), catalog_product_id)
+            result["variants"].extend(normalized_page["variants"])
+            if not normalized_page["variants"]:
+                break
+            offset += len(normalized_page["variants"])
+        return result
 
     async def mockup_plan(self, template_id, requested_variant_ids=None, requested_style_ids=None):
         template = await self.template(template_id)
@@ -650,9 +1002,7 @@ class PrintfulClient:
         token = os.getenv("PRINTFUL_API_TOKEN", "")
         if not token:
             raise OperatorError(503, "PRINTFUL_NOT_CONFIGURED")
-        body = {"format": "jpg", "mockup_width_px": 1000, "products": [{
-            "source": "product_template", "product_template_id": template_id,
-            "catalog_variant_ids": variant_ids, "mockup_style_ids": style_ids}]}
+        body = build_mockup_request_body(template_id, variant_ids, style_ids)
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(25.0, connect=5.0),
                                          follow_redirects=False, transport=self.transport) as client:
@@ -671,7 +1021,9 @@ class PrintfulClient:
         }
         if response.status_code in errors:
             status, code = errors[response.status_code]
-            raise OperatorError(status, code)
+            details = (sanitize_printful_generation_error(response, body)
+                       if response.status_code == 400 else None)
+            raise OperatorError(status, code, details)
         if response.status_code >= 500:
             raise OperatorError(502, "PRINTFUL_UNAVAILABLE")
         if not 200 <= response.status_code < 300:

@@ -17,6 +17,14 @@ function sourceText(source?: ProductImage): string {
   return [source?.name, source?.alt, source?.src].filter(Boolean).join(" ");
 }
 
+function mediaToken(value: string): string {
+  let decoded = value;
+  try { decoded = decodeURIComponent(value); }
+  catch { /* Keep the original value when a source contains invalid escapes. */ }
+  return decoded.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
 export function shouldPrioritizeVariantImage(source?: ProductImage): boolean {
   const text = sourceText(source);
   return !/\bback\b|\brear\b|flat[ -]?lay|print[ -]?file|design[ -]?file|template/i.test(text);
@@ -35,6 +43,22 @@ export function orderedProductImages(product: Pick<Product, "images" | "sourceIm
     .map((src, index) => ({ src, index, score: productImageScore(product.sourceImages[index], index) }))
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map(({ src }) => src);
+}
+
+export function productImagesForColor(
+  product: Pick<Product, "images" | "sourceImages">,
+  color?: string,
+): string[] {
+  const ordered = product.images
+    .map((src, index) => ({ src, index, source: product.sourceImages[index] }))
+    .sort((a, b) => productImageScore(b.source, b.index) - productImageScore(a.source, a.index) || a.index - b.index);
+  const colorToken = color ? mediaToken(color) : "";
+  if (!colorToken) return ordered.map(({ src }) => src);
+
+  const matching = ordered.filter(({ source }) => mediaToken(sourceText(source)).includes(colorToken));
+  if (matching.length === 0) return ordered.map(({ src }) => src);
+  const matchingSources = new Set(matching.map(({ src }) => src));
+  return [...matching, ...ordered.filter(({ src }) => !matchingSources.has(src))].map(({ src }) => src);
 }
 
 export function mainProductImage(product: Pick<Product, "images" | "sourceImages">): string | undefined {
