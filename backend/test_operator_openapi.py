@@ -28,6 +28,7 @@ def test_export_matches_routes_and_has_only_operator_endpoints():
         "getAw26Categories", "bootstrapAw26Categories",
         "getPrintfulStatus", "getPrintfulTemplates", "getPrintfulTemplate",
         "getPrintfulOrders", "getPrintfulOrder", "getPrintfulScopes",
+        "estimatePrintfulCost",
         "getPrintfulSyncProducts", "getPrintfulSyncProduct", "getPrintfulMockupStyles",
         "createPrintfulMockupPlan", "createPrintfulMockupTask", "getPrintfulMockupTask",
         "getPrintfulCatalogVariantPrices", "getPrintfulCatalogProductPrices"}
@@ -38,4 +39,8 @@ def test_export_matches_routes_and_has_only_operator_endpoints():
     assert document["components"]["schemas"]["Rename"]["additionalProperties"] is False
     assert document["components"]["schemas"]["Aw26ProductPatch"]["additionalProperties"] is False
     assert document["components"]["schemas"]["Aw26HardHide"]["additionalProperties"] is False
+    estimate = document["paths"]["/api/operator/v1/printful/estimate-cost"]["post"]
+    assert estimate["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/EstimateCostRequest"}
+    assert document["components"]["schemas"]["EstimateCostRequest"]["additionalProperties"] is False
     assert document == json.loads(Path(__file__).with_name("operator-openapi.json").read_text())

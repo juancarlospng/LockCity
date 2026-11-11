@@ -649,7 +649,7 @@ def select_review_styles(styles, representative_variant_ids, limit=10):
 
 
 class PrintfulClient:
-    """Only mockup task creation may use POST; products and orders are read-only."""
+    """POST is restricted to cost estimation and gated mockup generation."""
 
     def __init__(self, transport=None):
         self.transport = transport
@@ -696,6 +696,60 @@ class PrintfulClient:
         if not isinstance(payload, dict) or payload.get("code") not in (None, 200):
             raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
         return payload
+
+    async def estimate_cost(self, order):
+        """Estimate one order without creating a draft or mutating the store."""
+        token = os.getenv("PRINTFUL_API_TOKEN", "")
+        if not token:
+            raise OperatorError(503, "PRINTFUL_NOT_CONFIGURED")
+        try:
+            async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(20.0, connect=5.0),
+                    follow_redirects=False,
+                    transport=self.transport) as client:
+                headers = {"Authorization": "Bearer " + token, "Accept": "application/json",
+                           "X-PF-Store-Id": str(await self.store_id())}
+                response = await client.post(PRINTFUL_BASE_URL + "/orders/estimate-costs",
+                                             json=order, headers=headers)
+                # Account tokens require store context; single-store tokens may reject it.
+                # Estimation has no side effect, so the established one-time fallback is safe.
+                if response.status_code == 403:
+                    headers.pop("X-PF-Store-Id")
+                    response = await client.post(PRINTFUL_BASE_URL + "/orders/estimate-costs",
+                                                 json=order, headers=headers)
+        except OperatorError:
+            raise
+        except httpx.HTTPError:
+            raise OperatorError(502, "PRINTFUL_UNAVAILABLE") from None
+        errors = {
+            400: (400, "PRINTFUL_ESTIMATE_REJECTED"),
+            401: (502, "PRINTFUL_UNAUTHORIZED"),
+            403: (502, "PRINTFUL_FORBIDDEN"),
+            404: (404, "PRINTFUL_NOT_FOUND"),
+            429: (503, "PRINTFUL_RATE_LIMITED"),
+        }
+        if response.status_code in errors:
+            status, code = errors[response.status_code]
+            details = sanitize_printful_validation(response) if response.status_code == 400 else None
+            raise OperatorError(status, code, details)
+        if response.status_code >= 500:
+            raise OperatorError(502, "PRINTFUL_UNAVAILABLE")
+        if not 200 <= response.status_code < 300:
+            raise OperatorError(502, "PRINTFUL_ERROR")
+        try:
+            payload = response.json()
+        except ValueError:
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE") from None
+        result = payload.get("result") if isinstance(payload, dict) else None
+        costs = result.get("costs") if isinstance(result, dict) else None
+        if payload.get("code") not in (None, 200) or not isinstance(costs, dict):
+            raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+        allowed = (
+            "currency", "subtotal", "discount", "shipping", "digitization",
+            "additional_fee", "fulfillment_fee", "retail_delivery_fee", "tax",
+            "vat", "total",
+        )
+        return {name: costs.get(name) for name in allowed}
 
     async def store_id(self):
         configured = os.getenv("PRINTFUL_STORE_ID", "").strip()

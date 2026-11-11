@@ -1851,6 +1851,120 @@
         }
       }
     },
+    "/api/operator/v1/printful/estimate-cost": {
+      "post": {
+        "operationId": "estimatePrintfulCost",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstimateCostResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Product not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version conflict, idempotency conflict or operation busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "WooCommerce or verification error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured, unavailable or uncertain outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read WooCommerce commercial prices and call only Printful POST /orders/estimate-costs. This operation never creates an order or changes the store. Manual prices are explicitly hypothetical; incomplete costs return partial margins.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EstimateCostRequest"
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/operator/v1/printful/templates": {
       "get": {
         "operationId": "getPrintfulTemplates",
@@ -4064,6 +4178,259 @@
           },
           "orders_read": {
             "type": "boolean"
+          }
+        }
+      },
+      "EstimateCostRequest": {
+        "$defs": {
+          "EstimateItem": {
+            "additionalProperties": false,
+            "properties": {
+              "sync_variant_id": {
+                "maximum": 9223372036854775807,
+                "minimum": 1,
+                "title": "Sync Variant Id",
+                "type": "integer"
+              },
+              "quantity": {
+                "default": 1,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Quantity",
+                "type": "integer"
+              },
+              "woo_product_id": {
+                "anyOf": [
+                  {
+                    "maximum": 2147483647,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Woo Product Id"
+              },
+              "woo_variation_id": {
+                "anyOf": [
+                  {
+                    "maximum": 2147483647,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Woo Variation Id"
+              },
+              "hypothetical_unit_price": {
+                "anyOf": [
+                  {
+                    "pattern": "^(?:0|[1-9][0-9]{0,7})(?:\\.[0-9]{1,2})?$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Hypothetical Unit Price"
+              },
+              "hypothetical_currency": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Z]{3}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Hypothetical Currency"
+              }
+            },
+            "required": [
+              "sync_variant_id"
+            ],
+            "title": "EstimateItem",
+            "type": "object"
+          },
+          "EstimateRecipient": {
+            "additionalProperties": false,
+            "properties": {
+              "country_code": {
+                "pattern": "^[A-Z]{2}$",
+                "title": "Country Code",
+                "type": "string"
+              },
+              "state_code": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Za-z0-9 -]{1,40}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "State Code"
+              },
+              "city": {
+                "anyOf": [
+                  {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "City"
+              },
+              "zip": {
+                "anyOf": [
+                  {
+                    "maxLength": 20,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Zip"
+              },
+              "address1": {
+                "anyOf": [
+                  {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Address1"
+              }
+            },
+            "required": [
+              "country_code"
+            ],
+            "title": "EstimateRecipient",
+            "type": "object"
+          },
+          "MarginSimulation": {
+            "additionalProperties": false,
+            "properties": {
+              "buyer_discount_percent": {
+                "default": "0",
+                "pattern": "^(?:0|[1-9][0-9]{0,7})(?:\\.[0-9]{1,2})?$",
+                "title": "Buyer Discount Percent",
+                "type": "string"
+              },
+              "affiliate_commission_percent": {
+                "default": "0",
+                "pattern": "^(?:0|[1-9][0-9]{0,7})(?:\\.[0-9]{1,2})?$",
+                "title": "Affiliate Commission Percent",
+                "type": "string"
+              },
+              "target_margin_percent": {
+                "default": "0",
+                "pattern": "^(?:0|[1-9][0-9]{0,7})(?:\\.[0-9]{1,2})?$",
+                "title": "Target Margin Percent",
+                "type": "string"
+              }
+            },
+            "title": "MarginSimulation",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "recipient": {
+            "$ref": "#/$defs/EstimateRecipient"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/$defs/EstimateItem"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "shipping": {
+            "default": "STANDARD",
+            "pattern": "^[A-Z0-9_-]{1,40}$",
+            "title": "Shipping",
+            "type": "string"
+          },
+          "simulation": {
+            "$ref": "#/$defs/MarginSimulation"
+          }
+        },
+        "required": [
+          "recipient",
+          "items"
+        ],
+        "title": "EstimateCostRequest",
+        "type": "object"
+      },
+      "EstimateCostResponse": {
+        "type": "object",
+        "required": [
+          "estimate",
+          "costs",
+          "cost_evidence",
+          "commercial",
+          "margin",
+          "warnings"
+        ],
+        "properties": {
+          "estimate": {
+            "type": "object",
+            "properties": {
+              "created_order": {
+                "type": "boolean",
+                "const": false
+              },
+              "upstream_endpoint": {
+                "type": "string",
+                "const": "/orders/estimate-costs"
+              },
+              "shipping_method": {
+                "type": "string"
+              }
+            }
+          },
+          "costs": {
+            "type": "object"
+          },
+          "cost_evidence": {
+            "type": "object"
+          },
+          "commercial": {
+            "type": "object"
+          },
+          "margin": {
+            "type": "object"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
