@@ -28,7 +28,7 @@ from operator_orders import AdminOrderCreate, AdminOrderEmail
 LOGGER = logging.getLogger(__name__)
 ESTIMATE_RATE_LIMIT = 30
 ESTIMATE_RATE_WINDOW_SECONDS = 60
-_estimate_requests = {}
+_estimate_requests: dict[str, list[float]] = {}
 AW26_SINGLE_WOO_TIMEOUT = httpx.Timeout(
     connect=30.0, read=45.0, write=10.0, pool=10.0)
 

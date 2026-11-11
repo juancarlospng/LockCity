@@ -5215,11 +5215,11 @@
         "additionalProperties": false,
         "properties": {
           "recipient": {
-            "$ref": "#/$defs/EstimateRecipient"
+            "$ref": "#/components/schemas/EstimateCostRequest/$defs/EstimateRecipient"
           },
           "items": {
             "items": {
-              "$ref": "#/$defs/EstimateItem"
+              "$ref": "#/components/schemas/EstimateCostRequest/$defs/EstimateItem"
             },
             "maxItems": 20,
             "minItems": 1,
@@ -5233,7 +5233,7 @@
             "type": "string"
           },
           "simulation": {
-            "$ref": "#/$defs/MarginSimulation"
+            "$ref": "#/components/schemas/EstimateCostRequest/$defs/MarginSimulation"
           }
         },
         "required": [
