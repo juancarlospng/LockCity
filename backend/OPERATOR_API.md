@@ -102,6 +102,7 @@ token and an exact allowed Origin. The Bearer credential remains server-to-serve
 - `GET /api/operator/v1/audit?page=1&per_page=20`
 - `GET /api/operator/v1/printful/status`
 - `GET /api/operator/v1/printful/scopes`
+- `POST /api/operator/v1/printful/estimate-cost`
 - `GET /api/operator/v1/printful/templates?limit=20&offset=0`
 - `GET /api/operator/v1/printful/templates/{id}`
 - `GET /api/operator/v1/printful/orders?status=&external_id=&limit=&offset=`
@@ -115,10 +116,31 @@ token and an exact allowed Origin. The Bearer credential remains server-to-serve
 - `GET /api/operator/v1/printful/catalog-variants/{id}/prices`
 - `GET /api/operator/v1/printful/catalog-products/{id}/prices`
 
-The Printful integration uses GET for product and task data. Only the dedicated
-mockup task route sends a POST upstream, generating temporary review images
-without creating or publishing a product. Generation is restricted to the 17
-IDs in `AW26_TEMPLATE_IDS` and requires an independently enabled flag.
+The Printful integration uses GET for product and task data. The dedicated mockup
+task route is the only image-generation POST, generating temporary review images
+without creating or publishing a product. Generation is restricted to the 17 IDs
+in `AW26_TEMPLATE_IDS` and requires an independently enabled flag.
+
+The cost-estimate route is the other narrowly allowed upstream POST. It can call
+only Printful `/orders/estimate-costs`; it never calls `/orders`, never creates a
+draft, and does not inspect or change any write feature flag. Requests contain
+one to 20 sync variants, at most 100 total units, a validated destination and an
+optional shipping method. The Operator credential is limited to 30 estimates per
+60 seconds per process and request bodies are limited to 32 KiB.
+
+Commercial prices are read from the WooCommerce product or variation supplied on
+each line. A caller may instead provide `hypothetical_unit_price` and
+`hypothetical_currency`; those lines are explicitly returned with
+`price_source=hypothetical` and `hypothetical=true`. Manual prices are simulation
+inputs and are never sent to Printful or WooCommerce.
+
+The response keeps Printful estimates separate from commercial revenue. Printful
+fields are classified as `estimated` or `pending`; no estimated cost is labelled
+confirmed. Margin calculations use decimal arithmetic. Missing `costs.total` or
+currency produces `margin.status=incomplete`, a partial margin based only on known
+components, and `MATERIAL_COSTS_INCOMPLETE`. Different currencies produce
+`currency_mismatch` and no margin. No currency conversion or missing cost is
+invented.
 
 The pre-order status route reads the effective WordPress runtime switch through
 an authenticated plugin route; it does not read or return `wp-config.php`. The

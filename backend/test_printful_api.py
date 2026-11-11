@@ -1,11 +1,13 @@
 import asyncio
 import json
 import os
+from decimal import Decimal
 
 import httpx
 import pytest
 from fastapi import FastAPI
 
+import operator_api
 from operator_api import OperatorError, create_router
 from printful_api import (AW26_TEMPLATE_IDS, PrintfulClient, build_mockup_request_body,
                           group_styles_by_placement,
@@ -254,6 +256,13 @@ class Printful:
     async def order(self, order_id):
         return {"printful_order_id": int(str(order_id).lstrip("@") or "0")}
 
+    async def estimate_cost(self, order):
+        self.estimate_order = order
+        return {"currency": "USD", "subtotal": "20.00", "discount": "0.00",
+                "shipping": "5.00", "digitization": "0.00", "additional_fee": "0.00",
+                "fulfillment_fee": "0.00", "retail_delivery_fee": None,
+                "tax": "2.00", "vat": "0.00", "total": "27.00"}
+
     async def catalog_variant_prices(self, variant_id):
         return {"catalogVariantId": variant_id, "currency": "USD",
                 "productionCurrency": "USD", "sellingRegionName": "worldwide",
@@ -332,6 +341,111 @@ def test_operator_routes_require_auth(monkeypatch, path):
     assert run(request("GET", path, headers)).status_code in (200, 404)
 
 
+def test_estimate_route_uses_woo_price_and_returns_margin_without_writes(monkeypatch):
+    monkeypatch.setenv("OPERATOR_API_TOKEN", "o" * 32)
+    monkeypatch.setenv("OPERATOR_WRITES_ENABLED", "false")
+
+    class WooEstimate:
+        async def commercial_currency(self):
+            return "USD"
+
+        async def commercial_price(self, product_id, variation_id=None):
+            assert (product_id, variation_id) == (3915, 4012)
+            return Decimal("40.00")
+
+    printful = Printful()
+    app = FastAPI()
+    app.include_router(create_router(Store(), woo=WooEstimate(), printful=printful))
+    payload = {
+        "recipient": {"country_code": "US", "state_code": "CA", "zip": "91311"},
+        "items": [{"sync_variant_id": 123, "quantity": 1,
+                   "woo_product_id": 3915, "woo_variation_id": 4012}],
+        "simulation": {"buyer_discount_percent": "10",
+                       "affiliate_commission_percent": "5",
+                       "target_margin_percent": "20"},
+    }
+
+    async def request(headers, body=payload):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://test") as client:
+            return await client.post("/api/operator/v1/printful/estimate-cost",
+                                     headers=headers, json=body)
+
+    assert run(request({})).status_code == 401
+    response = run(request({"Authorization": "Bearer " + "o" * 32}))
+    assert response.status_code == 200
+    result = response.json()
+    assert printful.estimate_order == {
+        "recipient": {"country_code": "US", "state_code": "CA", "zip": "91311"},
+        "items": [{"sync_variant_id": 123, "quantity": 1}],
+        "shipping": "STANDARD",
+    }
+    assert result["estimate"]["created_order"] is False
+    assert result["commercial"]["lines"][0]["price_source"] == "woocommerce"
+    assert result["commercial"]["net_revenue"] == "36.00"
+    assert result["commercial"]["affiliate_commission"] == "1.80"
+    assert result["margin"]["margin_after_affiliate"] == "7.20"
+    assert result["margin"]["status"] == "profitable"
+    assert result["cost_evidence"]["confirmed"] == []
+    assert result["cost_evidence"]["pending"] == ["retail_delivery_fee"]
+    assert os.getenv("OPERATOR_WRITES_ENABLED") == "false"
+
+
+def test_estimate_route_marks_manual_prices_and_incomplete_costs(monkeypatch):
+    monkeypatch.setenv("OPERATOR_API_TOKEN", "o" * 32)
+
+    class IncompletePrintful(Printful):
+        async def estimate_cost(self, order):
+            self.estimate_order = order
+            return {"currency": "EUR", "subtotal": "12.00", "discount": None,
+                    "shipping": None, "digitization": None, "additional_fee": None,
+                    "fulfillment_fee": None, "retail_delivery_fee": None,
+                    "tax": None, "vat": None, "total": None}
+
+    app = FastAPI()
+    app.include_router(create_router(Store(), woo=object(), printful=IncompletePrintful()))
+    body = {"recipient": {"country_code": "FR"}, "items": [{
+        "sync_variant_id": 456, "quantity": 1,
+        "hypothetical_unit_price": "30.00", "hypothetical_currency": "EUR"}]}
+
+    async def request():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://test") as client:
+            return await client.post("/api/operator/v1/printful/estimate-cost",
+                                     headers={"Authorization": "Bearer " + "o" * 32}, json=body)
+
+    result = run(request()).json()
+    assert result["commercial"]["lines"][0]["hypothetical"] is True
+    assert result["margin"]["status"] == "incomplete"
+    assert result["margin"]["complete"] is False
+    assert result["margin"]["margin_after_affiliate"] == "18.00"
+    assert "MATERIAL_COSTS_INCOMPLETE" in result["warnings"]
+
+
+def test_estimate_route_rejects_unknown_fields_and_enforces_rate_limit(monkeypatch):
+    monkeypatch.setenv("OPERATOR_API_TOKEN", "r" * 32)
+    monkeypatch.setattr(operator_api, "ESTIMATE_RATE_LIMIT", 1)
+    operator_api._estimate_requests.clear()
+    app = FastAPI()
+    app.include_router(create_router(Store(), woo=object(), printful=Printful()))
+    body = {"recipient": {"country_code": "FR"}, "items": [{
+        "sync_variant_id": 456, "hypothetical_unit_price": "30.00",
+        "hypothetical_currency": "USD"}]}
+
+    async def request(payload):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://test") as client:
+            return await client.post("/api/operator/v1/printful/estimate-cost",
+                                     headers={"Authorization": "Bearer " + "r" * 32}, json=payload)
+
+    invalid = {**body, "create_order": True}
+    assert run(request(invalid)).json() == {"error": "INVALID_COST_ESTIMATE"}
+    assert run(request(body)).status_code == 200
+    limited = run(request(body))
+    assert limited.status_code == 429
+    assert limited.json() == {"error": "ESTIMATE_RATE_LIMITED"}
+
+
 def test_operator_routes_are_get_only_and_writes_stay_disabled(monkeypatch):
     monkeypatch.setenv("OPERATOR_API_TOKEN", "o" * 32)
     monkeypatch.setenv("OPERATOR_WRITES_ENABLED", "false")
@@ -393,6 +507,50 @@ def test_printful_scope_names_are_read_only_and_do_not_expose_token(monkeypatch)
     result = run(client_for(handler).scopes())
     assert result == {"scopes": ["orders/read", "sync_products/read"], "orders_read": True}
     assert TOKEN not in str(result)
+
+
+def test_estimate_cost_posts_only_to_official_estimate_endpoint(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("PRINTFUL_STORE_ID", "321")
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        assert request.method == "POST"
+        assert request.url.path == "/orders/estimate-costs"
+        assert request.headers["X-PF-Store-Id"] == "321"
+        assert json.loads(request.content) == {
+            "recipient": {"country_code": "US", "state_code": "CA"},
+            "items": [{"sync_variant_id": 123, "quantity": 2}],
+            "shipping": "STANDARD",
+        }
+        return httpx.Response(200, json={"code": 200, "result": {"costs": {
+            "currency": "USD", "subtotal": "20.00", "discount": "1.00",
+            "shipping": "5.00", "digitization": "0.00", "additional_fee": "0.00",
+            "fulfillment_fee": "0.00", "tax": "2.00", "vat": "0.00",
+            "total": "26.00"}}})
+
+    result = run(client_for(handler).estimate_cost({
+        "recipient": {"country_code": "US", "state_code": "CA"},
+        "items": [{"sync_variant_id": 123, "quantity": 2}],
+        "shipping": "STANDARD",
+    }))
+    assert len(requests) == 1
+    assert result["total"] == "26.00"
+    assert TOKEN not in str(result)
+
+
+def test_estimate_cost_sanitizes_upstream_error(monkeypatch):
+    monkeypatch.setenv("PRINTFUL_API_TOKEN", TOKEN)
+    monkeypatch.setenv("PRINTFUL_STORE_ID", "321")
+
+    def handler(_request):
+        return httpx.Response(403, json={"message": "missing scope " + TOKEN})
+
+    with pytest.raises(OperatorError) as error:
+        run(client_for(handler).estimate_cost({"recipient": {}, "items": []}))
+    assert (error.value.status, error.value.code) == (502, "PRINTFUL_FORBIDDEN")
+    assert TOKEN not in str(error.value.__dict__)
 
 
 def test_printful_orders_use_get_store_scope_and_support_external_lookup(monkeypatch):

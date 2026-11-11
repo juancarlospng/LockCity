@@ -3,7 +3,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from operator_api import Aw26HardHide, Aw26ProductPatch, Rename
+from operator_api import (Aw26HardHide, Aw26ProductPatch, EstimateCostRequest,
+                          Rename)
 from operator_auth import LoginBody
 from operator_orders import AdminOrderCreate, AdminOrderEmail
 
@@ -193,6 +194,18 @@ def contract():
             "properties": {
                 "scopes": {"type": "array", "items": {"type": "string"}},
                 "orders_read": {"type": "boolean"}}},
+        "EstimateCostRequest": embedded_model_schema(
+            EstimateCostRequest, "EstimateCostRequest"),
+        "EstimateCostResponse": {"type": "object", "required": [
+            "estimate", "costs", "cost_evidence", "commercial", "margin", "warnings"],
+            "properties": {
+                "estimate": {"type": "object", "properties": {
+                    "created_order": {"type": "boolean", "const": False},
+                    "upstream_endpoint": {"type": "string", "const": "/orders/estimate-costs"},
+                    "shipping_method": {"type": "string"}}},
+                "costs": {"type": "object"}, "cost_evidence": {"type": "object"},
+                "commercial": {"type": "object"}, "margin": {"type": "object"},
+                "warnings": {"type": "array", "items": {"type": "string"}}}},
         "PrintfulTemplate": {"type": "object", "required": [
             "id", "title", "catalogProductId", "externalProductId", "availableVariantIds",
             "colors", "sizes", "mockupUrl", "placements", "createdAt", "updatedAt"],
@@ -390,6 +403,7 @@ def contract():
         ("/audit", "get", "getAudit", "Audit", pagination),
         ("/printful/status", "get", "getPrintfulStatus", "PrintfulStatus", []),
         ("/printful/scopes", "get", "getPrintfulScopes", "PrintfulScopes", []),
+        ("/printful/estimate-cost", "post", "estimatePrintfulCost", "EstimateCostResponse", []),
         ("/printful/templates", "get", "getPrintfulTemplates", "PrintfulTemplateList", printful_pagination),
         ("/printful/templates/{id}", "get", "getPrintfulTemplate", "PrintfulTemplateDetail", identifier),
         ("/printful/orders", "get", "getPrintfulOrders", "PrintfulOrders", printful_order_filters),
@@ -471,6 +485,13 @@ def contract():
                                         "validated against the template. It never creates a Printful task.")
             operation["requestBody"] = {"required": False, "content": {"application/json": {
                 "schema": {"$ref": "#/components/schemas/MockupPlanSelection"}}}}
+        if operation_id == "estimatePrintfulCost":
+            operation["description"] = (
+                "Read WooCommerce commercial prices and call only Printful POST "
+                "/orders/estimate-costs. This operation never creates an order or changes the store. "
+                "Manual prices are explicitly hypothetical; incomplete costs return partial margins.")
+            operation["requestBody"] = {"required": True, "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/EstimateCostRequest"}}}}
         if operation_id == "createPrintfulMockupTask":
             operation["description"] = ("Generate images for one existing Printful template. Requires the separate "
                                         "PRINTFUL_MOCKUP_GENERATION_ENABLED flag and a prior dry-run plan; "

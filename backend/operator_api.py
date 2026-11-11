@@ -9,13 +9,14 @@ import re
 import time
 import uuid
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from urllib.parse import urlsplit
 
 import asyncpg
 import httpx
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, ValidationError
+from pydantic import (BaseModel, ConfigDict, Field, StrictInt, StrictStr,
+                      ValidationError, model_validator)
 from starlette.responses import JSONResponse
 
 from operator_audit import AuditEventError
@@ -25,6 +26,9 @@ from operator_orders import AdminOrderCreate, AdminOrderEmail
 
 
 LOGGER = logging.getLogger(__name__)
+ESTIMATE_RATE_LIMIT = 30
+ESTIMATE_RATE_WINDOW_SECONDS = 60
+_estimate_requests = {}
 AW26_SINGLE_WOO_TIMEOUT = httpx.Timeout(
     connect=30.0, read=45.0, write=10.0, pool=10.0)
 
@@ -98,9 +102,205 @@ class Aw26HardHide(BaseModel):
     idempotency_key: StrictStr = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
 
 
+MONEY_PATTERN = r"^(?:0|[1-9][0-9]{0,7})(?:\.[0-9]{1,2})?$"
+
+
+class EstimateRecipient(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    country_code: StrictStr = Field(pattern=r"^[A-Z]{2}$")
+    state_code: StrictStr | None = Field(default=None, pattern=r"^[A-Za-z0-9 -]{1,40}$")
+    city: StrictStr | None = Field(default=None, min_length=1, max_length=100)
+    zip: StrictStr | None = Field(default=None, min_length=1, max_length=20)
+    address1: StrictStr | None = Field(default=None, min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def required_region(self):
+        if self.country_code in {"US", "CA", "AU"} and not self.state_code:
+            raise ValueError("state_code is required for this country")
+        return self
+
+
+class EstimateItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    sync_variant_id: StrictInt = Field(ge=1, le=9223372036854775807)
+    quantity: StrictInt = Field(default=1, ge=1, le=100)
+    woo_product_id: StrictInt | None = Field(default=None, ge=1, le=2147483647)
+    woo_variation_id: StrictInt | None = Field(default=None, ge=1, le=2147483647)
+    hypothetical_unit_price: StrictStr | None = Field(default=None, pattern=MONEY_PATTERN)
+    hypothetical_currency: StrictStr | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+
+    @model_validator(mode="after")
+    def price_source(self):
+        manual = self.hypothetical_unit_price is not None
+        if manual != (self.hypothetical_currency is not None):
+            raise ValueError("hypothetical price and currency must be supplied together")
+        if not manual and self.woo_product_id is None:
+            raise ValueError("woo_product_id is required for WooCommerce pricing")
+        if self.woo_variation_id is not None and self.woo_product_id is None:
+            raise ValueError("woo_variation_id requires woo_product_id")
+        return self
+
+
+class MarginSimulation(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    buyer_discount_percent: StrictStr = Field(default="0", pattern=MONEY_PATTERN)
+    affiliate_commission_percent: StrictStr = Field(default="0", pattern=MONEY_PATTERN)
+    target_margin_percent: StrictStr = Field(default="0", pattern=MONEY_PATTERN)
+
+    @model_validator(mode="after")
+    def percentages(self):
+        if any(Decimal(value) > 100 for value in (
+                self.buyer_discount_percent, self.affiliate_commission_percent,
+                self.target_margin_percent)):
+            raise ValueError("percentages cannot exceed 100")
+        return self
+
+
+class EstimateCostRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    recipient: EstimateRecipient
+    items: list[EstimateItem] = Field(min_length=1, max_length=20)
+    shipping: StrictStr = Field(default="STANDARD", pattern=r"^[A-Z0-9_-]{1,40}$")
+    simulation: MarginSimulation = Field(default_factory=MarginSimulation)
+
+    @model_validator(mode="after")
+    def quantities(self):
+        if sum(item.quantity for item in self.items) > 100:
+            raise ValueError("total quantity cannot exceed 100")
+        return self
+
+
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=True,
                                      separators=(",", ":")).encode()).hexdigest()
+
+
+def _money(value, error="INVALID_UPSTREAM_RESPONSE"):
+    if isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)):
+        raise OperatorError(502, error)
+    try:
+        parsed = Decimal(str(value))
+    except InvalidOperation:
+        raise OperatorError(502, error) from None
+    if not parsed.is_finite() or parsed < 0:
+        raise OperatorError(502, error)
+    return parsed
+
+
+def _amount(value):
+    if value is None:
+        return None
+    return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def profitability_view(costs, commercial_lines, simulation):
+    cost_fields = (
+        "subtotal", "discount", "shipping", "digitization", "additional_fee",
+        "fulfillment_fee", "retail_delivery_fee", "tax", "vat", "total",
+    )
+    currency = costs.get("currency")
+    if currency is not None and (not isinstance(currency, str)
+                                 or not re.fullmatch(r"[A-Z]{3}", currency)):
+        raise OperatorError(502, "INVALID_PRINTFUL_RESPONSE")
+    parsed = {}
+    for name in cost_fields:
+        value = costs.get(name)
+        parsed[name] = None if value is None else _money(value, "INVALID_PRINTFUL_RESPONSE")
+    normalized_costs = {"currency": currency, **{
+        name: _amount(parsed[name]) for name in cost_fields}}
+    pending = [name for name in cost_fields if parsed[name] is None]
+    estimated = [name for name in cost_fields if parsed[name] is not None]
+
+    commercial_currencies = {line["currency"] for line in commercial_lines}
+    commercial_currency = next(iter(commercial_currencies)) if len(commercial_currencies) == 1 else None
+    warnings = []
+    if any(line["hypothetical"] for line in commercial_lines):
+        warnings.append("HYPOTHETICAL_COMMERCIAL_PRICE")
+    if commercial_currency is None:
+        warnings.append("COMMERCIAL_CURRENCY_MISMATCH")
+    elif currency is None or commercial_currency != currency:
+        warnings.append("CURRENCY_MISMATCH")
+
+    gross = sum(line["unit_price"] * line["quantity"] for line in commercial_lines)
+    buyer_rate = Decimal(simulation.buyer_discount_percent) / 100
+    affiliate_rate = Decimal(simulation.affiliate_commission_percent) / 100
+    target_rate = Decimal(simulation.target_margin_percent) / 100
+    buyer_discount = gross * buyer_rate
+    net = gross - buyer_discount
+    affiliate = net * affiliate_rate
+
+    known_components = ["subtotal", "shipping", "digitization", "additional_fee",
+                        "fulfillment_fee", "retail_delivery_fee", "tax", "vat"]
+    known_cost = sum(parsed[name] or Decimal("0") for name in known_components)
+    if parsed["discount"] is not None:
+        known_cost -= parsed["discount"]
+    complete = currency is not None and parsed["total"] is not None
+    comparable = commercial_currency is not None and commercial_currency == currency
+    chosen_cost = parsed["total"] if complete else known_cost
+    partial_margin = net - affiliate - chosen_cost if comparable else None
+    margin_before_affiliate = net - chosen_cost if comparable else None
+    margin_percent = (partial_margin / net * 100) if partial_margin is not None and net else None
+    maximum_affiliate = None
+    if comparable and complete and net:
+        maximum_affiliate = max(Decimal("0"), min(
+            Decimal("100"), (net - chosen_cost - (net * target_rate)) / net * 100))
+    if not complete:
+        warnings.append("MATERIAL_COSTS_INCOMPLETE")
+        status = "incomplete"
+    elif not comparable:
+        status = "currency_mismatch"
+    elif partial_margin > 0:
+        status = "profitable"
+    elif partial_margin < 0:
+        status = "unprofitable"
+    else:
+        status = "break_even"
+    if maximum_affiliate is not None and affiliate_rate * 100 > maximum_affiliate:
+        warnings.append("AFFILIATE_COMMISSION_EXCEEDS_TARGET_MARGIN")
+
+    return {
+        "costs": normalized_costs,
+        "cost_evidence": {
+            "confirmed": [],
+            "estimated": estimated,
+            "pending": pending,
+            "source": "printful_order_cost_estimate",
+        },
+        "commercial": {
+            "currency": commercial_currency,
+            "gross_revenue": _amount(gross),
+            "buyer_discount": _amount(buyer_discount),
+            "net_revenue": _amount(net),
+            "affiliate_commission": _amount(affiliate),
+            "lines": [{**{key: value for key, value in line.items() if key != "unit_price"},
+                       "unit_price": _amount(line["unit_price"])} for line in commercial_lines],
+        },
+        "margin": {
+            "status": status,
+            "complete": complete and comparable,
+            "known_cost_total": _amount(known_cost),
+            "margin_before_affiliate": _amount(margin_before_affiliate),
+            "margin_after_affiliate": _amount(partial_margin),
+            "margin_percent": _amount(margin_percent),
+            "maximum_affiliate_percent_for_target": _amount(maximum_affiliate),
+            "target_margin_percent": _amount(Decimal(simulation.target_margin_percent)),
+        },
+        "warnings": warnings,
+    }
+
+
+def enforce_estimate_rate_limit(request):
+    # The Operator credential is already authenticated by dispatch. Hash it so the
+    # limiter cannot expose or retain the secret and cannot be bypassed with XFF.
+    key = hashlib.sha256(request.headers.get("authorization", "").encode()).hexdigest()
+    now = time.monotonic()
+    recent = [stamp for stamp in _estimate_requests.get(key, [])
+              if now - stamp < ESTIMATE_RATE_WINDOW_SECONDS]
+    if len(recent) >= ESTIMATE_RATE_LIMIT:
+        _estimate_requests[key] = recent
+        raise OperatorError(429, "ESTIMATE_RATE_LIMITED")
+    recent.append(now)
+    _estimate_requests[key] = recent
 
 
 def product_view(raw):
@@ -555,6 +755,25 @@ class WooClient:
         if view["id"] != product_id:
             raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
         return view
+
+    async def commercial_currency(self):
+        raw, _ = await self.call("GET", "data/currencies/current")
+        code = raw.get("code") if isinstance(raw, dict) else None
+        if not isinstance(code, str) or not re.fullmatch(r"[A-Z]{3}", code):
+            raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+        return code
+
+    async def commercial_price(self, product_id, variation_id=None):
+        path = (f"products/{product_id}/variations/{variation_id}"
+                if variation_id is not None else f"products/{product_id}")
+        raw, _ = await self.call("GET", path)
+        if (not isinstance(raw, dict) or raw.get("id") != (variation_id or product_id)
+                or (variation_id is not None and raw.get("parent_id") != product_id)):
+            raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+        value = raw.get("price")
+        if not isinstance(value, str) or not re.fullmatch(MONEY_PATTERN, value):
+            raise OperatorError(422, "WOOCOMMERCE_PRICE_UNAVAILABLE")
+        return _money(value)
 
     async def rename(self, product_id, name):
         await self.call("PUT", f"products/{product_id}", payload={"name": name})
@@ -1647,6 +1866,59 @@ def create_router(
     async def printful_scopes(request: Request):
         async def action():
             return 200, await printful_client.scopes()
+        return await dispatch(request, action)
+
+    @router.post("/printful/estimate-cost")
+    async def printful_estimate_cost(request: Request):
+        async def action():
+            raw = await request.body()
+            if len(raw) > 32768:
+                raise OperatorError(413, "BODY_TOO_LARGE")
+            try:
+                body = EstimateCostRequest.model_validate_json(raw)
+            except ValidationError:
+                raise OperatorError(400, "INVALID_COST_ESTIMATE") from None
+            enforce_estimate_rate_limit(request)
+
+            woo_currency = None
+            if any(item.hypothetical_unit_price is None for item in body.items):
+                woo_currency = await service.woo.commercial_currency()
+            commercial_lines = []
+            for item in body.items:
+                if item.hypothetical_unit_price is not None:
+                    unit_price = Decimal(item.hypothetical_unit_price)
+                    currency = item.hypothetical_currency
+                    source = "hypothetical"
+                else:
+                    unit_price = await service.woo.commercial_price(
+                        item.woo_product_id, item.woo_variation_id)
+                    currency = woo_currency
+                    source = "woocommerce"
+                commercial_lines.append({
+                    "sync_variant_id": item.sync_variant_id,
+                    "woo_product_id": item.woo_product_id,
+                    "woo_variation_id": item.woo_variation_id,
+                    "quantity": item.quantity,
+                    "unit_price": unit_price,
+                    "currency": currency,
+                    "price_source": source,
+                    "hypothetical": source == "hypothetical",
+                })
+
+            upstream = {
+                "recipient": body.recipient.model_dump(exclude_none=True),
+                "items": [{"sync_variant_id": item.sync_variant_id,
+                           "quantity": item.quantity} for item in body.items],
+                "shipping": body.shipping,
+            }
+            costs = await printful_client.estimate_cost(upstream)
+            result = profitability_view(costs, commercial_lines, body.simulation)
+            result["estimate"] = {
+                "created_order": False,
+                "upstream_endpoint": "/orders/estimate-costs",
+                "shipping_method": body.shipping,
+            }
+            return 200, result
         return await dispatch(request, action)
 
     @router.get("/printful/templates")
