@@ -10,6 +10,10 @@ def production_settings():
     os.environ["AW26_PUBLISH_ENABLED"] = "false"
     os.environ["AW26_PRODUCT_WRITE_ENABLED"] = "false"
     os.environ["PRINTFUL_MOCKUP_GENERATION_ENABLED"] = "false"
+    # New administrative mutations are independently fail-closed. A deployment
+    # must deliberately opt in after its database migration and bridge exist.
+    os.environ.setdefault("OPERATOR_ORDER_CREATE_ENABLED", "false")
+    os.environ.setdefault("OPERATOR_EMAIL_SEND_ENABLED", "false")
     try:
         port = int(os.environ.get("PORT", "8000"))
     except ValueError as exc:

@@ -18,7 +18,10 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, ValidationError
 from starlette.responses import JSONResponse
 
+from operator_audit import AuditEventError
+from operator_auth import AuthError
 from operator_environment import runtime_status
+from operator_orders import AdminOrderCreate, AdminOrderEmail
 
 
 LOGGER = logging.getLogger(__name__)
@@ -507,6 +510,44 @@ class WooClient:
             "GET", f"orders/{order_id}/notes", params={"per_page": 100},
             not_found="ORDER_NOT_FOUND")
         return order_view(raw, notes)
+
+    async def read_product_for_order(self, product_id, variation_id=0):
+        raw, _ = await self.call(
+            "GET", f"products/{product_id}", params={"context": "edit"},
+            not_found="PRODUCT_NOT_FOUND")
+        if not isinstance(raw, dict):
+            raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+        if variation_id:
+            variation, _ = await self.call(
+                "GET", f"products/{product_id}/variations/{variation_id}",
+                params={"context": "edit"}, not_found="VARIATION_NOT_FOUND")
+            if not isinstance(variation, dict):
+                raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+            variation = dict(variation)
+            variation["parent_id"] = product_id
+            raw = dict(raw)
+            raw["selected_variation"] = variation
+        return raw
+
+    async def create_operator_order(self, payload):
+        result, _ = await self.call(
+            "POST", "lock-city/operator/orders", payload=payload,
+            not_found="OPERATOR_BRIDGE_NOT_AVAILABLE")
+        return result
+
+    async def send_operator_order_email(self, order_id, payload):
+        result, _ = await self.call(
+            "POST", f"lock-city/operator/orders/{order_id}/email", payload=payload,
+            not_found="OPERATOR_BRIDGE_NOT_AVAILABLE")
+        return result
+
+    async def operator_email_templates(self):
+        result, _ = await self.call(
+            "GET", "lock-city/operator/email-templates",
+            not_found="OPERATOR_BRIDGE_NOT_AVAILABLE")
+        if not isinstance(result, dict) or not isinstance(result.get("templates"), list):
+            raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
+        return result
 
     async def get(self, product_id):
         raw, _ = await self.call("GET", f"products/{product_id}")
@@ -1225,7 +1266,9 @@ class Aw26ProductService:
                 await self.store.unlock(product_id, op)
 
 
-def create_router(store, woo=None, printful=None):
+def create_router(
+        store, woo=None, printful=None, auth=None,
+        audit_events=None, order_service=None):
     from printful_api import (AW26_EDITORIAL_RECOMMENDATIONS, AW26_TEMPLATE_IDS,
                               PrintfulClient, normalize_mockup_task_result,
                               plan_mockup_batches)
@@ -1238,12 +1281,29 @@ def create_router(store, woo=None, printful=None):
     async def dispatch(request, action):
         try:
             token = os.getenv("OPERATOR_API_TOKEN", "")
-            if len(token) < 32:
-                raise OperatorError(503, "OPERATOR_NOT_CONFIGURED")
             supplied = request.headers.get("authorization", "")
-            if not hmac.compare_digest(supplied.encode(), ("Bearer " + token).encode()):
+            bearer_ok = (len(token) >= 32 and hmac.compare_digest(
+                supplied.encode(), ("Bearer " + token).encode()))
+            if bearer_ok:
+                request.state.operator_actor = "server_to_server"
+            elif auth is not None:
+                auth.require_origin(request)
+                session = await auth.authenticate(
+                    request, csrf=request.method not in {"GET", "HEAD", "OPTIONS"})
+                request.state.operator_actor = session.actor_id
+            elif len(token) < 32:
+                raise OperatorError(503, "OPERATOR_NOT_CONFIGURED")
+            else:
                 raise OperatorError(401, "UNAUTHORIZED")
             status, result = await action()
+        except AuthError as exc:
+            status, result = exc.status, {"error": exc.code}
+        except AuditEventError as exc:
+            status, result = exc.status, {"error": exc.code}
+            if exc.record is not None:
+                operation_id = exc.record.get("operation_id")
+                if operation_id:
+                    result["operation_id"] = operation_id
         except OperatorError as exc:
             status, result = exc.status, {"error": exc.code}
             if exc.details is not None:
@@ -1362,6 +1422,10 @@ def create_router(store, woo=None, printful=None):
             return 200, {"status": "ok", "audit": "ok", "woocommerce": "ok",
                          **runtime_status(),
                          "writes_enabled": os.getenv("OPERATOR_WRITES_ENABLED") == "true",
+                         "order_create_enabled":
+                             os.getenv("OPERATOR_ORDER_CREATE_ENABLED") == "true",
+                         "email_send_enabled":
+                             os.getenv("OPERATOR_EMAIL_SEND_ENABLED") == "true",
                          "aw26_product_writes_enabled":
                              os.getenv("AW26_PRODUCT_WRITE_ENABLED") == "true",
                          "aw26_publish_enabled": os.getenv("AW26_PUBLISH_ENABLED") == "true"}
@@ -1396,10 +1460,53 @@ def create_router(store, woo=None, printful=None):
             return 200, await service.woo.orders(order_filters(request))
         return await dispatch(request, action)
 
+    @router.post("/orders")
+    async def create_order(request: Request):
+        async def action():
+            if os.getenv("OPERATOR_ORDER_CREATE_ENABLED") != "true":
+                raise OperatorError(403, "ORDER_CREATION_DISABLED")
+            if order_service is None:
+                raise OperatorError(503, "ORDER_SERVICE_NOT_CONFIGURED")
+            raw = await request.body()
+            if len(raw) > 32768:
+                raise OperatorError(413, "BODY_TOO_LARGE")
+            try:
+                body = AdminOrderCreate.model_validate_json(raw)
+            except ValidationError:
+                raise OperatorError(400, "INVALID_ORDER_REQUEST") from None
+            return await order_service.create(
+                body, getattr(request.state, "operator_actor", "unknown"))
+        return await dispatch(request, action)
+
     @router.get("/orders/{id}")
     async def order(id: str, request: Request):
         async def action():
             return 200, await service.woo.order(valid_id(id))
+        return await dispatch(request, action)
+
+    @router.get("/email-templates")
+    async def email_templates(request: Request):
+        async def action():
+            return 200, await service.woo.operator_email_templates()
+        return await dispatch(request, action)
+
+    @router.post("/orders/{id}/email")
+    async def send_order_email(id: str, request: Request):
+        async def action():
+            if os.getenv("OPERATOR_EMAIL_SEND_ENABLED") != "true":
+                raise OperatorError(403, "EMAIL_SEND_DISABLED")
+            if order_service is None:
+                raise OperatorError(503, "ORDER_SERVICE_NOT_CONFIGURED")
+            order_id = valid_id(id)
+            raw = await request.body()
+            if len(raw) > 8192:
+                raise OperatorError(413, "BODY_TOO_LARGE")
+            try:
+                body = AdminOrderEmail.model_validate_json(raw)
+            except ValidationError:
+                raise OperatorError(400, "INVALID_EMAIL_REQUEST") from None
+            return await order_service.email(
+                order_id, body, getattr(request.state, "operator_actor", "unknown"))
         return await dispatch(request, action)
 
     @router.patch("/products/{product_id}")
@@ -1507,7 +1614,11 @@ def create_router(store, woo=None, printful=None):
     async def audit(request: Request):
         async def action():
             page, size = pagination(request)
-            return 200, {"operations": await store.audit(page, size), "page": page, "per_page": size}
+            events = []
+            if audit_events is not None:
+                events = await audit_events.store.list(page, size)
+            return 200, {"operations": await store.audit(page, size),
+                         "events": events, "page": page, "per_page": size}
         return await dispatch(request, action)
 
     @router.get("/printful/status")

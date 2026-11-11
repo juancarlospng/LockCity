@@ -4,6 +4,24 @@ from pathlib import Path
 from typing import Any
 
 from operator_api import Aw26HardHide, Aw26ProductPatch, Rename
+from operator_auth import LoginBody
+from operator_orders import AdminOrderCreate, AdminOrderEmail
+
+
+def embedded_model_schema(model, name):
+    """Keep Pydantic's local $defs references valid after component embedding."""
+    schema = model.model_json_schema()
+
+    def rewrite(value):
+        if isinstance(value, dict):
+            return {key: (item.replace("#/$defs/", f"#/components/schemas/{name}/$defs/")
+                          if key == "$ref" and isinstance(item, str) else rewrite(item))
+                    for key, item in value.items()}
+        if isinstance(value, list):
+            return [rewrite(item) for item in value]
+        return value
+
+    return rewrite(schema)
 
 
 def contract():
@@ -42,6 +60,35 @@ def contract():
     }
     schemas = {
         "Product": product, "Error": error, "Rename": Rename.model_json_schema(),
+        "Login": embedded_model_schema(LoginBody, "Login"),
+        "AdminOrderCreate": embedded_model_schema(AdminOrderCreate, "AdminOrderCreate"),
+        "AdminOrderEmail": embedded_model_schema(AdminOrderEmail, "AdminOrderEmail"),
+        "AuthSession": {"type": "object", "required": [
+            "authenticated", "email", "csrf_token", "expires_at"], "properties": {
+                "authenticated": {"type": "boolean"}, "email": {"type": "string"},
+                "csrf_token": {"type": "string"},
+                "expires_at": {"type": "string", "format": "date-time"}}},
+        "AdminOrderResult": {"type": "object", "required": [
+            "operation_id", "order_id", "status", "verified"], "properties": {
+                "operation_id": {"type": "string", "format": "uuid"},
+                "order_id": {"type": "integer"}, "status": {"type": "string"},
+                "currency": {"type": "string"}, "total": {"type": "string"},
+                "verified": {"type": "boolean"}, "replayed": {"type": "boolean"}}},
+        "AdminEmailResult": {"type": "object", "required": [
+            "operation_id", "order_id", "template", "sent", "verified"],
+                             "properties": {
+                                 "operation_id": {"type": "string", "format": "uuid"},
+                                 "order_id": {"type": "integer"},
+                                 "template": {"type": "string"},
+                                 "sent": {"type": "boolean"},
+                                 "verified": {"type": "boolean"},
+                                 "replayed": {"type": "boolean"}}},
+        "WooEmailTemplates": {"type": "object", "required": ["templates"],
+                              "properties": {"templates": {"type": "array", "items": {
+                                  "type": "object", "required": ["id", "enabled", "class"],
+                                  "properties": {"id": {"type": "string"},
+                                                 "enabled": {"type": "boolean"},
+                                                 "class": {"type": "string"}}}}}},
         "Aw26ProductPatch": Aw26ProductPatch.model_json_schema(),
         "Aw26HardHide": Aw26HardHide.model_json_schema(),
         "Aw26Product": {"type": "object", "required": [
@@ -76,11 +123,14 @@ def contract():
         "Aw26Categories": {"type": "object", "required": ["categories"], "properties": {
             "categories": {"type": "array", "items": {
                 "$ref": "#/components/schemas/Aw26Category"}}}},
-        "Status": {"type": "object", "required": ["status", "audit", "woocommerce", "environment",
-                                                       "woo_target", "wordpress_target", "paypal_environment",
-                                                       "printful_context", "writes_enabled"],
+        "Status": {"type": "object", "required": [
+            "status", "audit", "woocommerce", "environment", "woo_target",
+            "wordpress_target", "paypal_environment", "printful_context", "writes_enabled",
+            "order_create_enabled", "email_send_enabled"],
                    "properties": {"status": {"type": "string"}, "audit": {"type": "string"},
                                   "woocommerce": {"type": "string"}, "writes_enabled": {"type": "boolean"},
+                                  "order_create_enabled": {"type": "boolean"},
+                                  "email_send_enabled": {"type": "boolean"},
                                   "environment": {"type": "string", "enum": ["production", "staging"]},
                                   "woo_target": {"type": ["string", "null"]},
                                   "wordpress_target": {"type": ["string", "null"]},
@@ -131,13 +181,15 @@ def contract():
         "PatchResult": patch_result,
         "Audit": {"type": "object", "properties": {
             "operations": {"type": "array", "items": audit_record},
+            "events": {"type": "array", "items": {"type": "object"}},
             "page": {"type": "integer"}, "per_page": {"type": "integer"}}},
         "PrintfulStatus": {"type": "object", "required": [
             "ok", "productTemplatesRead", "syncProductsRead"], "properties": {
                 "ok": {"type": "boolean"}, "productTemplatesRead": {"type": "boolean"},
                 "syncProductsRead": {"type": "boolean"},
                 "errors": {"type": "object", "additionalProperties": {"type": "string"}}}},
-        "PrintfulScopes": {"type": "object", "required": ["scopes", "orders_read"],
+        "PrintfulScopes": {
+            "type": "object", "required": ["scopes", "orders_read"],
             "properties": {
                 "scopes": {"type": "array", "items": {"type": "string"}},
                 "orders_read": {"type": "boolean"}}},
@@ -310,7 +362,8 @@ def contract():
         {"name": "limit", "in": "query", "schema": {
             "type": "integer", "minimum": 1, "maximum": 100, "default": 20}},
     ]
-    printful_order_filters = [*printful_pagination,
+    printful_order_filters = [
+        *printful_pagination,
         {"name": "status", "in": "query", "schema": {"type": "string"}},
         {"name": "external_id", "in": "query", "schema": {"type": "string"}},
     ]
@@ -324,7 +377,10 @@ def contract():
         ("/products/{id}", "patch", "updateProduct", "PatchResult", identifier),
         ("/preorder/status", "get", "getPreorderStatus", "PreorderStatus", []),
         ("/orders", "get", "getOrders", "Orders", order_filters),
+        ("/orders", "post", "createAdminOrder", "AdminOrderResult", []),
         ("/orders/{id}", "get", "getOrder", "Order", identifier),
+        ("/orders/{id}/email", "post", "sendAdminOrderEmail", "AdminEmailResult", identifier),
+        ("/email-templates", "get", "getWooEmailTemplates", "WooEmailTemplates", []),
         ("/aw26/products", "get", "getAw26Products", "Aw26Products", []),
         ("/aw26/products/{id}", "get", "getAw26Product", "Aw26Product", identifier),
         ("/aw26/products/{id}", "patch", "updateAw26Product", "Aw26PatchResult", identifier),
@@ -373,6 +429,21 @@ def contract():
                 "External WordPress edits are not protected by an atomic compare-and-swap.")
             operation["requestBody"] = {"required": True, "content": {"application/json": {
                 "schema": {"$ref": "#/components/schemas/Rename"}}}}
+        if operation_id == "createAdminOrder":
+            operation["description"] = (
+                "Create a pending/on-hold Woo order. Woo validates products, variations, stock, "
+                "prices, tax and shipping. Prices, totals, payment data and set_paid are forbidden. "
+                "Requires a cookie session + CSRF or the server-to-server bearer credential, a "
+                "separate feature flag, generalized audit reservation and read-after-write.")
+            operation["requestBody"] = {"required": True, "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/AdminOrderCreate"}}}}
+            operation["responses"]["201"] = operation["responses"].pop("200")
+        if operation_id == "sendAdminOrderEmail":
+            operation["description"] = (
+                "Send one allowlisted WooCommerce customer template. The recipient is always read "
+                "from the order; arbitrary recipients, subjects and HTML are forbidden.")
+            operation["requestBody"] = {"required": True, "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/AdminOrderEmail"}}}}
         if operation_id == "updateAw26Product":
             operation["description"] = (
                 "Controlled AW26 update restricted to the server-side WooCommerce product allowlist. "
@@ -407,13 +478,37 @@ def contract():
             operation["requestBody"] = {"required": True, "content": {"application/json": {
                 "schema": {"$ref": "#/components/schemas/MockupRequest"}}}}
         paths.setdefault("/api/operator/v1" + suffix, {})[method] = operation
+    paths.update({
+        "/api/auth/login": {"post": {
+            "operationId": "operatorLogin", "security": [],
+            "requestBody": {"required": True, "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/Login"}}}},
+            "responses": {"200": {"description": "Session created", "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/AuthSession"}}}},
+                "401": {"description": "Generic login failure"},
+                "429": {"description": "Rate limited"}}}},
+        "/api/auth/logout": {"post": {
+            "operationId": "operatorLogout", "security": [{"OperatorSession": []}],
+            "parameters": [{"name": "X-CSRF-Token", "in": "header", "required": True,
+                            "schema": {"type": "string"}}],
+            "responses": {"200": {"description": "Session revoked"},
+                          "403": {"description": "CSRF or origin rejected"}}}},
+        "/api/auth/me": {"get": {
+            "operationId": "getOperatorSession", "security": [{"OperatorSession": []}],
+            "responses": {"200": {"description": "Current session", "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/AuthSession"}}}},
+                "401": {"description": "Unauthorized"}}}},
+    })
     return {
         "openapi": "3.1.0", "info": {
             "title": "LOCK CITY Operator API", "version": "1.0.0",
             "description": "Digital Administrator contract. Supply Bearer credentials separately; never in this file."},
         "servers": [{"url": "https://lock-city-operator-api.onrender.com"}],
         "security": [{"OperatorBearer": []}], "paths": paths,
-        "components": {"securitySchemes": {"OperatorBearer": {"type": "http", "scheme": "bearer"}},
+        "components": {"securitySchemes": {
+                           "OperatorBearer": {"type": "http", "scheme": "bearer"},
+                           "OperatorSession": {"type": "apiKey", "in": "cookie",
+                                               "name": "__Host-lc_operator_session"}},
                        "schemas": schemas},
     }
 

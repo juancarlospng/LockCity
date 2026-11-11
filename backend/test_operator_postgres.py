@@ -170,3 +170,29 @@ def test_operator_environment_example_excludes_legacy_mongodb():
     assert "DB_NAME=" not in operator_names
     assert "MONGO_URL=" in legacy_names
     assert "DB_NAME=" in legacy_names
+
+
+def test_admin_mvp_migration_is_private_and_preserves_legacy_audit():
+    migration = (Path(__file__).parent / "supabase" / "migrations" /
+                 "004_operator_admin_mvp.sql").read_text(encoding="utf-8").lower()
+    for table in ("operator_sessions", "operator_login_attempts", "operator_audit_events"):
+        assert f"create table if not exists public.{table}" in migration
+        assert f"alter table public.{table} enable row level security" in migration
+        assert f"revoke all on table public.{table} from anon, authenticated" in migration
+    assert "drop table" not in migration
+    assert "alter table public.operator_audit " not in migration
+
+
+def test_operator_bridge_is_narrow_and_never_marks_paid():
+    plugin = (Path(__file__).parents[1] / "wordpress" / "lock-city-operator-bridge" /
+              "lock-city-operator-bridge.php").read_text(encoding="utf-8").lower()
+    assert "wc/v3" in plugin
+    assert "manage_woocommerce" in plugin
+    assert "add_option" in plugin
+    assert "idempotency_key_reused" in plugin
+    assert "operation_uncertain" in plugin
+    assert "'pending', 'on-hold'" in plugin
+    assert "set_paid" not in plugin
+    assert "payment_complete" not in plugin
+    assert "refund" not in plugin
+    assert "delete" not in plugin

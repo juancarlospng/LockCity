@@ -13,7 +13,7 @@ from start import production_settings  # noqa: E402
 def test_operator_runtime_requirements_exclude_legacy_and_dev_packages():
     requirements = (Path(__file__).parent / "requirements-operator.txt").read_text(
         encoding="utf-8").lower()
-    required = {"asyncpg", "fastapi", "httpx", "pydantic", "starlette", "uvicorn"}
+    required = {"asyncpg", "bcrypt", "fastapi", "httpx", "pydantic", "starlette", "uvicorn"}
     names = {line.split("=", 1)[0] for line in requirements.splitlines() if line.strip()}
     assert names == required
     assert not {"emergentintegrations", "motor", "pymongo", "pytest", "black",
@@ -42,13 +42,19 @@ def test_independent_app_exposes_only_requested_routes():
               for method in (route.methods or set())}
     assert routes == {
         ("/api/health", "GET"),
+        ("/api/auth/login", "POST"),
+        ("/api/auth/logout", "POST"),
+        ("/api/auth/me", "GET"),
         ("/api/operator/v1/status", "GET"),
         ("/api/operator/v1/products", "GET"),
         ("/api/operator/v1/products/{product_id}", "GET"),
         ("/api/operator/v1/products/{product_id}", "PATCH"),
         ("/api/operator/v1/preorder/status", "GET"),
         ("/api/operator/v1/orders", "GET"),
+        ("/api/operator/v1/orders", "POST"),
         ("/api/operator/v1/orders/{id}", "GET"),
+        ("/api/operator/v1/orders/{id}/email", "POST"),
+        ("/api/operator/v1/email-templates", "GET"),
         ("/api/operator/v1/aw26/products/{product_id}", "GET"),
         ("/api/operator/v1/aw26/products", "GET"),
         ("/api/operator/v1/aw26/products/{product_id}", "PATCH"),
@@ -79,12 +85,16 @@ def test_production_launcher_binds_provider_port_and_forces_read_only(monkeypatc
     monkeypatch.setenv("AW26_PUBLISH_ENABLED", "true")
     monkeypatch.delenv("AW26_PRODUCT_WRITE_ENABLED", raising=False)
     monkeypatch.setenv("PRINTFUL_MOCKUP_GENERATION_ENABLED", "true")
+    monkeypatch.delenv("OPERATOR_ORDER_CREATE_ENABLED", raising=False)
+    monkeypatch.delenv("OPERATOR_EMAIL_SEND_ENABLED", raising=False)
     settings = production_settings()
     assert settings == {"app": "operator_server:app", "host": "0.0.0.0", "port": 9123}
     assert os.environ["OPERATOR_WRITES_ENABLED"] == "false"
     assert os.environ["AW26_PUBLISH_ENABLED"] == "false"
     assert os.environ["AW26_PRODUCT_WRITE_ENABLED"] == "false"
     assert os.environ["PRINTFUL_MOCKUP_GENERATION_ENABLED"] == "false"
+    assert os.environ["OPERATOR_ORDER_CREATE_ENABLED"] == "false"
+    assert os.environ["OPERATOR_EMAIL_SEND_ENABLED"] == "false"
 
 
 def test_staging_refuses_production_woo_target(monkeypatch):

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<ruleset name="Lock City WordPress">
+	<description>WordPress coding standards for Lock City-owned PHP.</description>
+
+	<file>wordpress/lock-city-operator-bridge</file>
+	<arg name="extensions" value="php" />
+	<arg value="sp" />
+
+	<rule ref="WordPress">
+		<!-- WordPress plugin bootstrap files conventionally use the plugin slug. -->
+		<exclude name="WordPress.Files.FileName.InvalidClassFileName" />
+	</rule>
+
+	<rule ref="WordPress.WP.Capabilities">
+		<properties>
+			<property name="custom_capabilities" type="array">
+				<element value="manage_woocommerce" />
+			</property>
+		</properties>
+	</rule>
+</ruleset>

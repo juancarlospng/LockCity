@@ -18,11 +18,14 @@ Apply migrations in order:
 psql $DATABASE_URL -f backend/supabase/migrations/001_initial_schema.sql
 psql $DATABASE_URL -f backend/supabase/migrations/002_operator_api.sql
 psql $DATABASE_URL -f backend/supabase/migrations/003_operator_mockup_audit.sql
+psql $DATABASE_URL -f backend/supabase/migrations/004_operator_admin_mvp.sql
 ```
 
 Migration 002 creates `operator_audit` and `operator_locks`. Both tables have RLS
 enabled, no browser policy, and explicit revocation for `anon` and `authenticated`.
 The database credential and all API credentials belong only in Render secrets.
+Migration 004 preserves those tables and adds private human sessions, persistent
+login throttling and the generalized `operator_audit_events` ledger.
 
 ## Render environment (names only)
 
@@ -46,6 +49,13 @@ The database credential and all API credentials belong only in Render secrets.
   generating review mockups. This permits only Printful mockup task creation;
   `OPERATOR_WRITES_ENABLED` stays `false` and WooCommerce writes remain blocked.
 - `OPERATOR_API_TOKEN` — secret Bearer token, at least 32 characters.
+- `OPERATOR_ADMIN_EMAIL` — the sole initial human Operator identity.
+- `OPERATOR_ADMIN_PASSWORD_HASH` — bcrypt hash; never a plaintext password.
+- `OPERATOR_SESSION_SECRET` — secret used to HMAC opaque session and CSRF tokens.
+- `OPERATOR_SESSION_TTL_SECONDS` — session lifetime, 300–86400 seconds.
+- `OPERATOR_ALLOWED_ORIGIN` — exact HTTPS origin allowed to use session cookies.
+- `OPERATOR_ORDER_CREATE_ENABLED` — independent order-create switch; default `false`.
+- `OPERATOR_EMAIL_SEND_ENABLED` — independent Woo email switch; default `false`.
 - `OPERATOR_WRITES_ENABLED` — set to `false`; `start.py` also forces it to false.
 - `AW26_PRODUCT_WRITE_ENABLED` — independent, default `false`; enables only the
   allowlisted AW26 product endpoint when an approved write is ready.
@@ -73,6 +83,11 @@ The authenticated `GET /api/operator/v1/status` response includes `environment`,
 `{"status":"ok"}`. All routes under `/api/operator/v1` require
 `Authorization: Bearer <operator token>` and return `Cache-Control: no-store`:
 
+Human Operator clients instead use `POST /api/auth/login`, `GET /api/auth/me`
+and `POST /api/auth/logout`. The opaque session is held only in a Secure,
+HttpOnly, SameSite=Strict cookie; mutating requests require the in-memory CSRF
+token and an exact allowed Origin. The Bearer credential remains server-to-server.
+
 - `GET /api/operator/v1/status`
 - `GET /api/operator/v1/products?page=1&per_page=20`
 - `GET /api/operator/v1/products/{id}`
@@ -80,6 +95,8 @@ The authenticated `GET /api/operator/v1/status` response includes `environment`,
 - `GET /api/operator/v1/preorder/status`
 - `GET /api/operator/v1/orders?status=&product_id=&after=&before=&payment_method=&limit=`
 - `GET /api/operator/v1/orders/{id}`
+- `POST /api/operator/v1/orders`
+- `POST /api/operator/v1/orders/{id}/email`
 - `GET /api/operator/v1/aw26/products/{id}`
 - `PATCH /api/operator/v1/aw26/products/{id}`
 - `GET /api/operator/v1/audit?page=1&per_page=20`
@@ -195,6 +212,32 @@ then compares every other normalized parent and variation field after the write.
 The candidate allowlist contains only the 19 verified AW26 WooCommerce IDs.
 Ordinary AW26 merchandising updates are restricted to the 18-product active set.
 
+## Administrative orders and Woo email bridge
+
+The normal Woo REST create-order endpoint cannot atomically reserve an external
+idempotency key, and Woo does not expose a suitably narrow standard endpoint for
+triggering one allowlisted customer email template. Therefore the repository
+contains the optional `wordpress/lock-city-operator-bridge` plugin. It is not
+deployed by this implementation.
+
+FastAPI first reserves a hashed idempotency key, reads product and variation data,
+and rejects unpublishable products, parent/variation mismatches, insufficient
+stock, missing prices and any caller-supplied commercial/payment fields. The
+bridge repeats those checks inside Woo, calculates the selected shipping rate and
+taxes server-side, and creates only `pending` or `on-hold` orders. Before creating
+anything, it atomically reserves the operation with WordPress `add_option`, whose
+`option_name` has a database unique index. A crash may leave an operation uncertain,
+but the same `operation_id` can never create a second order. FastAPI then reads the
+order back and verifies status, lines, quantities,
+absence of payment and totals before marking the audit event `verified`.
+
+Email commands accept only `customer_invoice`, `customer_on_hold_order` or
+`customer_processing_order`. Recipient, subject and HTML are never caller fields;
+Woo obtains the recipient from the order and renders its own template. The email
+operation is independently gated and idempotent. If a write response is lost,
+the generalized audit remains `uncertain`; the system does not automatically
+repeat an order or an email under a new key.
+
 ## Run and verify
 
 Render start command:
@@ -222,8 +265,8 @@ Validation commands from `backend/`:
 
 ```text
 python -m pytest
-python -m flake8 operator_api.py operator_server.py start.py test_operator_api.py test_operator_postgres.py test_deployment.py --max-line-length=120
-python -m mypy operator_api.py operator_server.py start.py --ignore-missing-imports --follow-imports=silent
+python -m flake8 operator_api.py operator_auth.py operator_audit.py operator_orders.py operator_server.py start.py --max-line-length=120
+python -m mypy operator_api.py operator_auth.py operator_audit.py operator_orders.py operator_server.py start.py --ignore-missing-imports --follow-imports=silent
 ```
 
 Tests use fake persistence and WooCommerce clients. They do not send a production

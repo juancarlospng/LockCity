@@ -148,6 +148,8 @@ def test_status_reports_non_secret_runtime_identity(setup, monkeypatch):
     monkeypatch.setenv("PAYPAL_MODE", "sandbox")
     monkeypatch.setenv("PRINTFUL_STORE_ID", "secret-store-id")
     monkeypatch.setenv("PRINTFUL_MOCKUP_GENERATION_ENABLED", "false")
+    monkeypatch.setenv("OPERATOR_ORDER_CREATE_ENABLED", "false")
+    monkeypatch.setenv("OPERATOR_EMAIL_SEND_ENABLED", "false")
     payload = request(setup, "GET", "/status").json()
     assert payload["environment"] == "staging"
     assert payload["woo_target"] == "pruebasv2.lockcityclothes.com"
@@ -155,6 +157,8 @@ def test_status_reports_non_secret_runtime_identity(setup, monkeypatch):
     assert payload["paypal_environment"] == "sandbox"
     assert payload["printful_context"] == {
         "store_configured": True, "access": "read_only"}
+    assert payload["order_create_enabled"] is False
+    assert payload["email_send_enabled"] is False
     assert "secret-store-id" not in str(payload)
 
 

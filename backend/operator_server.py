@@ -4,20 +4,33 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from operator_api import PostgresStore, create_router
+from operator_audit import AuditEvents, PostgresAuditEventStore
+from operator_api import PostgresStore, WooClient, create_router
+from operator_auth import OperatorAuthService, PostgresAuthStore, create_auth_router
 from operator_environment import validate_runtime_isolation
+from operator_orders import AdminOrderService
 
 
-def create_app(store=None, woo=None, printful=None):
+def create_app(
+        store=None, woo=None, printful=None, auth_store=None,
+        audit_event_store=None, auth_service=None, order_service=None):
     validate_runtime_isolation()
-    operator_store = store or PostgresStore(os.getenv("DATABASE_URL"))
+    database_url = os.getenv("DATABASE_URL")
+    operator_store = store or PostgresStore(database_url)
+    session_store = auth_store or PostgresAuthStore(database_url)
+    event_store = audit_event_store or PostgresAuditEventStore(database_url)
+    operator_auth = auth_service or OperatorAuthService(session_store)
+    audit_events = AuditEvents(event_store)
+    operator_woo = woo or WooClient()
+    operator_orders = order_service or AdminOrderService(operator_woo, audit_events)
 
     @asynccontextmanager
     async def lifespan(_app):
         yield
-        close = getattr(operator_store, "close", None)
-        if close is not None:
-            await close()
+        for resource in (operator_store, session_store, event_store):
+            close = getattr(resource, "close", None)
+            if close is not None:
+                await close()
 
     application = FastAPI(
         title="LOCK CITY Operator API",
@@ -31,7 +44,10 @@ def create_app(store=None, woo=None, printful=None):
     async def health():
         return {"status": "ok"}
 
-    application.include_router(create_router(operator_store, woo, printful))
+    application.include_router(create_auth_router(operator_auth))
+    application.include_router(create_router(
+        operator_store, operator_woo, printful, operator_auth,
+        audit_events, operator_orders))
     return application
 
 

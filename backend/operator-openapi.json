@@ -733,6 +733,118 @@
             }
           }
         }
+      },
+      "post": {
+        "operationId": "createAdminOrder",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Product not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version conflict, idempotency conflict or operation busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "WooCommerce or verification error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured, unavailable or uncertain outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminOrderResult"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a pending/on-hold Woo order. Woo validates products, variations, stock, prices, tax and shipping. Prices, totals, payment data and set_paid are forbidden. Requires a cookie session + CSRF or the server-to-server bearer credential, a separate feature flag, generalized audit reservation and read-after-write.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminOrderCreate"
+              }
+            }
+          }
+        }
       }
     },
     "/api/operator/v1/orders/{id}": {
@@ -762,6 +874,234 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Product not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version conflict, idempotency conflict or operation busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "WooCommerce or verification error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured, unavailable or uncertain outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/operator/v1/orders/{id}/email": {
+      "post": {
+        "operationId": "sendAdminOrderEmail",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminEmailResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Product not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version conflict, idempotency conflict or operation busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "WooCommerce or verification error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured, unavailable or uncertain outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Send one allowlisted WooCommerce customer template. The recipient is always read from the order; arbitrary recipients, subjects and HTML are forbidden.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminOrderEmail"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/operator/v1/email-templates": {
+      "get": {
+        "operationId": "getWooEmailTemplates",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WooEmailTemplates"
                 }
               }
             }
@@ -3283,6 +3623,93 @@
           }
         }
       }
+    },
+    "/api/auth/login": {
+      "post": {
+        "operationId": "operatorLogin",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Generic login failure"
+          },
+          "429": {
+            "description": "Rate limited"
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "operatorLogout",
+        "security": [
+          {
+            "OperatorSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session revoked"
+          },
+          "403": {
+            "description": "CSRF or origin rejected"
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "operationId": "getOperatorSession",
+        "security": [
+          {
+            "OperatorSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3290,6 +3717,11 @@
       "OperatorBearer": {
         "type": "http",
         "scheme": "bearer"
+      },
+      "OperatorSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-lc_operator_session"
       }
     },
     "schemas": {
@@ -3377,6 +3809,416 @@
         ],
         "title": "Rename",
         "type": "object"
+      },
+      "Login": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginBody",
+        "type": "object"
+      },
+      "AdminOrderCreate": {
+        "$defs": {
+          "Address": {
+            "additionalProperties": false,
+            "properties": {
+              "first_name": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "First Name",
+                "type": "string"
+              },
+              "last_name": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Last Name",
+                "type": "string"
+              },
+              "company": {
+                "default": "",
+                "maxLength": 200,
+                "title": "Company",
+                "type": "string"
+              },
+              "address_1": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Address 1",
+                "type": "string"
+              },
+              "address_2": {
+                "default": "",
+                "maxLength": 200,
+                "title": "Address 2",
+                "type": "string"
+              },
+              "city": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "City",
+                "type": "string"
+              },
+              "state": {
+                "default": "",
+                "maxLength": 100,
+                "title": "State",
+                "type": "string"
+              },
+              "postcode": {
+                "maxLength": 30,
+                "minLength": 1,
+                "title": "Postcode",
+                "type": "string"
+              },
+              "country": {
+                "pattern": "^[A-Z]{2}$",
+                "title": "Country",
+                "type": "string"
+              }
+            },
+            "required": [
+              "first_name",
+              "last_name",
+              "address_1",
+              "city",
+              "postcode",
+              "country"
+            ],
+            "title": "Address",
+            "type": "object"
+          },
+          "AdminLineItem": {
+            "additionalProperties": false,
+            "properties": {
+              "product_id": {
+                "exclusiveMinimum": 0,
+                "maximum": 2147483647,
+                "title": "Product Id",
+                "type": "integer"
+              },
+              "variation_id": {
+                "default": 0,
+                "maximum": 2147483647,
+                "minimum": 0,
+                "title": "Variation Id",
+                "type": "integer"
+              },
+              "quantity": {
+                "maximum": 20,
+                "minimum": 1,
+                "title": "Quantity",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "product_id",
+              "quantity"
+            ],
+            "title": "AdminLineItem",
+            "type": "object"
+          },
+          "BillingAddress": {
+            "additionalProperties": false,
+            "properties": {
+              "first_name": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "First Name",
+                "type": "string"
+              },
+              "last_name": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Last Name",
+                "type": "string"
+              },
+              "company": {
+                "default": "",
+                "maxLength": 200,
+                "title": "Company",
+                "type": "string"
+              },
+              "address_1": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Address 1",
+                "type": "string"
+              },
+              "address_2": {
+                "default": "",
+                "maxLength": 200,
+                "title": "Address 2",
+                "type": "string"
+              },
+              "city": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "City",
+                "type": "string"
+              },
+              "state": {
+                "default": "",
+                "maxLength": 100,
+                "title": "State",
+                "type": "string"
+              },
+              "postcode": {
+                "maxLength": 30,
+                "minLength": 1,
+                "title": "Postcode",
+                "type": "string"
+              },
+              "country": {
+                "pattern": "^[A-Z]{2}$",
+                "title": "Country",
+                "type": "string"
+              },
+              "email": {
+                "maxLength": 254,
+                "minLength": 3,
+                "title": "Email",
+                "type": "string"
+              },
+              "phone": {
+                "maxLength": 40,
+                "minLength": 3,
+                "title": "Phone",
+                "type": "string"
+              }
+            },
+            "required": [
+              "first_name",
+              "last_name",
+              "address_1",
+              "city",
+              "postcode",
+              "country",
+              "email",
+              "phone"
+            ],
+            "title": "BillingAddress",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "pending",
+              "on-hold"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "line_items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminOrderCreate/$defs/AdminLineItem"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Line Items",
+            "type": "array"
+          },
+          "billing": {
+            "$ref": "#/components/schemas/AdminOrderCreate/$defs/BillingAddress"
+          },
+          "shipping": {
+            "$ref": "#/components/schemas/AdminOrderCreate/$defs/Address"
+          },
+          "shipping_method": {
+            "pattern": "^[A-Za-z0-9_.:-]{1,100}$",
+            "title": "Shipping Method",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "pattern": "^[A-Za-z0-9_-]{16,128}$",
+            "title": "Idempotency Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "line_items",
+          "billing",
+          "shipping",
+          "shipping_method",
+          "reason",
+          "idempotency_key"
+        ],
+        "title": "AdminOrderCreate",
+        "type": "object"
+      },
+      "AdminOrderEmail": {
+        "additionalProperties": false,
+        "properties": {
+          "template": {
+            "enum": [
+              "customer_invoice",
+              "customer_on_hold_order",
+              "customer_processing_order"
+            ],
+            "title": "Template",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "pattern": "^[A-Za-z0-9_-]{16,128}$",
+            "title": "Idempotency Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template",
+          "reason",
+          "idempotency_key"
+        ],
+        "title": "AdminOrderEmail",
+        "type": "object"
+      },
+      "AuthSession": {
+        "type": "object",
+        "required": [
+          "authenticated",
+          "email",
+          "csrf_token",
+          "expires_at"
+        ],
+        "properties": {
+          "authenticated": {
+            "type": "boolean"
+          },
+          "email": {
+            "type": "string"
+          },
+          "csrf_token": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminOrderResult": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "order_id",
+          "status",
+          "verified"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "order_id": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "total": {
+            "type": "string"
+          },
+          "verified": {
+            "type": "boolean"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AdminEmailResult": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "order_id",
+          "template",
+          "sent",
+          "verified"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "order_id": {
+            "type": "integer"
+          },
+          "template": {
+            "type": "string"
+          },
+          "sent": {
+            "type": "boolean"
+          },
+          "verified": {
+            "type": "boolean"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WooEmailTemplates": {
+        "type": "object",
+        "required": [
+          "templates"
+        ],
+        "properties": {
+          "templates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "enabled",
+                "class"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "class": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
       },
       "Aw26ProductPatch": {
         "additionalProperties": false,
@@ -3694,7 +4536,9 @@
           "wordpress_target",
           "paypal_environment",
           "printful_context",
-          "writes_enabled"
+          "writes_enabled",
+          "order_create_enabled",
+          "email_send_enabled"
         ],
         "properties": {
           "status": {
@@ -3707,6 +4551,12 @@
             "type": "string"
           },
           "writes_enabled": {
+            "type": "boolean"
+          },
+          "order_create_enabled": {
+            "type": "boolean"
+          },
+          "email_send_enabled": {
             "type": "boolean"
           },
           "environment": {
@@ -4014,6 +4864,12 @@
                   }
                 }
               }
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object"
             }
           },
           "page": {
