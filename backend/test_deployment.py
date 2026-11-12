@@ -1,6 +1,7 @@
 import asyncio
 import os
 from pathlib import Path
+import tomllib
 
 import httpx
 import pytest
@@ -20,6 +21,12 @@ def test_operator_runtime_requirements_exclude_legacy_and_dev_packages():
     assert vercel_requirements == requirements
     assert not {"emergentintegrations", "motor", "pymongo", "pytest", "black",
                 "mypy", "flake8", "pandas", "numpy"} & names
+
+
+def test_vercel_uses_the_operator_entrypoint():
+    configuration = tomllib.loads(
+        (Path(__file__).parent / "pyproject.toml").read_text(encoding="utf-8"))
+    assert configuration["tool"]["vercel"]["entrypoint"] == "operator_server:app"
 
 
 def test_public_liveness_has_no_configuration_details():
