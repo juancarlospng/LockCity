@@ -27,6 +27,9 @@ def test_vercel_uses_the_operator_entrypoint():
     configuration = tomllib.loads(
         (Path(__file__).parent / "pyproject.toml").read_text(encoding="utf-8"))
     assert configuration["tool"]["vercel"]["entrypoint"] == "operator_server:app"
+    dependencies = {value.split("=", 1)[0] for value in configuration["project"]["dependencies"]}
+    assert dependencies == {
+        "asyncpg", "bcrypt", "fastapi", "httpx", "pydantic", "starlette", "uvicorn"}
 
 
 def test_public_liveness_has_no_configuration_details():
