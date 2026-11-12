@@ -11,11 +11,13 @@ from start import production_settings  # noqa: E402
 
 
 def test_operator_runtime_requirements_exclude_legacy_and_dev_packages():
-    requirements = (Path(__file__).parent / "requirements-operator.txt").read_text(
-        encoding="utf-8").lower()
+    backend = Path(__file__).parent
+    requirements = (backend / "requirements-operator.txt").read_text(encoding="utf-8").lower()
+    vercel_requirements = (backend / "requirements.txt").read_text(encoding="utf-8").lower()
     required = {"asyncpg", "bcrypt", "fastapi", "httpx", "pydantic", "starlette", "uvicorn"}
     names = {line.split("=", 1)[0] for line in requirements.splitlines() if line.strip()}
     assert names == required
+    assert vercel_requirements == requirements
     assert not {"emergentintegrations", "motor", "pymongo", "pytest", "black",
                 "mypy", "flake8", "pandas", "numpy"} & names
 
