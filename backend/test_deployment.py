@@ -55,6 +55,7 @@ def test_independent_app_exposes_only_requested_routes():
         ("/api/operator/v1/orders/{id}", "GET"),
         ("/api/operator/v1/orders/{id}/email", "POST"),
         ("/api/operator/v1/email-templates", "GET"),
+        ("/api/operator/v1/woocommerce/estimate-shipping", "POST"),
         ("/api/operator/v1/aw26/products/{product_id}", "GET"),
         ("/api/operator/v1/aw26/products", "GET"),
         ("/api/operator/v1/aw26/products/{product_id}", "PATCH"),

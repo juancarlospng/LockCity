@@ -28,6 +28,7 @@ def test_export_matches_routes_and_has_only_operator_endpoints():
         "getPreorderStatus", "getOrders", "getOrder", "createAdminOrder",
         "sendAdminOrderEmail", "operatorLogin", "operatorLogout", "getOperatorSession",
         "getWooEmailTemplates",
+        "estimateWooShipping",
         "getAw26Products", "getAw26Product", "updateAw26Product", "hardHideAw26Product",
         "getAw26Categories", "bootstrapAw26Categories",
         "getPrintfulStatus", "getPrintfulTemplates", "getPrintfulTemplate",
@@ -50,4 +51,9 @@ def test_export_matches_routes_and_has_only_operator_endpoints():
     assert estimate["requestBody"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/EstimateCostRequest"}
     assert document["components"]["schemas"]["EstimateCostRequest"]["additionalProperties"] is False
+    shipping = document["paths"]["/api/operator/v1/woocommerce/estimate-shipping"]["post"]
+    assert shipping["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/WooShippingEstimateRequest"}
+    assert document["components"]["schemas"]["WooShippingEstimateRequest"][
+        "additionalProperties"] is False
     assert document == json.loads(Path(__file__).with_name("operator-openapi.json").read_text())

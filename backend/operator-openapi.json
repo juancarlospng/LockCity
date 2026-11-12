@@ -1189,6 +1189,130 @@
         }
       }
     },
+    "/api/operator/v1/woocommerce/estimate-shipping": {
+      "post": {
+        "operationId": "estimateWooShipping",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WooShippingEstimateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Writes disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Product not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version conflict, idempotency conflict or operation busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "WooCommerce or verification error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured, unavailable or uncertain outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read the real WooCommerce product or variation price and calculate every native shipping rate for an isolated request-local package. No order, cart, customer session, checkout, product or price is created or changed. Commercial and payment fields supplied by the caller are rejected.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WooShippingEstimateRequest"
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/operator/v1/aw26/products": {
       "get": {
         "operationId": "getAw26Products",
@@ -2283,6 +2407,16 @@
           },
           "503": {
             "description": "Not configured, unavailable or uncertain outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
             "content": {
               "application/json": {
                 "schema": {
@@ -5287,6 +5421,187 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "WooShippingEstimateRequest": {
+        "$defs": {
+          "WooShippingDestination": {
+            "additionalProperties": false,
+            "properties": {
+              "country": {
+                "pattern": "^[A-Z]{2}$",
+                "title": "Country",
+                "type": "string"
+              },
+              "state": {
+                "maxLength": 40,
+                "title": "State",
+                "type": "string"
+              },
+              "postcode": {
+                "maxLength": 20,
+                "minLength": 1,
+                "title": "Postcode",
+                "type": "string"
+              },
+              "city": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "City",
+                "type": "string"
+              },
+              "address_1": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Address 1",
+                "type": "string"
+              }
+            },
+            "required": [
+              "country",
+              "state",
+              "postcode",
+              "city",
+              "address_1"
+            ],
+            "title": "WooShippingDestination",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "product_id": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "title": "Product Id",
+            "type": "integer"
+          },
+          "variation_id": {
+            "anyOf": [
+              {
+                "maximum": 2147483647,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Variation Id"
+          },
+          "quantity": {
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/WooShippingEstimateRequest/$defs/WooShippingDestination"
+          }
+        },
+        "required": [
+          "product_id",
+          "quantity",
+          "destination"
+        ],
+        "title": "WooShippingEstimateRequest",
+        "type": "object"
+      },
+      "WooShippingOption": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "method_id",
+          "label",
+          "cost",
+          "tax",
+          "total"
+        ],
+        "properties": {
+          "method_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "cost": {
+            "type": "string"
+          },
+          "tax": {
+            "type": "string"
+          },
+          "total": {
+            "type": "string"
+          }
+        }
+      },
+      "WooShippingEstimateResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "product_id",
+          "variation_id",
+          "quantity",
+          "currency",
+          "product_price",
+          "destination",
+          "shipping_options",
+          "selected_or_cheapest_shipping"
+        ],
+        "properties": {
+          "product_id": {
+            "type": "integer"
+          },
+          "variation_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "product_price": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "country",
+              "state",
+              "postcode",
+              "city"
+            ],
+            "properties": {
+              "country": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "postcode": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              }
+            }
+          },
+          "shipping_options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WooShippingOption"
+            }
+          },
+          "selected_or_cheapest_shipping": {
+            "$ref": "#/components/schemas/WooShippingOption"
           }
         }
       },

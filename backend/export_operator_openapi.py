@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from operator_api import (Aw26HardHide, Aw26ProductPatch, EstimateCostRequest,
-                          Rename)
+                          Rename, WooShippingEstimateRequest)
 from operator_auth import LoginBody
 from operator_orders import AdminOrderCreate, AdminOrderEmail
 
@@ -206,6 +206,41 @@ def contract():
                 "costs": {"type": "object"}, "cost_evidence": {"type": "object"},
                 "commercial": {"type": "object"}, "margin": {"type": "object"},
                 "warnings": {"type": "array", "items": {"type": "string"}}}},
+        "WooShippingEstimateRequest": embedded_model_schema(
+            WooShippingEstimateRequest, "WooShippingEstimateRequest"),
+        "WooShippingOption": {
+            "type": "object", "additionalProperties": False,
+            "required": ["method_id", "label", "cost", "tax", "total"],
+            "properties": {
+                "method_id": {"type": "string"},
+                "label": {"type": "string"},
+                "cost": {"type": "string"},
+                "tax": {"type": "string"},
+                "total": {"type": "string"}}},
+        "WooShippingEstimateResponse": {
+            "type": "object", "additionalProperties": False,
+            "required": [
+                "product_id", "variation_id", "quantity", "currency",
+                "product_price", "destination", "shipping_options",
+                "selected_or_cheapest_shipping"],
+            "properties": {
+                "product_id": {"type": "integer"},
+                "variation_id": {"type": ["integer", "null"]},
+                "quantity": {"type": "integer"},
+                "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+                "product_price": {"type": "string"},
+                "destination": {
+                    "type": "object", "additionalProperties": False,
+                    "required": ["country", "state", "postcode", "city"],
+                    "properties": {
+                        "country": {"type": "string"},
+                        "state": {"type": "string"},
+                        "postcode": {"type": "string"},
+                        "city": {"type": "string"}}},
+                "shipping_options": {"type": "array", "items": {
+                    "$ref": "#/components/schemas/WooShippingOption"}},
+                "selected_or_cheapest_shipping": {
+                    "$ref": "#/components/schemas/WooShippingOption"}}},
         "PrintfulTemplate": {"type": "object", "required": [
             "id", "title", "catalogProductId", "externalProductId", "availableVariantIds",
             "colors", "sizes", "mockupUrl", "placements", "createdAt", "updatedAt"],
@@ -394,6 +429,8 @@ def contract():
         ("/orders/{id}", "get", "getOrder", "Order", identifier),
         ("/orders/{id}/email", "post", "sendAdminOrderEmail", "AdminEmailResult", identifier),
         ("/email-templates", "get", "getWooEmailTemplates", "WooEmailTemplates", []),
+        ("/woocommerce/estimate-shipping", "post", "estimateWooShipping",
+         "WooShippingEstimateResponse", []),
         ("/aw26/products", "get", "getAw26Products", "Aw26Products", []),
         ("/aw26/products/{id}", "get", "getAw26Product", "Aw26Product", identifier),
         ("/aw26/products/{id}", "patch", "updateAw26Product", "Aw26PatchResult", identifier),
@@ -492,6 +529,18 @@ def contract():
                 "Manual prices are explicitly hypothetical; incomplete costs return partial margins.")
             operation["requestBody"] = {"required": True, "content": {"application/json": {
                 "schema": {"$ref": "#/components/schemas/EstimateCostRequest"}}}}
+            operation["responses"]["429"] = {"description": "Rate limited", "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        if operation_id == "estimateWooShipping":
+            operation["description"] = (
+                "Read the real WooCommerce product or variation price and calculate every native "
+                "shipping rate for an isolated request-local package. No order, cart, customer "
+                "session, checkout, product or price is created or changed. Commercial and payment "
+                "fields supplied by the caller are rejected.")
+            operation["requestBody"] = {"required": True, "content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/WooShippingEstimateRequest"}}}}
+            operation["responses"]["429"] = {"description": "Rate limited", "content": {
+                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
         if operation_id == "createPrintfulMockupTask":
             operation["description"] = ("Generate images for one existing Printful template. Requires the separate "
                                         "PRINTFUL_MOCKUP_GENERATION_ENABLED flag and a prior dry-run plan; "

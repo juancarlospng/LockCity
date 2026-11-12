@@ -196,3 +196,24 @@ def test_operator_bridge_is_narrow_and_never_marks_paid():
     assert "payment_complete" not in plugin
     assert "refund" not in plugin
     assert "delete" not in plugin
+
+
+def test_operator_bridge_shipping_estimate_is_isolated_and_read_only():
+    plugin = (Path(__file__).parents[1] / "wordpress" / "lock-city-operator-bridge" /
+              "lock-city-operator-bridge.php").read_text(encoding="utf-8").lower()
+    assert "/lock-city/operator/shipping-estimate" in plugin
+    assert "calculate_shipping_for_package" in plugin
+    assert "current_user_can( 'manage_woocommerce' )" in plugin
+    estimate = plugin.split("public static function estimate_shipping", 1)[1].split(
+        "private static function add_shipping", 1)[0]
+    assert "wc_get_product" in estimate
+    assert "is_purchasable" in estimate
+    assert "get_parent_id" in estimate
+    assert "shipping_rates" in estimate
+    assert "wc_create_order" not in estimate
+    assert "reserve_operation" not in estimate
+    assert "update_" not in estimate
+    assert "save(" not in estimate
+    assert "wc()->cart" not in plugin
+    assert "wc()->customer" not in plugin
+    assert "wc()->session" not in plugin

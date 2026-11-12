@@ -170,6 +170,30 @@ class EstimateCostRequest(BaseModel):
         return self
 
 
+class WooShippingDestination(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    country: StrictStr = Field(pattern=r"^[A-Z]{2}$")
+    state: StrictStr = Field(max_length=40)
+    postcode: StrictStr = Field(min_length=1, max_length=20)
+    city: StrictStr = Field(min_length=1, max_length=100)
+    address_1: StrictStr = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def safe_text(self):
+        for value in (self.state, self.postcode, self.city, self.address_1):
+            if any(ord(char) < 32 for char in value):
+                raise ValueError("destination contains control characters")
+        return self
+
+
+class WooShippingEstimateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    product_id: StrictInt = Field(ge=1, le=2147483647)
+    variation_id: StrictInt | None = Field(default=None, ge=1, le=2147483647)
+    quantity: StrictInt = Field(ge=1, le=20)
+    destination: WooShippingDestination
+
+
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=True,
                                      separators=(",", ":")).encode()).hexdigest()
@@ -290,9 +314,12 @@ def profitability_view(costs, commercial_lines, simulation):
 
 
 def enforce_estimate_rate_limit(request):
-    # The Operator credential is already authenticated by dispatch. Hash it so the
-    # limiter cannot expose or retain the secret and cannot be bypassed with XFF.
-    key = hashlib.sha256(request.headers.get("authorization", "").encode()).hexdigest()
+    # Dispatch has already authenticated this request. Hash the actor identity so
+    # neither a credential nor an email-like session actor is retained by the
+    # limiter, and do not trust caller-controlled forwarding headers.
+    actor = getattr(request.state, "operator_actor", "")
+    identity = actor or request.headers.get("authorization", "")
+    key = hashlib.sha256(identity.encode()).hexdigest()
     now = time.monotonic()
     recent = [stamp for stamp in _estimate_requests.get(key, [])
               if now - stamp < ESTIMATE_RATE_WINDOW_SECONDS]
@@ -301,6 +328,74 @@ def enforce_estimate_rate_limit(request):
         raise OperatorError(429, "ESTIMATE_RATE_LIMITED")
     recent.append(now)
     _estimate_requests[key] = recent
+
+
+def shipping_estimate_view(raw, requested):
+    top_fields = {
+        "product_id", "variation_id", "quantity", "currency", "product_price",
+        "destination", "shipping_options", "selected_or_cheapest_shipping",
+    }
+    if not isinstance(raw, dict) or set(raw) != top_fields:
+        raise OperatorError(502, "INVALID_WOOCOMMERCE_RESPONSE")
+    if (raw.get("product_id") != requested["product_id"]
+            or raw.get("variation_id") != requested["variation_id"]
+            or raw.get("quantity") != requested["quantity"]):
+        raise OperatorError(502, "INVALID_WOOCOMMERCE_RESPONSE")
+    currency = raw.get("currency")
+    if not isinstance(currency, str) or not re.fullmatch(r"[A-Z]{3}", currency):
+        raise OperatorError(502, "INVALID_WOOCOMMERCE_RESPONSE")
+    destination = raw.get("destination")
+    expected_destination = {
+        name: requested["destination"][name]
+        for name in ("country", "state", "postcode", "city")
+    }
+    if not isinstance(destination, dict) or destination != expected_destination:
+        raise OperatorError(502, "INVALID_WOOCOMMERCE_RESPONSE")
+
+    def normalized_option(value):
+        if not isinstance(value, dict) or set(value) != {
+                "method_id", "label", "cost", "tax", "total"}:
+            raise OperatorError(502, "INVALID_WOOCOMMERCE_RESPONSE")
+        method_id = value.get("method_id")
+        label = value.get("label")
+        if (not isinstance(method_id, str)
+                or not re.fullmatch(r"[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)?", method_id)
+                or not isinstance(label, str) or not 1 <= len(label) <= 200):
+            raise OperatorError(502, "INVALID_WOOCOMMERCE_RESPONSE")
+        cost = _money(value.get("cost"), "INVALID_WOOCOMMERCE_RESPONSE")
+        tax = _money(value.get("tax"), "INVALID_WOOCOMMERCE_RESPONSE")
+        total = _money(value.get("total"), "INVALID_WOOCOMMERCE_RESPONSE")
+        if total != cost + tax:
+            raise OperatorError(502, "INVALID_WOOCOMMERCE_RESPONSE")
+        return {
+            "method_id": method_id,
+            "label": label,
+            "cost": _amount(cost),
+            "tax": _amount(tax),
+            "total": _amount(total),
+        }
+
+    options = raw.get("shipping_options")
+    if not isinstance(options, list) or not 1 <= len(options) <= 50:
+        raise OperatorError(502, "INVALID_WOOCOMMERCE_RESPONSE")
+    normalized_options = [normalized_option(option) for option in options]
+    if len({option["method_id"] for option in normalized_options}) != len(normalized_options):
+        raise OperatorError(502, "INVALID_WOOCOMMERCE_RESPONSE")
+    selected = normalized_option(raw.get("selected_or_cheapest_shipping"))
+    cheapest = min(normalized_options, key=lambda option: Decimal(option["total"]))
+    if selected != cheapest:
+        raise OperatorError(502, "INVALID_WOOCOMMERCE_RESPONSE")
+    return {
+        "product_id": raw["product_id"],
+        "variation_id": raw["variation_id"],
+        "quantity": raw["quantity"],
+        "currency": currency,
+        "product_price": _amount(
+            _money(raw.get("product_price"), "INVALID_WOOCOMMERCE_RESPONSE")),
+        "destination": destination,
+        "shipping_options": normalized_options,
+        "selected_or_cheapest_shipping": selected,
+    }
 
 
 def product_view(raw):
@@ -748,6 +843,12 @@ class WooClient:
         if not isinstance(result, dict) or not isinstance(result.get("templates"), list):
             raise OperatorError(502, "INVALID_UPSTREAM_RESPONSE")
         return result
+
+    async def estimate_shipping(self, payload):
+        result, _ = await self.call(
+            "POST", "lock-city/operator/shipping-estimate", payload=payload,
+            not_found="OPERATOR_BRIDGE_NOT_AVAILABLE")
+        return shipping_estimate_view(result, payload)
 
     async def get(self, product_id):
         raw, _ = await self.call("GET", f"products/{product_id}")
@@ -1707,6 +1808,20 @@ def create_router(
     async def email_templates(request: Request):
         async def action():
             return 200, await service.woo.operator_email_templates()
+        return await dispatch(request, action)
+
+    @router.post("/woocommerce/estimate-shipping")
+    async def estimate_woocommerce_shipping(request: Request):
+        async def action():
+            raw = await request.body()
+            if len(raw) > 8192:
+                raise OperatorError(413, "BODY_TOO_LARGE")
+            try:
+                body = WooShippingEstimateRequest.model_validate_json(raw)
+            except ValidationError:
+                raise OperatorError(400, "INVALID_SHIPPING_ESTIMATE") from None
+            enforce_estimate_rate_limit(request)
+            return 200, await service.woo.estimate_shipping(body.model_dump())
         return await dispatch(request, action)
 
     @router.post("/orders/{id}/email")

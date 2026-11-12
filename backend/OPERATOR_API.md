@@ -97,6 +97,7 @@ token and an exact allowed Origin. The Bearer credential remains server-to-serve
 - `GET /api/operator/v1/orders/{id}`
 - `POST /api/operator/v1/orders`
 - `POST /api/operator/v1/orders/{id}/email`
+- `POST /api/operator/v1/woocommerce/estimate-shipping`
 - `GET /api/operator/v1/aw26/products/{id}`
 - `PATCH /api/operator/v1/aw26/products/{id}`
 - `GET /api/operator/v1/audit?page=1&per_page=20`
@@ -141,6 +142,21 @@ currency produces `margin.status=incomplete`, a partial margin based only on kno
 components, and `MATERIAL_COSTS_INCOMPLETE`. Different currencies produce
 `currency_mismatch` and no margin. No currency conversion or missing cost is
 invented.
+
+The WooCommerce shipping estimate route is also read-only despite using POST for
+its structured destination payload. Operator authentication, CSRF/Origin checks
+for browser sessions, an 8 KiB body limit, strict schemas and the shared estimate
+limiter all apply. The caller may provide only product ID, optional variation ID,
+quantity and destination; prices, totals, taxes, shipping costs and payment fields
+are rejected.
+
+The existing WordPress Operator bridge repeats product, publication, variation,
+stock and postcode validation inside WooCommerce. It builds a request-local
+shipping package and calls Woo's native `calculate_shipping_for_package`, keeping
+the configured zones, methods and shipping taxes as the source of truth. It does
+not instantiate or change a cart, customer session, checkout or order. The
+response contains the effective Woo product price, every available rate and the
+cheapest rate selected explicitly for analysis. No quote is persisted.
 
 The pre-order status route reads the effective WordPress runtime switch through
 an authenticated plugin route; it does not read or return `wp-config.php`. The

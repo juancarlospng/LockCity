@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Lock City Operator Bridge
  * Description: Narrow, idempotent Woo-side commands for the Lock City Operator API.
- * Version: 0.1.0
+ * Version: 0.2.0
  *
  * @package LockCity
  */
@@ -33,6 +33,15 @@ final class Lock_City_Operator_Bridge {
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( __CLASS__, 'create_order' ),
+				'permission_callback' => array( __CLASS__, 'authorized' ),
+			)
+		);
+		register_rest_route(
+			'wc/v3',
+			'/lock-city/operator/shipping-estimate',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'estimate_shipping' ),
 				'permission_callback' => array( __CLASS__, 'authorized' ),
 			)
 		);
@@ -203,14 +212,51 @@ final class Lock_City_Operator_Bridge {
 	}
 
 	/**
-	 * Resolves a server-calculated shipping rate for validated products.
+	 * Validates a shipping-only destination without touching the public customer.
 	 *
-	 * @param array  $products    Validated products and quantities.
-	 * @param array  $destination Sanitized shipping destination.
-	 * @param string $method_id   Requested WooCommerce rate identifier.
-	 * @return WC_Shipping_Rate|WP_Error
+	 * @param mixed $value Destination payload.
+	 * @return array|null
 	 */
-	private static function shipping_rate( array $products, array $destination, string $method_id ) {
+	private static function shipping_destination( $value ): ?array {
+		$allowed = array( 'country', 'state', 'postcode', 'city', 'address_1' );
+		if ( ! is_array( $value ) || array_diff( array_keys( $value ), $allowed )
+			|| array_diff( $allowed, array_keys( $value ) ) ) {
+			return null;
+		}
+		$result = array();
+		foreach ( $allowed as $field ) {
+			$result[ $field ] = wc_clean( (string) $value[ $field ] );
+		}
+		$result['country']  = strtoupper( $result['country'] );
+		$result['postcode'] = wc_format_postcode( $result['postcode'], $result['country'] );
+		if ( '' === $result['country'] || '' === $result['postcode']
+			|| '' === $result['city'] || '' === $result['address_1'] ) {
+			return null;
+		}
+		$countries = WC()->countries->get_countries();
+		if ( ! isset( $countries[ $result['country'] ] )
+			|| ! WC_Validation::is_postcode( $result['postcode'], $result['country'] ) ) {
+			return null;
+		}
+		$states = WC()->countries->get_states( $result['country'] );
+		if ( '' !== $result['state'] && is_array( $states ) && $states
+			&& ! isset( $states[ $result['state'] ] ) ) {
+			return null;
+		}
+		return $result;
+	}
+
+	/**
+	 * Calculates native WooCommerce rates for an isolated package.
+	 *
+	 * This builds request-local data only. It does not use WC_Cart, WC_Customer,
+	 * checkout state, or a public WooCommerce session.
+	 *
+	 * @param array $products    Validated products and quantities.
+	 * @param array $destination Sanitized shipping destination.
+	 * @return array
+	 */
+	private static function shipping_rates( array $products, array $destination ): array {
 		$contents      = array();
 		$contents_cost = 0.0;
 		foreach ( $products as $index => $entry ) {
@@ -240,16 +286,116 @@ final class Lock_City_Operator_Bridge {
 				'city'      => $destination['city'],
 				'address'   => $destination['address_1'],
 				'address_1' => $destination['address_1'],
-				'address_2' => $destination['address_2'],
+				'address_2' => $destination['address_2'] ?? '',
 			),
 		);
 		$calculated = WC()->shipping()->calculate_shipping_for_package( $package, 0 );
-		$rates      = isset( $calculated['rates'] ) && is_array( $calculated['rates'] )
+		return isset( $calculated['rates'] ) && is_array( $calculated['rates'] )
 			? $calculated['rates'] : array();
+	}
+
+	/**
+	 * Resolves a server-calculated shipping rate for validated products.
+	 *
+	 * @param array  $products    Validated products and quantities.
+	 * @param array  $destination Sanitized shipping destination.
+	 * @param string $method_id   Requested WooCommerce rate identifier.
+	 * @return WC_Shipping_Rate|WP_Error
+	 */
+	private static function shipping_rate( array $products, array $destination, string $method_id ) {
+		$rates = self::shipping_rates( $products, $destination );
 		if ( ! isset( $rates[ $method_id ] ) || ! $rates[ $method_id ] instanceof WC_Shipping_Rate ) {
 			return self::error( 'SHIPPING_METHOD_UNAVAILABLE', 409 );
 		}
 		return $rates[ $method_id ];
+	}
+
+	/**
+	 * Estimates all native WooCommerce shipping rates without creating an order.
+	 *
+	 * @param WP_REST_Request $request REST request.
+	 * @return array|WP_Error
+	 */
+	public static function estimate_shipping( WP_REST_Request $request ) {
+		$body    = $request->get_json_params();
+		$allowed = array( 'product_id', 'variation_id', 'quantity', 'destination' );
+		if ( ! is_array( $body ) || array_diff( array_keys( $body ), $allowed )
+			|| array_diff( $allowed, array_keys( $body ) ) ) {
+			return self::error( 'INVALID_SHIPPING_ESTIMATE', 400 );
+		}
+		$product_id   = absint( $body['product_id'] );
+		$variation_id = null === $body['variation_id'] ? 0 : absint( $body['variation_id'] );
+		$quantity     = absint( $body['quantity'] );
+		$destination  = self::shipping_destination( $body['destination'] );
+		$parent       = wc_get_product( $product_id );
+		if ( null === $destination || ! $parent || 'publish' !== $parent->get_status()
+			|| $quantity < 1 || $quantity > 20 ) {
+			return self::error( 'INVALID_SHIPPING_ESTIMATE', 400 );
+		}
+		if ( $parent->is_type( 'variable' ) ) {
+			$product = $variation_id ? wc_get_product( $variation_id ) : false;
+			if ( ! $product || ! $product->is_type( 'variation' )
+				|| (int) $product->get_parent_id() !== $product_id ) {
+				return self::error( 'VARIATION_MISMATCH', 409 );
+			}
+		} elseif ( $variation_id ) {
+			return self::error( 'VARIATION_MISMATCH', 409 );
+		} else {
+			$product = $parent;
+		}
+		$price = $product->get_price();
+		if ( '' === $price || ! is_numeric( $price ) || ! $product->is_purchasable()
+			|| ! $product->is_in_stock() || ! $product->has_enough_stock( $quantity ) ) {
+			return self::error( 'PRODUCT_NOT_PURCHASABLE', 409 );
+		}
+		$rates = self::shipping_rates(
+			array(
+				array(
+					'product'  => $product,
+					'quantity' => $quantity,
+				),
+			),
+			$destination
+		);
+		$options = array();
+		foreach ( $rates as $rate ) {
+			if ( ! $rate instanceof WC_Shipping_Rate ) {
+				continue;
+			}
+			$tax       = array_sum( array_map( 'floatval', (array) $rate->get_taxes() ) );
+			$cost      = (float) $rate->get_cost();
+			$options[] = array(
+				'method_id' => $rate->get_id(),
+				'label'     => wp_strip_all_tags( $rate->get_label() ),
+				'cost'      => wc_format_decimal( $cost, 2 ),
+				'tax'       => wc_format_decimal( $tax, 2 ),
+				'total'     => wc_format_decimal( $cost + $tax, 2 ),
+			);
+		}
+		if ( ! $options ) {
+			return self::error( 'SHIPPING_UNAVAILABLE', 409 );
+		}
+		$selected = $options[0];
+		foreach ( $options as $option ) {
+			if ( (float) $option['total'] < (float) $selected['total'] ) {
+				$selected = $option;
+			}
+		}
+		return array(
+			'product_id'                   => $product_id,
+			'variation_id'                 => $variation_id ? $variation_id : null,
+			'quantity'                     => $quantity,
+			'currency'                     => get_woocommerce_currency(),
+			'product_price'                => wc_format_decimal( $price, 2 ),
+			'destination'                  => array(
+				'country'  => $destination['country'],
+				'state'    => $destination['state'],
+				'postcode' => $destination['postcode'],
+				'city'     => $destination['city'],
+			),
+			'shipping_options'             => $options,
+			'selected_or_cheapest_shipping' => $selected,
+		);
 	}
 
 	/**
